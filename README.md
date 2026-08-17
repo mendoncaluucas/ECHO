@@ -4,7 +4,7 @@
 
 **Echo** é uma plataforma web de coleta de feedback via **QR Code** para restaurantes de alto fluxo. O cliente avalia a experiência direto da mesa — sem app e sem cadastro — e a gestão recebe as manifestações organizadas, em tempo real e prontas para virar decisão.
 
-Projeto desenvolvido no **PAC Extensionista** do curso de Engenharia de Software do Centro Universitário Católica de Santa Catarina (Joinville), com estudo de caso no **Restaurante Sinuelo** (Araquari–SC).
+Projeto desenvolvido no **PAC** do curso de Engenharia de Software do Centro Universitário Católica de Santa Catarina (Joinville), com estudo de caso no **Restaurante Sinuelo** (Araquari–SC).
 
 ---
 
@@ -35,15 +35,37 @@ Resultado: a gestão decide no escuro, sem dado confiável e em tempo hábil de 
 - **Gerente** — dashboard com KPIs, gráficos por setor e exportação PDF/CSV.
 - **Administrador** — usuários, QR Codes por área, auditoria e conformidade LGPD.
 
+## Estrutura do projeto
+
+```
+ECHO/
+├─ web/        # Protótipo de alta fidelidade (frontend) — React + Vite + TypeScript
+└─ (api/)      # Backend — a ser criado no PAC VI (Node.js + PostgreSQL)
+```
+
 ## Tecnologias
 
-- **Frontend:** Next.js · React · TypeScript
-- **Backend:** Node.js
+**Protótipo atual (`web/`)**
+
+- **React 18** + **Vite 6** + **TypeScript**
+- **Tailwind CSS 4** e componentes **shadcn/ui** (Radix UI)
+- **React Router** para navegação e **Recharts** para os indicadores
+
+**Evolução pretendida (PAC VI)**
+
+- **Backend:** Node.js — API REST/serviços
 - **Banco de dados:** PostgreSQL
-- **Bibliotecas:** geração de QR Codes, notificações em tempo real, visualização de indicadores
 - **Segurança e conformidade:** autenticação por tokens (JWT), controle de acesso por papéis (RBAC), criptografia de dados sensíveis, validação de entradas e políticas de retenção — orientadas pelo **OWASP Top 10 (2021)** e pela **LGPD**.
 
-> Um protótipo de alta fidelidade (React + Vite) já foi construído e validado com o cliente. Este repositório inicia a implementação funcional a partir desse protótipo.
+> O protótipo em `web/` é um **mock de alta fidelidade** já validado com o cliente: funcionalidades como autenticação efetiva, tempo real e leitura de QR Code estão representadas na interface, mas ainda não operam de ponta a ponta. Este repositório inicia a implementação funcional a partir dele.
+
+## Como rodar (protótipo)
+
+```bash
+cd web
+npm install
+npm run dev
+```
 
 ## Status
 
@@ -51,11 +73,11 @@ Resultado: a gestão decide no escuro, sem dado confiável e em tempo hábil de 
 
 ## Roadmap
 
-- [ ] Configuração do ambiente, versionamento e estrutura frontend/backend/banco
+- [ ] Configuração do backend (`api/`), versionamento e integração com o `web/`
 - [ ] Plano de testes (unitários, integração e aceitação) desde o início
-- [ ] Fluxo do cliente: QR Code → formulário de feedback
+- [ ] Fluxo do cliente: QR Code → formulário de feedback (ponta a ponta)
 - [ ] Autenticação e perfis de acesso (JWT + RBAC)
-- [ ] Painéis de Coordenador, Gerente e Administrador
+- [ ] Painéis de Coordenador, Gerente e Administrador com dados reais
 - [ ] Ajustes mapeados na validação: identidade visual do Sinuelo, avaliação de múltiplas categorias, retorno ao cliente por e-mail, respostas prontas, ampliação de gráficos e múltiplos setores por usuário
 
 ## Equipe
