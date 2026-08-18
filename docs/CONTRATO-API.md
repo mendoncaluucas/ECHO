@@ -113,5 +113,43 @@
 
 ---
 
+## 5. `POST /api/qrcodes` — gerar QR Code
+Cria um QR Code para uma área e devolve o token, a URL do formulário e a imagem (PNG em data URL).
+
+> **Setup/administrativo.** No MVP está aberto; deve passar a exigir autenticação (RBAC) quando o middleware estiver pronto.
+
+**Requisição:**
+```json
+{ "areaId": "uuid", "token": "MESA12" }
+```
+- `token` é **opcional** (ex.: `"MESA12"`); se omitido, o servidor gera um token aleatório.
+
+**Resposta `201`:**
+```json
+{
+  "id": "uuid",
+  "token": "MESA12",
+  "url": "http://localhost:5173/feedback?t=MESA12",
+  "imagem": "data:image/png;base64,iVBORw0KGgo..."
+}
+```
+**Erros:** `400` (areaId ausente) · `404` (área não encontrada) · `409` (token já em uso).
+
+---
+
+## 6. `GET /api/qrcodes/:token/imagem` — imagem do QR Code
+Devolve a imagem **PNG** do QR (para impressão). Escaneada, abre o formulário do cliente.
+
+**Resposta `200`:** `Content-Type: image/png` (binário da imagem).
+
+**Erros:** `404` (token não encontrado ou inativo).
+
+---
+
+## Convenção de erro adicional
+Rotas inexistentes retornam `404` com `{ "erro": "Rota não encontrada", "codigo": "ROTA_NAO_ENCONTRADA" }`. Erros inesperados retornam `500` com `codigo: "ERRO_INTERNO"`.
+
+---
+
 ## Fora do escopo deste contrato (MVP 2+)
-Tratativa de ocorrências (status, respostas prontas), dashboards/indicadores, exportação PDF/CSV, notificações em tempo real, gestão de usuários e QR Codes pelo admin.
+Tratativa de ocorrências (status, respostas prontas), dashboards/indicadores, exportação PDF/CSV, notificações em tempo real, gestão de usuários e a **tela administrativa** de QR Codes.

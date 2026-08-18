@@ -1,45 +1,53 @@
 import { Router } from "express";
 import { TipoFeedback } from "@prisma/client";
 import { prisma } from "../prisma.js";
+import { asyncHandler } from "../middlewares/asyncHandler.js";
 
 // Rotas públicas do cliente (sem autenticação) — DONO: Lucas
 export const publicRoutes = Router();
 
+const MAX_COMENTARIO = 1000;
+const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
 // GET /api/public/venue/:qrToken
 // Resolve o QR Code e devolve o contexto para montar o formulário.
 // Contrato: docs/CONTRATO-API.md
-publicRoutes.get("/venue/:qrToken", async (req, res) => {
-  const { qrToken } = req.params;
+publicRoutes.get(
+  "/venue/:qrToken",
+  asyncHandler(async (req, res) => {
+    const { qrToken } = req.params;
 
-  const qr = await prisma.qRCode.findUnique({
-    where: { token: qrToken },
-    include: { area: { include: { venue: true } } },
-  });
+    const qr = await prisma.qRCode.findUnique({
+      where: { token: qrToken },
+      include: { area: { include: { venue: true } } },
+    });
 
-  if (!qr || !qr.ativo) {
-    return res
-      .status(404)
-      .json({ erro: "QR Code inválido ou inativo", codigo: "QR_NAO_ENCONTRADO" });
-  }
+    if (!qr || !qr.ativo) {
+      return res
+        .status(404)
+        .json({ erro: "QR Code inválido ou inativo", codigo: "QR_NAO_ENCONTRADO" });
+    }
 
-  const categorias = await prisma.category.findMany({
-    select: { id: true, nome: true },
-    orderBy: { nome: "asc" },
-  });
+    const categorias = await prisma.category.findMany({
+      select: { id: true, nome: true },
+      orderBy: { nome: "asc" },
+    });
 
-  return res.json({
-    venue: { id: qr.area.venue.id, nome: qr.area.venue.nome },
-    area: { id: qr.area.id, nome: qr.area.nome },
-    categorias,
-  });
-});
+    return res.json({
+      venue: { id: qr.area.venue.id, nome: qr.area.venue.nome },
+      area: { id: qr.area.id, nome: qr.area.nome },
+      categorias,
+    });
+  })
+);
 
 // POST /api/public/feedback
 // Grava o feedback do cliente.
 // Contrato: docs/CONTRATO-API.md
 //   body: { qrToken, tipo, comentario?, anonimo?, contatoEmail?, avaliacoes: [{ categoriaId, estrelas }] }
-publicRoutes.post("/feedback", async (req, res) => {
-  try {
+publicRoutes.post(
+  "/feedback",
+  asyncHandler(async (req, res) => {
     const { qrToken, tipo, comentario, anonimo, contatoEmail, avaliacoes } =
       req.body ?? {};
 
@@ -50,6 +58,12 @@ publicRoutes.post("/feedback", async (req, res) => {
     if (!Object.values(TipoFeedback).includes(tipo)) {
       return res.status(400).json({
         erro: "tipo inválido (ELOGIO, SUGESTAO ou RECLAMACAO)",
+        codigo: "VALIDACAO",
+      });
+    }
+    if (comentario != null && (typeof comentario !== "string" || comentario.length > MAX_COMENTARIO)) {
+      return res.status(400).json({
+        erro: `comentário inválido (texto com no máximo ${MAX_COMENTARIO} caracteres)`,
         codigo: "VALIDACAO",
       });
     }
@@ -70,6 +84,15 @@ publicRoutes.post("/feedback", async (req, res) => {
     }
 
     const ehAnonimo = typeof anonimo === "boolean" ? anonimo : true;
+
+    // Se o cliente se identificou, o e-mail (quando enviado) precisa ter formato válido.
+    if (!ehAnonimo && contatoEmail != null) {
+      if (typeof contatoEmail !== "string" || !EMAIL_REGEX.test(contatoEmail)) {
+        return res
+          .status(400)
+          .json({ erro: "contatoEmail inválido", codigo: "VALIDACAO" });
+      }
+    }
 
     // --- resolve o QR Code ---
     const qr = await prisma.qRCode.findUnique({
@@ -120,10 +143,5 @@ publicRoutes.post("/feedback", async (req, res) => {
     });
 
     return res.status(201).json(feedback);
-  } catch (err) {
-    console.error("Erro ao gravar feedback:", err);
-    return res
-      .status(500)
-      .json({ erro: "Erro interno ao gravar o feedback", codigo: "ERRO_INTERNO" });
-  }
-});
+  })
+);
