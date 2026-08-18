@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: echo
       POSTGRES_DB: echo
     ports:
-      - "5433:5432"   # 5433 no host para não colidir com outro Postgres na 5432
+      # Porta do host configurável via DB_PORT (padrão 5432).
+      # Troque no seu .env se a 5432 já estiver ocupada na sua máquina.
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - echo_pgdata:/var/lib/postgresql/data
 
