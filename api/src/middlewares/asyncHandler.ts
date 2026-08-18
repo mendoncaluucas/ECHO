@@ -6,8 +6,7 @@ type AsyncHandler = (
   next: NextFunction
 ) => Promise<unknown>;
 
-// Envolve handlers assíncronos e encaminha qualquer erro ao middleware de erro global,
-// evitando repetir try/catch em cada rota.
+// Encaminha erros de handlers async ao error handler global.
 export function asyncHandler(fn: AsyncHandler): RequestHandler {
   return (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);

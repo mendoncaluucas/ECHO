@@ -3,15 +3,12 @@ import { TipoFeedback } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 
-// Rotas públicas do cliente (sem autenticação) — DONO: Lucas
 export const publicRoutes = Router();
 
 const MAX_COMENTARIO = 1000;
 const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-// GET /api/public/venue/:qrToken
-// Resolve o QR Code e devolve o contexto para montar o formulário.
-// Contrato: docs/CONTRATO-API.md
+// GET /venue/:qrToken — contexto do formulário a partir do QR. Ver docs/CONTRATO-API.md
 publicRoutes.get(
   "/venue/:qrToken",
   asyncHandler(async (req, res) => {
@@ -41,17 +38,13 @@ publicRoutes.get(
   })
 );
 
-// POST /api/public/feedback
-// Grava o feedback do cliente.
-// Contrato: docs/CONTRATO-API.md
-//   body: { qrToken, tipo, comentario?, anonimo?, contatoEmail?, avaliacoes: [{ categoriaId, estrelas }] }
+// POST /feedback — registra o feedback do cliente. Ver docs/CONTRATO-API.md
 publicRoutes.post(
   "/feedback",
   asyncHandler(async (req, res) => {
     const { qrToken, tipo, comentario, anonimo, contatoEmail, avaliacoes } =
       req.body ?? {};
 
-    // --- validações ---
     if (typeof qrToken !== "string" || qrToken.length === 0) {
       return res.status(400).json({ erro: "qrToken é obrigatório", codigo: "VALIDACAO" });
     }
@@ -85,7 +78,7 @@ publicRoutes.post(
 
     const ehAnonimo = typeof anonimo === "boolean" ? anonimo : true;
 
-    // Se o cliente se identificou, o e-mail (quando enviado) precisa ter formato válido.
+    // E-mail válido é exigido apenas quando o cliente se identifica.
     if (!ehAnonimo && contatoEmail != null) {
       if (typeof contatoEmail !== "string" || !EMAIL_REGEX.test(contatoEmail)) {
         return res
@@ -94,7 +87,6 @@ publicRoutes.post(
       }
     }
 
-    // --- resolve o QR Code ---
     const qr = await prisma.qRCode.findUnique({
       where: { token: qrToken },
       include: { area: true },
@@ -105,7 +97,6 @@ publicRoutes.post(
         .json({ erro: "QR Code inválido ou inativo", codigo: "QR_NAO_ENCONTRADO" });
     }
 
-    // --- confere as categorias (sem repetição e existentes) ---
     const ids: string[] = avaliacoes.map((a) => a.categoriaId);
     const idsUnicos = new Set(ids);
     if (idsUnicos.size !== ids.length) {
@@ -122,7 +113,6 @@ publicRoutes.post(
         .json({ erro: "alguma categoriaId não existe", codigo: "VALIDACAO" });
     }
 
-    // --- grava o feedback + as notas por categoria ---
     const feedback = await prisma.feedback.create({
       data: {
         venueId: qr.area.venueId,

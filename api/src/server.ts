@@ -8,24 +8,21 @@ import { notFoundHandler, errorHandler } from "./middlewares/errorHandler.js";
 
 const app = express();
 
-// CORS: se CORS_ORIGIN estiver definido (uma ou mais origens separadas por vírgula),
-// restringe a elas; senão, libera geral (conveniente para desenvolvimento).
+// CORS restrito a CORS_ORIGIN (lista separada por vírgula); sem a variável, libera todas as origens.
 const corsOrigin = process.env.CORS_ORIGIN;
 app.use(cors(corsOrigin ? { origin: corsOrigin.split(",") } : undefined));
 app.use(express.json());
 
-// Health check — não depende do banco, confirma que a API está de pé.
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "echo-api" });
 });
 
-// Rotas do MVP (cada arquivo tem um dono — evita conflito trabalhando em dois)
-app.use("/api/public", publicRoutes); // Lucas  — fluxo do cliente (sem login)
-app.use("/api/qrcodes", qrcodesRoutes); // Lucas  — geração de QR Code
-app.use("/api/auth", authRoutes); // Victor — autenticação
-app.use("/api/occurrences", occurrencesRoutes); // Victor — gestão (protegido)
+app.use("/api/public", publicRoutes);
+app.use("/api/qrcodes", qrcodesRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/occurrences", occurrencesRoutes);
 
-// 404 e tratamento de erro global — sempre por último.
+// 404 e error handler — sempre por último.
 app.use(notFoundHandler);
 app.use(errorHandler);
 

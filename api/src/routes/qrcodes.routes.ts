@@ -4,18 +4,13 @@ import QRCode from "qrcode";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 
-// Geração de QR Code — DONO: Lucas
-// Cada QR aponta para a URL do formulário do cliente, carregando o token.
-// OBS: criar QR é ação de setup — no futuro deve ser protegido pelo RBAC (middleware do Victor).
+// TODO: exigir RBAC quando o middleware de autenticação estiver pronto.
 export const qrcodesRoutes = Router();
 
-// Base da URL do frontend (onde o cliente abre o formulário).
 const WEB_BASE_URL = process.env.WEB_BASE_URL ?? "http://localhost:5173";
 const urlDoFormulario = (token: string) => `${WEB_BASE_URL}/feedback?t=${token}`;
 
-// POST /api/qrcodes
-// Cria um QR Code para uma área e devolve token, URL e a imagem (PNG data URL).
-//   body: { areaId, token? }   // token opcional (ex.: "MESA12"); se ausente, gera um aleatório
+// POST / — cria um QR Code para uma área. Ver docs/CONTRATO-API.md
 qrcodesRoutes.post(
   "/",
   asyncHandler(async (req, res) => {
@@ -32,7 +27,6 @@ qrcodesRoutes.post(
         .json({ erro: "Área não encontrada", codigo: "AREA_NAO_ENCONTRADA" });
     }
 
-    // token: usa o informado ou gera um aleatório
     const tokenFinal =
       typeof token === "string" && token.length > 0
         ? token
@@ -43,22 +37,20 @@ qrcodesRoutes.post(
       return res.status(409).json({ erro: "token já em uso", codigo: "TOKEN_DUPLICADO" });
     }
 
-    // Em caso de corrida, a restrição única do banco dispara P2002,
-    // tratado como 409 pelo error handler global.
+    // Em corrida, a constraint única dispara P2002 → 409 no error handler global.
     const qr = await prisma.qRCode.create({
       data: { token: tokenFinal, areaId: area.id },
       select: { id: true, token: true },
     });
 
     const url = urlDoFormulario(qr.token);
-    const imagem = await QRCode.toDataURL(url); // PNG em data URL (base64)
+    const imagem = await QRCode.toDataURL(url);
 
     return res.status(201).json({ id: qr.id, token: qr.token, url, imagem });
   })
 );
 
-// GET /api/qrcodes/:token/imagem
-// Devolve a imagem PNG do QR (útil para imprimir). Escaneada, abre o formulário.
+// GET /:token/imagem — PNG do QR para impressão.
 qrcodesRoutes.get(
   "/:token/imagem",
   asyncHandler(async (req, res) => {
