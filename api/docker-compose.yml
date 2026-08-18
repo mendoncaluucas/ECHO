@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: echo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: echo
+      POSTGRES_PASSWORD: echo
+      POSTGRES_DB: echo
+    ports:
+      - "5433:5432"   # 5433 no host para não colidir com outro Postgres na 5432
+    volumes:
+      - echo_pgdata:/var/lib/postgresql/data
+
+volumes:
+  echo_pgdata:
