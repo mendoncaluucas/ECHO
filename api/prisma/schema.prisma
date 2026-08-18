@@ -1,0 +1,100 @@
+// Echo — Schema inicial do banco (v1 · rascunho para revisão do time de BD)
+// Escopo: entidades do MVP 1 (feedback do cliente + login da gestão).
+// Ajustar nomes/campos no Bloco 1 (18–20/08) junto com o backend.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+
+enum Papel {
+  COORDENADOR
+  GERENTE
+  ADMINISTRADOR
+}
+
+enum TipoFeedback {
+  ELOGIO
+  SUGESTAO
+  RECLAMACAO
+}
+
+// ---------- Gestão / autenticação ----------
+
+model User {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senhaHash String
+  papel     Papel
+  criadoEm  DateTime @default(now())
+}
+
+// ---------- Estabelecimento e QR ----------
+
+model Venue {
+  id        String     @id @default(uuid())
+  nome      String
+  areas     Area[]
+  feedbacks Feedback[]
+  criadoEm  DateTime   @default(now())
+}
+
+model Area {
+  id        String     @id @default(uuid())
+  nome      String
+  venue     Venue      @relation(fields: [venueId], references: [id])
+  venueId   String
+  qrCodes   QRCode[]
+  feedbacks Feedback[]
+}
+
+model QRCode {
+  id       String   @id @default(uuid())
+  token    String   @unique
+  ativo    Boolean  @default(true)
+  area     Area     @relation(fields: [areaId], references: [id])
+  areaId   String
+  criadoEm DateTime @default(now())
+}
+
+// ---------- Feedback ----------
+
+model Category {
+  id      String           @id @default(uuid())
+  nome    String           @unique
+  ratings FeedbackRating[]
+}
+
+model Feedback {
+  id           String           @id @default(uuid())
+  venue        Venue            @relation(fields: [venueId], references: [id])
+  venueId      String
+  area         Area?            @relation(fields: [areaId], references: [id])
+  areaId       String?
+  tipo         TipoFeedback
+  comentario   String?
+  anonimo      Boolean          @default(true)
+  contatoEmail String?
+  avaliacoes   FeedbackRating[]
+  criadoEm     DateTime         @default(now())
+
+  @@index([venueId, criadoEm])
+}
+
+model FeedbackRating {
+  id         String   @id @default(uuid())
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  feedbackId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  categoryId String
+  estrelas   Int // 1 a 5
+
+  @@unique([feedbackId, categoryId])
+}
