@@ -7,13 +7,28 @@
 
 - **Base URL:** `/api` (ex.: `http://localhost:3333/api`)
 - **Formato:** JSON em requisição e resposta (`Content-Type: application/json`)
-- **Autenticação:** rotas protegidas exigem o header `Authorization: Bearer <token>` (JWT)
+- **Autenticação:** rotas protegidas exigem o header `Authorization: Bearer <token>` (JWT).
+  O token é obtido em `POST /auth/login` e vale 8h por padrão (`JWT_EXPIRES_IN`).
 - **Datas:** ISO 8601 (ex.: `2026-08-27T14:30:00.000Z`)
 - **Erro padrão:**
   ```json
   { "erro": "mensagem legível", "codigo": "VALIDACAO" }
   ```
 - **Status usados:** `200` ok · `201` criado · `400` validação · `401` não autenticado · `403` sem permissão · `404` não encontrado
+- **Códigos de erro (`codigo`):**
+
+  | `codigo` | Status | Quando acontece |
+  |---|---|---|
+  | `VALIDACAO` | 400 | Campo obrigatório ausente ou valor inválido |
+  | `CREDENCIAIS_INVALIDAS` | 401 | E-mail ou senha incorretos no login |
+  | `NAO_AUTENTICADO` | 401 | Header `Authorization` ausente ou fora do formato `Bearer <token>` |
+  | `TOKEN_INVALIDO` | 401 | Token adulterado, assinado com outro segredo ou expirado |
+  | `SEM_PERMISSAO` | 403 | Autenticado, mas o papel não está na lista da rota |
+  | `QR_NAO_ENCONTRADO` | 404 | `qrToken` inexistente ou inativo |
+  | `AREA_NAO_ENCONTRADA` | 404 | `areaId` inexistente |
+  | `TOKEN_DUPLICADO` / `CONFLITO` | 409 | Token de QR Code já em uso |
+  | `ROTA_NAO_ENCONTRADA` | 404 | Rota inexistente |
+  | `ERRO_INTERNO` | 500 | Erro inesperado |
 
 ---
 
@@ -79,7 +94,10 @@
   "usuario": { "id": "uuid", "nome": "Valmir Inácio", "papel": "GERENTE" }
 }
 ```
-**Erros:** `401` (credenciais inválidas).
+**Erros:** `400` `VALIDACAO` (`email` ou `senha` ausentes) · `401` `CREDENCIAIS_INVALIDAS`.
+
+> A resposta de `401` é **idêntica** para e-mail inexistente e senha errada — de propósito, para não
+> revelar quais e-mails têm cadastro. O `senhaHash` nunca sai na resposta.
 
 ---
 
@@ -109,14 +127,20 @@
   ]
 }
 ```
-**Erros:** `401` (sem token) · `403` (papel sem permissão).
+**Erros:** `401` `NAO_AUTENTICADO` (sem token) · `401` `TOKEN_INVALIDO` (token inválido ou expirado) ·
+`403` `SEM_PERMISSAO` (papel fora da lista).
+
+> Ordenado do mais recente para o mais antigo. `area` vem `null` quando o feedback veio de um QR genérico.
+> O `contatoEmail` **não** é devolvido nesta rota (dado pessoal — LGPD).
 
 ---
 
 ## 5. `POST /api/qrcodes` — gerar QR Code
 Cria um QR Code para uma área e devolve o token, a URL do formulário e a imagem (PNG em data URL).
 
-> **Setup/administrativo.** No MVP está aberto; deve passar a exigir autenticação (RBAC) quando o middleware estiver pronto.
+> **Setup/administrativo.** O middleware de RBAC já existe (`requireAuth`), mas esta rota segue **aberta**
+> por decisão de escopo: fechá-la entra junto com a tela administrativa de QR Codes, no MVP 2.
+> Para proteger, basta `requireAuth([Papel.ADMINISTRADOR])` antes do handler.
 
 **Requisição:**
 ```json
