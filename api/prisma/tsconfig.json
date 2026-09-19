@@ -1,0 +1,12 @@
+// O tsconfig da raiz cobre apenas `src` (rootDir do build). Sem este arquivo o editor
+// trata prisma/seed.ts como solto, sem os tipos do Node (erro em `process`).
+// Aqui é só checagem de tipos: o seed roda via tsx e nunca é emitido para dist/.
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["."]
+}
