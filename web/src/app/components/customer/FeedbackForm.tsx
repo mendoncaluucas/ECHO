@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Droplet, Users, UtensilsCrossed, Star } from 'lucide-react';
 
 type Category = 'higiene' | 'atendimento' | 'alimento';
@@ -13,6 +13,8 @@ const categories = [
 
 export function FeedbackForm() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const qrToken = searchParams.get('t') ?? '';
   const [activeCategory, setActiveCategory] = useState<Category>('higiene');
   const [ratings, setRatings] = useState<Record<Category, number>>({
     higiene: 0,
@@ -28,6 +30,7 @@ export function FeedbackForm() {
 
   const handleSubmit = () => {
     const feedbackData = {
+      qrToken,
       ratings,
       comments,
       type: feedbackType,

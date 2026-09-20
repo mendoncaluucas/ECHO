@@ -1,26 +1,79 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getVenue, submitFeedback, type TipoFeedback } from '../../services/api';
+
+// remove acentos e caixa para casar os slugs do formulário com os nomes das categorias do banco
+const normalizar = (texto: string) =>
+  texto.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
 export function OptionalId() {
   const navigate = useNavigate();
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
-  const handleSubmit = () => {
-    const feedback = JSON.parse(localStorage.getItem('pendingFeedback') || '{}');
-    const finalFeedback = {
-      ...feedback,
-      user: isAnonymous ? null : { name, email },
-      anonymous: isAnonymous,
-    };
+  const enviar = async (anonimo: boolean) => {
+    setErro(null);
 
-    const existingFeedbacks = JSON.parse(localStorage.getItem('feedbacks') || '[]');
-    existingFeedbacks.push(finalFeedback);
-    localStorage.setItem('feedbacks', JSON.stringify(existingFeedbacks));
-    localStorage.removeItem('pendingFeedback');
+    const pending = JSON.parse(localStorage.getItem('pendingFeedback') || '{}');
+    const qrToken: string = pending.qrToken;
+    if (!qrToken) {
+      setErro('QR Code ausente. Acesse o formulário pelo QR Code da mesa.');
+      return;
+    }
 
-    navigate('/sucesso');
+    const ratings: Record<string, number> = pending.ratings ?? {};
+    const comments: Record<string, string> = pending.comments ?? {};
+
+    setEnviando(true);
+    try {
+      // ids reais das categorias vêm do backend
+      const contexto = await getVenue(qrToken);
+      const idPorNome = new Map(
+        contexto.categorias.map((c) => [normalizar(c.nome), c.id])
+      );
+
+      const avaliacoes = Object.entries(ratings)
+        .filter(([, estrelas]) => Number(estrelas) >= 1)
+        .map(([slug, estrelas]) => ({
+          categoriaId: idPorNome.get(normalizar(slug)),
+          estrelas: Number(estrelas),
+        }))
+        .filter((a): a is { categoriaId: string; estrelas: number } => Boolean(a.categoriaId));
+
+      if (avaliacoes.length === 0) {
+        setErro('Dê ao menos uma avaliação (estrelas) antes de enviar.');
+        setEnviando(false);
+        return;
+      }
+
+      // backend guarda um comentário só; juntamos os por categoria
+      const comentario =
+        Object.entries(comments)
+          .filter(([, txt]) => txt?.trim())
+          .map(([slug, txt]) => `${slug}: ${txt.trim()}`)
+          .join(' | ') || undefined;
+
+      const tipo = String(pending.type ?? 'sugestao').toUpperCase() as TipoFeedback;
+
+      await submitFeedback({
+        qrToken,
+        tipo,
+        comentario,
+        anonimo,
+        contatoEmail: anonimo ? null : email || null,
+        avaliacoes,
+      });
+
+      localStorage.removeItem('pendingFeedback');
+      navigate('/sucesso');
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao enviar. Tente novamente.');
+    } finally {
+      setEnviando(false);
+    }
   };
 
   return (
@@ -75,21 +128,26 @@ export function OptionalId() {
             </div>
           )}
 
+          {erro && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+              {erro}
+            </p>
+          )}
+
           <div className="flex gap-3 pt-4">
             <button
-              onClick={() => {
-                setIsAnonymous(true);
-                setTimeout(handleSubmit, 100);
-              }}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 px-6 rounded-xl font-semibold transition-colors"
+              onClick={() => enviar(true)}
+              disabled={enviando}
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 px-6 rounded-xl font-semibold transition-colors disabled:opacity-60"
             >
               Pular
             </button>
             <button
-              onClick={handleSubmit}
-              className="flex-1 bg-teal-600 hover:bg-teal-700 text-white py-3 px-6 rounded-xl font-semibold transition-colors shadow-md hover:shadow-lg"
+              onClick={() => enviar(isAnonymous)}
+              disabled={enviando}
+              className="flex-1 bg-teal-600 hover:bg-teal-700 text-white py-3 px-6 rounded-xl font-semibold transition-colors shadow-md hover:shadow-lg disabled:opacity-60"
             >
-              Enviar
+              {enviando ? 'Enviando...' : 'Enviar'}
             </button>
           </div>
         </div>
