@@ -1,16 +1,30 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, Shield } from 'lucide-react';
+import { login } from '../../services/api';
 
 export function CoordinatorLogin() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('userRole', 'coordinator');
-    navigate('/coordenador/ocorrencias');
+    setErro(null);
+    setEnviando(true);
+    try {
+      const { token, usuario } = await login(email, password);
+      localStorage.setItem('echo_token', token);
+      localStorage.setItem('echo_usuario', JSON.stringify(usuario));
+      localStorage.setItem('userRole', 'coordinator');
+      navigate('/coordenador/ocorrencias');
+    } catch {
+      setErro('Credenciais inválidas');
+    } finally {
+      setEnviando(false);
+    }
   };
 
   return (
@@ -53,12 +67,19 @@ export function CoordinatorLogin() {
             />
           </div>
 
+          {erro && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+              {erro}
+            </p>
+          )}
+
           <button
             type="submit"
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 px-6 rounded-xl font-semibold transition-colors shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+            disabled={enviando}
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 px-6 rounded-xl font-semibold transition-colors shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-60"
           >
             <LogIn className="w-5 h-5" />
-            Entrar
+            {enviando ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
 
