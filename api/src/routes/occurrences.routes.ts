@@ -1,15 +1,43 @@
 import { Router } from "express";
-// import { requireAuth } from "../middlewares/auth.js";
+import { Papel } from "@prisma/client";
+import { prisma } from "../prisma.js";
+import { asyncHandler } from "../middlewares/asyncHandler.js";
+import { requireAuth } from "../middlewares/auth.js";
 
 // Feedbacks para a gestão (protegido) — DONO: Victor
 export const occurrencesRoutes = Router();
 
-// GET /api/occurrences
-// Lista os feedbacks recebidos (somente leitura) para a gestão.
-// TODO (Victor): aplicar requireAuth e implementar conforme docs/CONTRATO-API.md
-//   Ex.: occurrencesRoutes.get("/", requireAuth(["COORDENADOR","GERENTE","ADMINISTRADOR"]), handler)
-occurrencesRoutes.get("/", async (_req, res) => {
-  return res
-    .status(501)
-    .json({ erro: "Ainda não implementado", codigo: "NAO_IMPLEMENTADO" });
-});
+// GET / — lista os feedbacks recebidos (somente leitura). Ver docs/CONTRATO-API.md
+// Sem paginação no MVP 1: o contrato não prevê. Entra no MVP 2, junto com filtros.
+occurrencesRoutes.get(
+  "/",
+  requireAuth([Papel.COORDENADOR, Papel.GERENTE, Papel.ADMINISTRADOR]),
+  asyncHandler(async (_req, res) => {
+    const feedbacks = await prisma.feedback.findMany({
+      orderBy: { criadoEm: "desc" },
+      select: {
+        id: true,
+        tipo: true,
+        comentario: true,
+        anonimo: true,
+        criadoEm: true,
+        area: { select: { nome: true } },
+        avaliacoes: {
+          orderBy: { category: { nome: "asc" } },
+          select: { estrelas: true, category: { select: { nome: true } } },
+        },
+      },
+    });
+
+    // contatoEmail fica de fora de propósito: não está no contrato e é dado pessoal (LGPD).
+    const itens = feedbacks.map((feedback) => ({
+      ...feedback,
+      avaliacoes: feedback.avaliacoes.map((avaliacao) => ({
+        categoria: avaliacao.category.nome,
+        estrelas: avaliacao.estrelas,
+      })),
+    }));
+
+    return res.json({ itens });
+  })
+);

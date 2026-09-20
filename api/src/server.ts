@@ -1,3 +1,5 @@
+// Carrega o .env antes de qualquer leitura de process.env.
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { publicRoutes } from "./routes/public.routes.js";
