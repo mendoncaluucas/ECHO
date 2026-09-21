@@ -18,6 +18,8 @@ export function Navigation({ title, role }: NavigationProps) {
 
   const handleLogout = () => {
     localStorage.removeItem('userRole');
+    localStorage.removeItem('echo_token');
+    localStorage.removeItem('echo_usuario');
     navigate('/');
   };
 
