@@ -170,6 +170,24 @@ Devolve a imagem **PNG** do QR (para impressão). Escaneada, abre o formulário 
 
 ---
 
+## 7. `GET /api/areas` — listar áreas
+
+Lista as áreas cadastradas (mesas, salão etc.), usada pela tela de geração de QR Code para escolher o destino do código.
+
+> Mesma decisão de escopo do `POST /api/qrcodes`: segue aberta no MVP e passa a exigir RBAC quando a tela administrativa for fechada.
+
+**Resposta `200`:**
+```json
+{
+  "itens": [
+    { "id": "uuid", "nome": "Mesa 12", "venue": { "nome": "Restaurante Sinuelo" } }
+  ]
+}
+```
+Ordenada por nome. Devolve `{ "itens": [] }` quando não há áreas.
+
+---
+
 ## Convenção de erro adicional
 Rotas inexistentes retornam `404` com `{ "erro": "Rota não encontrada", "codigo": "ROTA_NAO_ENCONTRADA" }`. Erros inesperados retornam `500` com `codigo: "ERRO_INTERNO"`.
 
