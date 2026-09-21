@@ -25,6 +25,12 @@ enum TipoFeedback {
   RECLAMACAO
 }
 
+enum StatusOcorrencia {
+  PENDENTE
+  EM_ANDAMENTO
+  RESOLVIDO
+}
+
 // ---------- Gestão / autenticação ----------
 
 model User {
@@ -34,6 +40,8 @@ model User {
   senhaHash String
   papel     Papel
   criadoEm  DateTime @default(now())
+
+  tratativas Feedback[]
 }
 
 // ---------- Estabelecimento e QR ----------
@@ -85,7 +93,14 @@ model Feedback {
   avaliacoes   FeedbackRating[]
   criadoEm     DateTime         @default(now())
 
+  // Tratativa: quem da gestão mexeu na ocorrência e quando.
+  status       StatusOcorrencia @default(PENDENTE)
+  tratadoPor   User?            @relation(fields: [tratadoPorId], references: [id])
+  tratadoPorId String?
+  tratadoEm    DateTime?
+
   @@index([venueId, criadoEm])
+  @@index([status])
 }
 
 model FeedbackRating {

@@ -78,12 +78,17 @@ export interface AvaliacaoOcorrencia {
   estrelas: number;
 }
 
+export type StatusOcorrencia = 'PENDENTE' | 'EM_ANDAMENTO' | 'RESOLVIDO';
+
 export interface Ocorrencia {
   id: string;
   tipo: TipoFeedback;
   comentario: string | null;
   anonimo: boolean;
   criadoEm: string;
+  status: StatusOcorrencia;
+  tratadoEm: string | null;
+  tratadoPor: { nome: string } | null;
   area: { nome: string } | null;
   avaliacoes: AvaliacaoOcorrencia[];
 }
@@ -117,5 +122,23 @@ export function gerarQRCode(areaId: string): Promise<QRCodeGerado> {
   return request(`/qrcodes`, {
     method: "POST",
     body: JSON.stringify({ areaId }),
+  });
+}
+
+export function buscarOcorrencia(id: string, token: string): Promise<Ocorrencia> {
+  return request(`/occurrences/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function atualizarStatusOcorrencia(
+  id: string,
+  status: StatusOcorrencia,
+  token: string
+): Promise<Ocorrencia> {
+  return request(`/occurrences/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ status }),
   });
 }

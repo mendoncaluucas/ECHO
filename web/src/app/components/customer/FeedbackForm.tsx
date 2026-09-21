@@ -130,16 +130,29 @@ export function FeedbackForm() {
             </label>
             <div className="flex gap-2">
               {[
-                { id: 'reclamacao' as FeedbackType, label: 'Reclamação', color: 'red' },
-                { id: 'sugestao' as FeedbackType, label: 'Sugestão', color: 'blue' },
-                { id: 'elogio' as FeedbackType, label: 'Elogio', color: 'green' },
+                // Classe inteira, não montada: o Tailwind só gera o que encontra escrito.
+                {
+                  id: 'reclamacao' as FeedbackType,
+                  label: 'Reclamação',
+                  classe: 'bg-red-100 text-red-700 border-2 border-red-500',
+                },
+                {
+                  id: 'sugestao' as FeedbackType,
+                  label: 'Sugestão',
+                  classe: 'bg-blue-100 text-blue-700 border-2 border-blue-500',
+                },
+                {
+                  id: 'elogio' as FeedbackType,
+                  label: 'Elogio',
+                  classe: 'bg-green-100 text-green-700 border-2 border-green-500',
+                },
               ].map((type) => (
                 <button
                   key={type.id}
                   onClick={() => setFeedbackType(type.id)}
                   className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
                     feedbackType === type.id
-                      ? `bg-${type.color}-100 text-${type.color}-700 border-2 border-${type.color}-500`
+                      ? type.classe
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >

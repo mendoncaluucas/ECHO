@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Filter, Droplet, Users, UtensilsCrossed, Lightbulb, ThumbsUp, AlertCircle, Loader2 } from 'lucide-react';
 import { Navigation } from '../Navigation';
-import { listarOcorrencias, type Ocorrencia, type TipoFeedback } from '../../services/api';
+import {
+  listarOcorrencias,
+  type Ocorrencia,
+  type StatusOcorrencia,
+  type TipoFeedback,
+} from '../../services/api';
 
 // remove acentos e caixa para casar o nome da categoria (vem do banco) com o ícone certo
 const normalizar = (texto: string) =>
@@ -14,10 +19,23 @@ const categoryIcons: Record<string, typeof Droplet> = {
   alimento: UtensilsCrossed,
 };
 
-const tipoConfig: Record<TipoFeedback, { label: string; color: string; icon: typeof AlertCircle }> = {
-  RECLAMACAO: { label: 'Reclamação', color: 'red', icon: AlertCircle },
-  SUGESTAO: { label: 'Sugestão', color: 'amber', icon: Lightbulb },
-  ELOGIO: { label: 'Elogio', color: 'green', icon: ThumbsUp },
+// As classes precisam aparecer inteiras no código: o Tailwind varre os arquivos
+// por strings completas e não gera nada montado em tempo de execução.
+const tipoConfig: Record<TipoFeedback, { label: string; classe: string; icon: typeof AlertCircle }> = {
+  RECLAMACAO: { label: 'Reclamação', classe: 'bg-red-100 text-red-700', icon: AlertCircle },
+  SUGESTAO: { label: 'Sugestão', classe: 'bg-amber-100 text-amber-700', icon: Lightbulb },
+  ELOGIO: { label: 'Elogio', classe: 'bg-green-100 text-green-700', icon: ThumbsUp },
+};
+
+// Usados quando a API devolver um valor que o front ainda não conhece — evita
+// quebrar a tela inteira se o enum do backend crescer antes de um deploy do front.
+const TIPO_DESCONHECIDO = { label: 'Outro', classe: 'bg-gray-100 text-gray-700', icon: AlertCircle };
+const STATUS_DESCONHECIDO = { label: 'Desconhecido', classe: 'bg-gray-100 text-gray-700' };
+
+const statusConfig: Record<StatusOcorrencia, { label: string; classe: string }> = {
+  PENDENTE: { label: 'Pendente', classe: 'bg-gray-100 text-gray-700' },
+  EM_ANDAMENTO: { label: 'Em andamento', classe: 'bg-blue-100 text-blue-700' },
+  RESOLVIDO: { label: 'Resolvido', classe: 'bg-green-100 text-green-700' },
 };
 
 export function OccurrencesPanel() {
@@ -26,6 +44,7 @@ export function OccurrencesPanel() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [filterTipo, setFilterTipo] = useState<TipoFeedback | 'all'>('all');
+  const [filterStatus, setFilterStatus] = useState<StatusOcorrencia | 'all'>('all');
   const [filterCategory, setFilterCategory] = useState<string | 'all'>('all');
 
   useEffect(() => {
@@ -72,10 +91,11 @@ export function OccurrencesPanel() {
 
   const filteredOccurrences = ocorrencias.filter((occ) => {
     const passaTipo = filterTipo === 'all' || occ.tipo === filterTipo;
+    const passaStatus = filterStatus === 'all' || occ.status === filterStatus;
     const passaCategoria =
       filterCategory === 'all' ||
       occ.avaliacoes.some((a) => a.categoria === filterCategory);
-    return passaTipo && passaCategoria;
+    return passaTipo && passaStatus && passaCategoria;
   });
 
   return (
@@ -92,8 +112,22 @@ export function OccurrencesPanel() {
             <Filter className="w-5 h-5 text-purple-600" />
             <span className="font-semibold text-gray-900">Filtros</span>
           </div>
-          {/* Filtro por status fica para o MVP 2 — a API ainda não devolve status de tratativa */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Status
+              </label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as StatusOcorrencia | 'all')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="all">Todos</option>
+                <option value="PENDENTE">Pendente</option>
+                <option value="EM_ANDAMENTO">Em andamento</option>
+                <option value="RESOLVIDO">Resolvido</option>
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Tipo
@@ -155,13 +189,15 @@ export function OccurrencesPanel() {
               const CategoryIcon = primeiraCategoria
                 ? categoryIcons[normalizar(primeiraCategoria)] ?? Filter
                 : Filter;
-              const tipoInfo = tipoConfig[occ.tipo];
+              const tipoInfo = tipoConfig[occ.tipo] ?? TIPO_DESCONHECIDO;
+              const statusInfo = statusConfig[occ.status] ?? STATUS_DESCONHECIDO;
               const TipoIcon = tipoInfo.icon;
 
               return (
-                <div
+                <button
                   key={occ.id}
-                  className="bg-white rounded-xl shadow-md p-4 border-l-4 border-purple-600"
+                  onClick={() => navigate(`/coordenador/ocorrencia/${occ.id}`)}
+                  className="w-full text-left bg-white rounded-xl shadow-md p-4 border-l-4 border-purple-600 transition-shadow hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -172,11 +208,18 @@ export function OccurrencesPanel() {
                         <span className="font-semibold text-gray-900">
                           {occ.anonimo ? 'Anônimo' : 'Identificado'}
                         </span>
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold bg-${tipoInfo.color}-100 text-${tipoInfo.color}-700 flex items-center gap-1 flex-shrink-0`}
-                        >
-                          <TipoIcon className="w-3 h-3" />
-                          {tipoInfo.label}
+                        <span className="flex items-center gap-2 flex-shrink-0">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-semibold ${statusInfo.classe}`}
+                          >
+                            {statusInfo.label}
+                          </span>
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-semibold ${tipoInfo.classe} flex items-center gap-1`}
+                          >
+                            <TipoIcon className="w-3 h-3" />
+                            {tipoInfo.label}
+                          </span>
                         </span>
                       </div>
                       <p className="text-gray-600 text-sm mb-2">
@@ -201,7 +244,7 @@ export function OccurrencesPanel() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
