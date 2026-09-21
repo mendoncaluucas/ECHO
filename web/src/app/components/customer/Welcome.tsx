@@ -16,7 +16,7 @@ export function Welcome() {
             <MessageSquare className="w-12 h-12 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 text-center">
-            Restaurante Sabor & Cia
+            Restaurante Sinuelo
           </h1>
         </div>
 

@@ -36,7 +36,7 @@ export function Navigation({ title, role }: NavigationProps) {
             </button>
             <div>
               <h1 className="text-xl font-bold">{title}</h1>
-              <p className="text-xs opacity-90">Restaurante Sabor & Cia</p>
+              <p className="text-xs opacity-90">Restaurante Sinuelo</p>
             </div>
           </div>
 

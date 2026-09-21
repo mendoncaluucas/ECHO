@@ -95,3 +95,27 @@ export function listarOcorrencias(
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+export interface Area {
+  id: string;
+  nome: string;
+  venue: { nome: string };
+}
+
+export function listarAreas(): Promise<{ itens: Area[] }> {
+  return request(`/areas`);
+}
+
+export interface QRCodeGerado {
+  id: string;
+  token: string;
+  url: string;
+  imagem: string;
+}
+
+export function gerarQRCode(areaId: string): Promise<QRCodeGerado> {
+  return request(`/qrcodes`, {
+    method: "POST",
+    body: JSON.stringify({ areaId }),
+  });
+}

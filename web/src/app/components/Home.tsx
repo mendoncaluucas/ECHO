@@ -43,7 +43,7 @@ export function Home() {
             Sistema de Feedback
           </h1>
           <p className="text-xl text-gray-600">
-            Restaurante Sabor & Cia
+            Restaurante Sinuelo
           </p>
           <p className="text-gray-500 mt-2">
             Selecione como você deseja acessar o sistema

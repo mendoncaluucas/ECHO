@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import { publicRoutes } from "./routes/public.routes.js";
 import { qrcodesRoutes } from "./routes/qrcodes.routes.js";
+import { areasRoutes } from "./routes/areas.routes.js";
 import { authRoutes } from "./routes/auth.routes.js";
 import { occurrencesRoutes } from "./routes/occurrences.routes.js";
 import { notFoundHandler, errorHandler } from "./middlewares/errorHandler.js";
@@ -23,6 +24,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/public", publicRoutes);
 app.use("/api/qrcodes", qrcodesRoutes);
+app.use("/api/areas", areasRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/occurrences", occurrencesRoutes);
 

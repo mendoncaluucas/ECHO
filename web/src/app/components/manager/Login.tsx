@@ -20,8 +20,15 @@ export function ManagerLogin() {
       localStorage.setItem('echo_usuario', JSON.stringify(usuario));
       localStorage.setItem('userRole', 'manager');
       navigate('/gerente/dashboard');
-    } catch {
-      setErro('Credenciais inválidas');
+    } catch (e) {
+      // 401 é credencial errada; qualquer outra coisa (API fora, rede) merece
+      // mensagem própria, senão o usuário procura problema na senha.
+      const status = (e as { status?: number }).status;
+      setErro(
+        status === 401
+          ? 'Credenciais inválidas'
+          : 'Não foi possível conectar ao servidor. Tente novamente.'
+      );
     } finally {
       setEnviando(false);
     }
