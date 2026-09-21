@@ -6,9 +6,14 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// url é a conexão da aplicação; directUrl é usada só pelas migrations.
+// Em provedores com pooler na frente (Neon, Supabase), o `migrate deploy` não
+// consegue segurar os advisory locks através do pooler — por isso a conexão direta.
+// Em desenvolvimento as duas apontam para o mesmo Postgres local.
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------- Enums ----------
