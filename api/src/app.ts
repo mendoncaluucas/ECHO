@@ -7,6 +7,7 @@ import { qrcodesRoutes } from "./routes/qrcodes.routes.js";
 import { areasRoutes } from "./routes/areas.routes.js";
 import { authRoutes } from "./routes/auth.routes.js";
 import { occurrencesRoutes } from "./routes/occurrences.routes.js";
+import { metricsRoutes } from "./routes/metrics.routes.js";
 import { notFoundHandler, errorHandler } from "./middlewares/errorHandler.js";
 
 // A aplicação é montada aqui e exportada sem escutar porta, para que os testes
@@ -27,6 +28,7 @@ app.use("/api/qrcodes", qrcodesRoutes);
 app.use("/api/areas", areasRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/occurrences", occurrencesRoutes);
+app.use("/api/metrics", metricsRoutes);
 
 // 404 e error handler — sempre por último.
 app.use(notFoundHandler);
