@@ -14,5 +14,20 @@ services:
     volumes:
       - echo_pgdata:/var/lib/postgresql/data
 
+  # Banco exclusivo dos testes: sem volume (os dados somem ao derrubar) e só sobe
+  # com o profile "test", para não interferir no banco de desenvolvimento.
+  db-test:
+    image: postgres:16-alpine
+    container_name: echo-postgres-test
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: echo
+      POSTGRES_PASSWORD: echo
+      POSTGRES_DB: echo_test
+    ports:
+      - "${DB_TEST_PORT:-5435}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+
 volumes:
   echo_pgdata:
