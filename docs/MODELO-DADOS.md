@@ -64,7 +64,7 @@ erDiagram
 |---|---|---|
 | **User** | Usuário de gestão que faz login | `nome`, `email` (único), `senhaHash`, `papel` |
 | **Venue** | O restaurante | `nome` |
-| **Area** | Mesa / área / setor do restaurante | `nome`, `venueId` |
+| **Area** | Mesa / área / setor do restaurante | `nome`, `venueId` — único por `(venueId, nome)` |
 | **QRCode** | QR físico que aponta para uma área | `token` (único), `ativo`, `areaId` |
 | **Category** | Categoria avaliável | `nome` (ex.: Higiene, Atendimento, Alimento) |
 | **Feedback** | Manifestação enviada pelo cliente | `tipo`, `comentario`, `anonimo`, `contatoEmail`, `venueId`, `areaId?`, `criadoEm` |
@@ -79,6 +79,10 @@ erDiagram
 - **Um feedback tem várias notas:** a relação `Feedback → FeedbackRating` permite avaliar **múltiplas categorias** de uma vez.
 - **`Feedback.areaId` é opcional:** cobre o caso de um QR genérico (do restaurante, não de uma mesa específica).
 - **Índice** em `Feedback(venueId, criadoEm)** para acelerar a listagem da gestão por data.
+- **Nome da área é único dentro do restaurante** (`@@unique([venueId, nome])`): duas "Mesa 12" no mesmo
+  lugar viravam duas barras indistinguíveis no dashboard. Entre restaurantes o nome pode repetir, porque
+  toda casa tem a sua "Mesa 1". A constraint é por **texto exato** — quem for criar o `POST /areas` precisa
+  aplicar `trim()` no nome, senão `"Mesa 1"` e `"Mesa 1 "` passam como áreas diferentes.
 - **"Ocorrência" no MVP 1** = um `Feedback`. Status, tratativa e respostas prontas viram entidades próprias no **MVP 2**.
 
 ## Fora do escopo (MVP 2+)
