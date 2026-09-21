@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Um push novo na mesma branch cancela o run anterior, que já está obsoleto.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API — typecheck e testes
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: echo
+          POSTGRES_PASSWORD: echo
+          POSTGRES_DB: echo_test
+        # Publicado na 5435 de propósito: é a porta que o api/.env.test já usa,
+        # então a suíte roda igual aqui e na máquina de quem desenvolve.
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # Antes do typecheck: o código importa tipos gerados pelo Prisma.
+      - name: Gerar o Prisma Client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # As migrations são aplicadas pelo globalSetup da própria suíte.
+      - name: Testes
+        run: npm test
+
+  web:
+    name: Front — build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # O front não tem typecheck próprio; o build é o que pega import quebrado.
+      - name: Build
+        run: npm run build
