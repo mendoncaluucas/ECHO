@@ -59,13 +59,28 @@ ECHO/
 
 > O protótipo em `web/` é um **mock de alta fidelidade** já validado com o cliente: funcionalidades como autenticação efetiva, tempo real e leitura de QR Code estão representadas na interface, mas ainda não operam de ponta a ponta. Este repositório inicia a implementação funcional a partir dele.
 
-## Como rodar (protótipo)
+## Como rodar
+
+O projeto tem duas partes, cada uma com o seu guia:
+
+| Parte | Guia | Observação |
+|---|---|---|
+| **API** (`api/`) | [`api/README.md`](api/README.md) | Precisa de Docker e de um `.env` — a lista de variáveis está lá |
+| **Front** (`web/`) | [`web/README.md`](web/README.md) | Sobe em `http://localhost:5173` |
+
+Comece pela API: o front depende dela para login, ocorrências e dashboard.
 
 ```bash
-cd web
+cd api
 npm install
+cp .env.example .env    # PowerShell: Copy-Item .env.example .env
+npm run db:up
+npm run prisma:migrate
+npm run prisma:seed
 npm run dev
 ```
+
+> Publicar em produção (Vercel · Render · Neon): [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## Status
 
