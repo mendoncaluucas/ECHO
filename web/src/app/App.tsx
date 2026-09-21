@@ -1,4 +1,6 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+
+import { ErrorBoundary } from './components/shared/ErrorBoundary';
 
 import { Home } from './components/Home';
 
@@ -24,35 +26,47 @@ import { QRGenerator } from './components/shared/QRGenerator';
 import { Notifications } from './components/shared/Notifications';
 import { AuditLog } from './components/shared/AuditLog';
 
+// A chave por rota faz o boundary remontar a cada navegação: sem isso, uma tela
+// que quebrou deixaria o erro preso e as telas seguintes apareceriam quebradas também.
+function RotasProtegidas() {
+  const location = useLocation();
+
+  return (
+    <ErrorBoundary key={location.pathname}>
+      <Routes>
+        <Route path="/" element={<Home />} />
+
+        <Route path="/boas-vindas" element={<Welcome />} />
+        <Route path="/feedback" element={<FeedbackForm />} />
+        <Route path="/identificacao" element={<OptionalId />} />
+        <Route path="/sucesso" element={<Success />} />
+
+        <Route path="/coordenador/login" element={<CoordinatorLogin />} />
+        <Route path="/coordenador/ocorrencias" element={<OccurrencesPanel />} />
+        <Route path="/coordenador/ocorrencia/:id" element={<OccurrenceDetail />} />
+
+        <Route path="/gerente/login" element={<ManagerLogin />} />
+        <Route path="/gerente/dashboard" element={<ManagerDashboard />} />
+        <Route path="/gerente/registro" element={<IssueRegistry />} />
+        <Route path="/gerente/relatorios" element={<Reports />} />
+
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/usuarios" element={<UserManagement />} />
+        <Route path="/admin/configuracoes" element={<AdminSettings />} />
+
+        <Route path="/qr-generator" element={<QRGenerator />} />
+        <Route path="/notificacoes" element={<Notifications />} />
+        <Route path="/audit-log" element={<AuditLog />} />
+      </Routes>
+    </ErrorBoundary>
+  );
+}
+
 export default function App() {
   return (
     <Router>
       <div className="size-full">
-        <Routes>
-          <Route path="/" element={<Home />} />
-
-          <Route path="/boas-vindas" element={<Welcome />} />
-          <Route path="/feedback" element={<FeedbackForm />} />
-          <Route path="/identificacao" element={<OptionalId />} />
-          <Route path="/sucesso" element={<Success />} />
-
-          <Route path="/coordenador/login" element={<CoordinatorLogin />} />
-          <Route path="/coordenador/ocorrencias" element={<OccurrencesPanel />} />
-          <Route path="/coordenador/ocorrencia/:id" element={<OccurrenceDetail />} />
-
-          <Route path="/gerente/login" element={<ManagerLogin />} />
-          <Route path="/gerente/dashboard" element={<ManagerDashboard />} />
-          <Route path="/gerente/registro" element={<IssueRegistry />} />
-          <Route path="/gerente/relatorios" element={<Reports />} />
-
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/admin/usuarios" element={<UserManagement />} />
-          <Route path="/admin/configuracoes" element={<AdminSettings />} />
-
-          <Route path="/qr-generator" element={<QRGenerator />} />
-          <Route path="/notificacoes" element={<Notifications />} />
-          <Route path="/audit-log" element={<AuditLog />} />
-        </Routes>
+        <RotasProtegidas />
       </div>
     </Router>
   );

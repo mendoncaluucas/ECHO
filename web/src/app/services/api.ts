@@ -142,3 +142,25 @@ export function atualizarStatusOcorrencia(
     body: JSON.stringify({ status }),
   });
 }
+
+export interface Metricas {
+  periodo: { dias: number; de: string; ate: string };
+  resumo: {
+    total: number;
+    resolvidos: number;
+    percentualResolvido: number;
+    // null quando ainda não houve tratativa / não há período anterior para comparar.
+    tempoMedioTratativaHoras: number | null;
+    variacaoPercentual: number | null;
+  };
+  porStatus: { status: StatusOcorrencia; total: number }[];
+  porTipo: { tipo: TipoFeedback; total: number }[];
+  porArea: { area: string; total: number }[];
+  porCategoria: { categoria: string; total: number; mediaEstrelas: number }[];
+}
+
+export function buscarMetricas(dias: number, token: string): Promise<Metricas> {
+  return request(`/metrics?dias=${dias}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}

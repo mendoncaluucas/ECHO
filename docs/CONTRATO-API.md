@@ -234,10 +234,65 @@ Ordenada por nome. Devolve `{ "itens": [] }` quando não há áreas.
 
 ---
 
+## 10. `GET /api/metrics` — números do dashboard
+**Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Devolve os agregados do período, já calculados no servidor — o front não faz conta.
+
+**Parâmetro de consulta:**
+- `dias` — **opcional**, inteiro de `1` a `365`. Padrão `30`. A janela é `[agora - dias, agora]`.
+
+**Resposta `200`:**
+```json
+{
+  "periodo": { "dias": 30, "de": "2026-08-22T18:00:00.000Z", "ate": "2026-09-21T18:00:00.000Z" },
+  "resumo": {
+    "total": 42,
+    "resolvidos": 18,
+    "percentualResolvido": 43,
+    "tempoMedioTratativaHoras": 2.4,
+    "variacaoPercentual": 12
+  },
+  "porStatus": [{ "status": "PENDENTE", "total": 20 }],
+  "porTipo": [{ "tipo": "ELOGIO", "total": 15 }],
+  "porArea": [{ "area": "Mesa 12", "total": 9 }],
+  "porCategoria": [{ "categoria": "Higiene", "total": 31, "mediaEstrelas": 3.4 }]
+}
+```
+
+Regras que o front pode assumir:
+
+| Campo | Regra |
+|---|---|
+| `porStatus` / `porTipo` | sempre com **todas** as opções do enum, inclusive zeradas |
+| `porArea` / `porCategoria` | só quem teve registro no período; `[]` é resultado válido |
+| `porArea` | ordenado por total (maior primeiro); feedback sem área aparece como `"Sem área"` |
+| `porCategoria` | ordenado por nome; `mediaEstrelas` de 1 a 5, uma casa decimal |
+| `tempoMedioTratativaHoras` | `null` quando ninguém foi tratado ainda — **não** `0` |
+| `variacaoPercentual` | `null` quando o período anterior teve zero feedbacks (não há base de comparação) |
+| `percentualResolvido` | inteiro de 0 a 100; `0` quando não há feedback no período |
+
+> `tempoMedioTratativaHoras` mede `criadoEm → tratadoEm`, ou seja o tempo até a gestão **agir** na
+> ocorrência. Não é tempo de resposta ao cliente: responder ao cliente não existe no MVP 1.
+> Como `tratadoEm` é sobrescrito a cada `PATCH`, o que se mede é a **última** ação, não a primeira.
+>
+> **Cuidado ao ler esse número em período curto.** A média considera os feedbacks *criados* na
+> janela que já foram tratados. Numa janela de 7 dias, uma ocorrência que leva 10 dias para ser
+> tratada nunca entra na conta — só as rápidas entram, e a média sai otimista. Quanto menor o
+> período, mais forte o viés.
+
+> **Decisão de escopo: os números somam todos os restaurantes.** Não há filtro por `venue`, porque
+> `User` não tem vínculo com `Venue` no schema. Com um só restaurante cadastrado (caso do Sinuelo)
+> o resultado está correto. **Ao cadastrar o segundo restaurante, cada gestor passa a ver o total
+> geral** — separar exige migration (`User.venueId`) e ficou para o MVP 2, junto com `GET /occurrences`,
+> que tem a mesma característica.
+
+**Erros:** `400` `VALIDACAO` (`dias` fora de 1–365 ou não inteiro) · `401` (sem token) · `403` `SEM_PERMISSAO`.
+
+---
+
 ## Convenção de erro adicional
 Rotas inexistentes retornam `404` com `{ "erro": "Rota não encontrada", "codigo": "ROTA_NAO_ENCONTRADA" }`. Erros inesperados retornam `500` com `codigo: "ERRO_INTERNO"`.
 
 ---
 
 ## Fora do escopo deste contrato (MVP 2+)
-Respostas prontas na tratativa, retorno ao cliente por e-mail, dashboards/indicadores, exportação PDF/CSV, notificações em tempo real, gestão de usuários e a **tela administrativa** de QR Codes.
+Respostas prontas na tratativa, retorno ao cliente por e-mail, série histórica por dia (o `GET /metrics` devolve o total do período, não a curva), exportação PDF/CSV, notificações em tempo real, gestão de usuários e a **tela administrativa** de QR Codes.

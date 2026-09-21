@@ -61,6 +61,11 @@ model Area {
   venueId   String
   qrCodes   QRCode[]
   feedbacks Feedback[]
+
+  // Duas áreas de mesmo nome no mesmo restaurante viravam duas barras
+  // indistinguíveis no dashboard. O nome se repetir entre restaurantes é legítimo
+  // (toda casa tem uma "Mesa 1"), por isso a chave é composta com o venueId.
+  @@unique([venueId, nome])
 }
 
 model QRCode {

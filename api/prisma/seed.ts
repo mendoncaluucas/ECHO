@@ -36,16 +36,18 @@ async function main() {
     await prisma.category.upsert({ where: { nome }, update: {}, create: { nome } });
   }
 
-  // Venue e Area não têm campo único por nome — procura antes de criar.
+  // Venue não tem campo único por nome — procura antes de criar.
   const venue =
     (await prisma.venue.findFirst({ where: { nome: VENUE_NOME } })) ??
     (await prisma.venue.create({ data: { nome: VENUE_NOME } }));
 
+  // Area é única por (venueId, nome), então o upsert resolve sem procurar antes.
   for (const nome of AREAS) {
-    const existente = await prisma.area.findFirst({ where: { nome, venueId: venue.id } });
-    if (!existente) {
-      await prisma.area.create({ data: { nome, venueId: venue.id } });
-    }
+    await prisma.area.upsert({
+      where: { venueId_nome: { venueId: venue.id, nome } },
+      update: {},
+      create: { nome, venueId: venue.id },
+    });
   }
 
   // QR Code de demonstração apontando para a primeira área.
