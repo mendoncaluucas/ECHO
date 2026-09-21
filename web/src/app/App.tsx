@@ -25,6 +25,7 @@ import { AdminSettings } from './components/admin/Settings';
 import { QRGenerator } from './components/shared/QRGenerator';
 import { Notifications } from './components/shared/Notifications';
 import { AuditLog } from './components/shared/AuditLog';
+import { NotFound } from './components/shared/NotFound';
 
 // A chave por rota faz o boundary remontar a cada navegação: sem isso, uma tela
 // que quebrou deixaria o erro preso e as telas seguintes apareceriam quebradas também.
@@ -57,6 +58,8 @@ function RotasProtegidas() {
         <Route path="/qr-generator" element={<QRGenerator />} />
         <Route path="/notificacoes" element={<Notifications />} />
         <Route path="/audit-log" element={<AuditLog />} />
+
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </ErrorBoundary>
   );

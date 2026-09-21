@@ -6,7 +6,8 @@
   "description": "Backend do Echo — plataforma de feedback via QR Code",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
+    "deploy:migrate": "prisma migrate deploy",
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
