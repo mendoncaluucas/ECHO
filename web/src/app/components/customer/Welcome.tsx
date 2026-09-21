@@ -1,8 +1,12 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MessageSquare } from 'lucide-react';
 
 export function Welcome() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // o token do QR chega aqui quando o cliente entra pela tela de boas-vindas;
+  // precisa ser repassado ao formulário, senão o envio não sabe de qual mesa veio
+  const qrToken = searchParams.get('t');
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-teal-50 to-white flex flex-col items-center justify-center p-6">
@@ -28,7 +32,9 @@ export function Welcome() {
           </div>
 
           <button
-            onClick={() => navigate('/feedback')}
+            onClick={() =>
+              navigate(qrToken ? `/feedback?t=${encodeURIComponent(qrToken)}` : '/feedback')
+            }
             className="w-full bg-teal-600 hover:bg-teal-700 text-white py-4 px-6 rounded-xl font-semibold transition-colors shadow-md hover:shadow-lg"
           >
             Deixar Feedback
