@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Droplet, Users, UtensilsCrossed, Star } from 'lucide-react';
+import { Droplet, Users, UtensilsCrossed, Star, QrCode } from 'lucide-react';
 
 type Category = 'higiene' | 'atendimento' | 'alimento';
 type FeedbackType = 'reclamacao' | 'sugestao' | 'elogio';
@@ -39,6 +39,24 @@ export function FeedbackForm() {
     localStorage.setItem('pendingFeedback', JSON.stringify(feedbackData));
     navigate('/identificacao');
   };
+
+  // Sem o token do QR não há como saber de qual mesa veio o feedback. Avisa aqui,
+  // antes de o cliente preencher o formulário à toa.
+  if (!qrToken) {
+    return (
+      <div className="min-h-screen bg-teal-50 flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 text-center space-y-4">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+            <QrCode className="w-8 h-8 text-amber-600" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">QR Code não identificado</h1>
+          <p className="text-gray-600">
+            Escaneie o QR Code disponível na sua mesa para deixar o seu feedback.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-teal-50 p-4 pb-8">
