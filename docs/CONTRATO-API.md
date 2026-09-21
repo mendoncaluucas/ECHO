@@ -26,6 +26,7 @@
   | `SEM_PERMISSAO` | 403 | Autenticado, mas o papel não está na lista da rota |
   | `QR_NAO_ENCONTRADO` | 404 | `qrToken` inexistente ou inativo |
   | `AREA_NAO_ENCONTRADA` | 404 | `areaId` inexistente |
+  | `OCORRENCIA_NAO_ENCONTRADA` | 404 | Ocorrência inexistente |
   | `TOKEN_DUPLICADO` / `CONFLITO` | 409 | Token de QR Code já em uso |
   | `ROTA_NAO_ENCONTRADA` | 404 | Rota inexistente |
   | `ERRO_INTERNO` | 500 | Erro inesperado |
@@ -104,7 +105,9 @@
 ## 4. `GET /occurrences` — feedbacks para a gestão
 **Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Lista, somente leitura, os feedbacks recebidos.
 
-> No MVP 1, "ocorrência" = um feedback registrado. Status e tratativa entram no MVP 2.
+> "Ocorrência" = um feedback registrado. O `status` (`PENDENTE` | `EM_ANDAMENTO` | `RESOLVIDO`) nasce
+> como `PENDENTE` e é alterado pelo `PATCH /occurrences/:id`. `tratadoPor` e `tratadoEm` ficam `null`
+> enquanto ninguém tiver mexido.
 
 **Header:** `Authorization: Bearer <token>`
 
@@ -118,6 +121,9 @@
       "comentario": "Demora no atendimento.",
       "anonimo": true,
       "criadoEm": "2026-08-27T14:30:00.000Z",
+      "status": "PENDENTE",
+      "tratadoPor": null,
+      "tratadoEm": null,
       "area": { "nome": "Mesa 12" },
       "avaliacoes": [
         { "categoria": "Atendimento", "estrelas": 2 },
@@ -135,7 +141,47 @@
 
 ---
 
-## 5. `POST /api/qrcodes` — gerar QR Code
+## 5. `GET /occurrences/:id` — detalhe da ocorrência
+**Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Mesmo formato de um item da listagem.
+
+**Resposta `200`:**
+```json
+{
+  "id": "uuid",
+  "tipo": "RECLAMACAO",
+  "comentario": "Demora no atendimento.",
+  "anonimo": true,
+  "criadoEm": "2026-08-27T14:30:00.000Z",
+  "status": "EM_ANDAMENTO",
+  "tratadoPor": { "nome": "Coordenadora Sinuelo" },
+  "tratadoEm": "2026-09-21T18:00:00.000Z",
+  "area": { "nome": "Mesa 12" },
+  "avaliacoes": [{ "categoria": "Atendimento", "estrelas": 2 }]
+}
+```
+**Erros:** `401` (sem token) · `404` `OCORRENCIA_NAO_ENCONTRADA`.
+
+---
+
+## 6. `PATCH /occurrences/:id` — mudar o status
+**Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Registra a tratativa da ocorrência.
+
+**Requisição:**
+```json
+{ "status": "RESOLVIDO" }
+```
+- `status`: `PENDENTE` | `EM_ANDAMENTO` | `RESOLVIDO`
+
+**Resposta `200`:** a ocorrência atualizada, no mesmo formato do detalhe.
+
+> `tratadoPor` é preenchido a partir do **token**, nunca do corpo da requisição — enviar `tratadoPorId`
+> no body não tem efeito. `tratadoEm` recebe o horário da alteração.
+
+**Erros:** `400` `VALIDACAO` (status fora do enum) · `401` (sem token) · `404` `OCORRENCIA_NAO_ENCONTRADA`.
+
+---
+
+## 7. `POST /api/qrcodes` — gerar QR Code
 Cria um QR Code para uma área e devolve o token, a URL do formulário e a imagem (PNG em data URL).
 
 > **Setup/administrativo.** O middleware de RBAC já existe (`requireAuth`), mas esta rota segue **aberta**
@@ -161,7 +207,7 @@ Cria um QR Code para uma área e devolve o token, a URL do formulário e a image
 
 ---
 
-## 6. `GET /api/qrcodes/:token/imagem` — imagem do QR Code
+## 8. `GET /api/qrcodes/:token/imagem` — imagem do QR Code
 Devolve a imagem **PNG** do QR (para impressão). Escaneada, abre o formulário do cliente.
 
 **Resposta `200`:** `Content-Type: image/png` (binário da imagem).
@@ -170,7 +216,7 @@ Devolve a imagem **PNG** do QR (para impressão). Escaneada, abre o formulário 
 
 ---
 
-## 7. `GET /api/areas` — listar áreas
+## 9. `GET /api/areas` — listar áreas
 
 Lista as áreas cadastradas (mesas, salão etc.), usada pela tela de geração de QR Code para escolher o destino do código.
 
@@ -194,4 +240,4 @@ Rotas inexistentes retornam `404` com `{ "erro": "Rota não encontrada", "codigo
 ---
 
 ## Fora do escopo deste contrato (MVP 2+)
-Tratativa de ocorrências (status, respostas prontas), dashboards/indicadores, exportação PDF/CSV, notificações em tempo real, gestão de usuários e a **tela administrativa** de QR Codes.
+Respostas prontas na tratativa, retorno ao cliente por e-mail, dashboards/indicadores, exportação PDF/CSV, notificações em tempo real, gestão de usuários e a **tela administrativa** de QR Codes.
