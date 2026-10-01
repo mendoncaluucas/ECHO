@@ -1,8 +1,16 @@
 # Roadmap — do MVP à entrega
 
-> **Objetivo:** entregar o Echo funcionando ao Restaurante Sinuelo no fim de outubro/2026.
-> Não é entrega acadêmica: o software vai ser **usado**. Isso muda o critério de pronto —
-> "a tela abre" não basta, o cliente precisa conseguir operar sozinho.
+> **Duas metas, em momentos diferentes:**
+>
+> 1. **Fim de outubro/2026 — apresentação ao professor.** O critério é o projeto inteiro
+>    funcional: nenhuma tela pode ser mock.
+> 2. **Depois — entrega ao Restaurante Sinuelo.** Aí o software passa a ser **usado**, com
+>    cliente real deixando feedback. O critério sobe: não basta funcionar, o restaurante
+>    precisa conseguir operar sozinho e os dados de cliente precisam de tratamento sério.
+>
+> O ambiente publicado hoje (Vercel + Render + Neon) é **vitrine da apresentação**, não produção
+> com cliente real. Vale ter isso claro ao priorizar: o que é urgente para a meta 1 nem sempre é
+> o mesmo que é urgente para a meta 2.
 
 ## Onde estamos (01/10/2026)
 
@@ -26,8 +34,9 @@ configurações) · notificações · log de auditoria.
 - **trocar qualquer senha** — as três contas usam `echo123`, e não há tela para mudar isso
 
 Enquanto isso não existir, toda mudança de cadastro depende de alguém da equipe rodar script
-contra o banco de produção. Por isso a Fase 1 não é "mais uma tela": é o que separa um protótipo
-hospedado de um produto entregável.
+contra o banco. Por isso a Fase 1 não é "mais uma tela": é o que separa um protótipo hospedado de
+um produto entregável — e é também o que o professor vai olhar, já que as telas de admin estão
+na interface prometendo essas funções.
 
 ---
 
@@ -86,12 +95,14 @@ hospedado de um produto entregável.
 
 ## Transversal
 
-| Item | Por quê |
-|---|---|
-| **Typecheck do front no CI** | o `vite build` usa esbuild e só apaga os tipos; erro de tipo passa batido. O front já passa limpo em `strict` — é só adicionar `tsconfig.json` e o script |
-| **Testes de front** | zero hoje. Já causou bug real: o clique do card sumiu numa reescrita e ninguém percebeu |
-| **Plano pago do Render** | cold start medido em **24s**. Para um QR na mesa de restaurante, é inviável — o cliente desiste |
-| **LGPD** | a tela de configurações promete retenção de dados; precisa existir de fato antes de coletar e-mail de cliente real |
+| Item | Por quê | Quando |
+|---|---|---|
+| **Typecheck do front no CI** | o `vite build` usa esbuild e só apaga os tipos; erro de tipo passa batido. O front já passa limpo em `strict` — é só adicionar `tsconfig.json` e o script | a qualquer momento, custa pouco |
+| **Testes de front** | zero hoje. Já causou bug real: o clique do card sumiu numa reescrita e ninguém percebeu | antes da meta 1 |
+| **Cold start do Render** | medido em **24s** no plano gratuito. Se o professor abrir o link antes da apresentação começar, espera isso olhando tela parada | antes da meta 1 |
+| **`POST /api/qrcodes` sem autenticação** | qualquer um na internet cria QR Code no banco. Hoje o estrago possível é poluir a base de demonstração | antes da meta 2 |
+| **Senhas `echo123`** | três contas administrativas com senha trivial | antes da meta 2 |
+| **LGPD** | a tela de configurações promete retenção de dados; precisa existir de fato antes de coletar e-mail de cliente real | antes da meta 2 |
 
 ---
 
@@ -105,5 +116,6 @@ que seja o PDF — não as Fases 1 e 2, que são o que torna o sistema entregáv
 do MVP. Se a Fase 1 depender de mais de uma pessoa, vale combinar a divisão antes de começar,
 não no meio.
 
-**Dados de produção.** O banco tem dados de demonstração (`npm run prisma:seed:demo`). Antes de o
-Sinuelo usar para valer, limpar e definir quem são os usuários reais.
+**Dados de demonstração.** O banco publicado tem 30 feedbacks fabricados (`npm run prisma:seed:demo`),
+feitos para a apresentação. Antes de o Sinuelo usar para valer, limpar tudo e definir os usuários
+reais — senão o primeiro relatório do restaurante vem contaminado com dado inventado.
