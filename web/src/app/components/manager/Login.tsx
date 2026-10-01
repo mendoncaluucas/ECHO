@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, BarChart3 } from 'lucide-react';
-import { login } from '../../services/api';
+import { login, telaInicialDe } from '../../services/api';
 
 export function ManagerLogin() {
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ export function ManagerLogin() {
       localStorage.setItem('echo_token', token);
       localStorage.setItem('echo_usuario', JSON.stringify(usuario));
       localStorage.setItem('userRole', 'manager');
-      navigate('/gerente/dashboard');
+      navigate(telaInicialDe(usuario.papel));
     } catch (e) {
       // 401 é credencial errada; qualquer outra coisa (API fora, rede) merece
       // mensagem própria, senão o usuário procura problema na senha.
