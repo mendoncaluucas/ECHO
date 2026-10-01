@@ -73,7 +73,7 @@ migrations conectam direto (`DIRECT_URL`).
 | `npm test` | Roda a suíte (exige `npm run db:test:up` antes) |
 | `npm run typecheck` | Checa os tipos sem gerar arquivos |
 | `npm run db:up` / `db:down` | Sobe / derruba o Postgres via Docker |
-| `npm run db:test:up` / `db:test:down` | Sobe / derruba o Postgres **de teste** (efêmero, porta 5435) |
+| `npm run db:test:up` / `db:test:down` | Sobe / derruba o Postgres **de teste** (efêmero, porta 5440) |
 | `npm run prisma:migrate` | Cria e aplica migration em desenvolvimento (interativo) |
 | `npm run deploy:migrate` | Só **aplica** as migrations já existentes — usado no deploy |
 | `npm run prisma:seed` | Popula o banco com os dados de desenvolvimento (idempotente) |

@@ -25,7 +25,7 @@ services:
       POSTGRES_PASSWORD: echo
       POSTGRES_DB: echo_test
     ports:
-      - "${DB_TEST_PORT:-5435}:5432"
+      - "${DB_TEST_PORT:-5440}:5432"
     tmpfs:
       - /var/lib/postgresql/data
 

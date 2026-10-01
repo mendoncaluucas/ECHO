@@ -28,10 +28,10 @@ jobs:
           POSTGRES_USER: echo
           POSTGRES_PASSWORD: echo
           POSTGRES_DB: echo_test
-        # Publicado na 5435 de propósito: é a porta que o api/.env.test já usa,
+        # Publicado na 5440 de propósito: é a porta que o api/.env.test já usa,
         # então a suíte roda igual aqui e na máquina de quem desenvolve.
         ports:
-          - 5435:5432
+          - 5440:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
