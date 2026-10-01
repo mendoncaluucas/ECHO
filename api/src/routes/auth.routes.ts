@@ -2,7 +2,9 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
+import { requireAuth } from "../middlewares/auth.js";
 import { assinarToken } from "../jwt.js";
+import { senhaValida, TAMANHO_MINIMO_DA_SENHA } from "./users.routes.js";
 
 // Autenticação da gestão — DONO: Victor
 export const authRoutes = Router();
@@ -27,8 +29,9 @@ authRoutes.post(
     const usuario = await prisma.user.findUnique({ where: { email } });
     const senhaConfere = await bcrypt.compare(senha, usuario?.senhaHash ?? HASH_FICTICIO);
 
-    // Resposta idêntica para e-mail inexistente e senha errada: não revelar quem tem cadastro.
-    if (!usuario || !senhaConfere) {
+    // Resposta idêntica para e-mail inexistente, senha errada e conta desativada:
+    // não revelar quem tem cadastro nem quem foi desligado da equipe.
+    if (!usuario || !senhaConfere || !usuario.ativo) {
       return res
         .status(401)
         .json({ erro: "Credenciais inválidas", codigo: "CREDENCIAIS_INVALIDAS" });
@@ -38,5 +41,40 @@ authRoutes.post(
       token: assinarToken({ sub: usuario.id, papel: usuario.papel }),
       usuario: { id: usuario.id, nome: usuario.nome, papel: usuario.papel },
     });
+  })
+);
+
+// PATCH /senha — o usuário troca a própria senha. Qualquer papel autenticado.
+// Fica aqui, e não em /users, porque não é administração de terceiros: é a credencial
+// de quem está logado, e por isso exige a senha atual.
+authRoutes.patch(
+  "/senha",
+  requireAuth([]),
+  asyncHandler(async (req, res) => {
+    const { senhaAtual, novaSenha } = req.body ?? {};
+
+    if (typeof senhaAtual !== "string" || senhaAtual.length === 0) {
+      return res.status(400).json({ erro: "senhaAtual é obrigatória", codigo: "VALIDACAO" });
+    }
+    if (!senhaValida(novaSenha)) {
+      return res.status(400).json({
+        erro: `novaSenha deve ter ao menos ${TAMANHO_MINIMO_DA_SENHA} caracteres`,
+        codigo: "VALIDACAO",
+      });
+    }
+
+    const usuario = await prisma.user.findUnique({ where: { id: req.usuario!.sub } });
+    if (!usuario || !(await bcrypt.compare(senhaAtual, usuario.senhaHash))) {
+      return res
+        .status(401)
+        .json({ erro: "Senha atual incorreta", codigo: "CREDENCIAIS_INVALIDAS" });
+    }
+
+    await prisma.user.update({
+      where: { id: usuario.id },
+      data: { senhaHash: await bcrypt.hash(novaSenha, 10) },
+    });
+
+    return res.status(204).send();
   })
 );

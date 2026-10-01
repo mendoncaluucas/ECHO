@@ -45,8 +45,9 @@ export async function criarUsuario(
 }
 
 // Cria o usuário e devolve um token válido, passando pelo endpoint real de login.
-export async function autenticar(papel: Papel) {
-  const usuario = await criarUsuario(papel);
+// O e-mail é parametrizável para os testes que precisam de dois usuários do mesmo papel.
+export async function autenticar(papel: Papel, email?: string) {
+  const usuario = await criarUsuario(papel, email);
   const res = await request(app)
     .post("/api/auth/login")
     .send({ email: usuario.email, senha: SENHA_TESTE });

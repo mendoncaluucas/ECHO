@@ -267,6 +267,19 @@ describe("GET /api/metrics", () => {
   });
 
   describe("janela de tempo", () => {
+    // O criadoEm vem do relógio do banco e a janela do relógio da API — máquinas
+    // diferentes em produção. Com limite superior na janela, um feedback carimbado
+    // alguns milissegundos à frente sumia do dashboard. Era falha intermitente: a
+    // suíte quebrava em ~1 de cada 5 execuções.
+    it("conta feedback com horário à frente do relógio da API", async () => {
+      await gravarFeedback(cenario, { criadoEm: new Date(Date.now() + 5000) });
+      const { token } = await autenticar(Papel.GERENTE);
+
+      const res = await buscarMetricas(token);
+
+      expect(res.body.resumo.total).toBe(1);
+    });
+
     it("ignora feedback anterior ao período", async () => {
       await gravarFeedback(cenario, { criadoEm: diasAtras(2) });
       await gravarFeedback(cenario, { criadoEm: diasAtras(40) });
