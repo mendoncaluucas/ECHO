@@ -23,6 +23,7 @@ import {
 import { Navigation } from '../Navigation';
 import {
   buscarMetricas,
+  encerrarSessao,
   type Metricas,
   type StatusOcorrencia,
   type TipoFeedback,
@@ -109,7 +110,7 @@ export function ManagerDashboard() {
       .catch((e: Error & { status?: number }) => {
         if (!ativo) return;
         if (e.status === 401) {
-          localStorage.removeItem('echo_token');
+          encerrarSessao();
           navigate('/gerente/login');
           return;
         }

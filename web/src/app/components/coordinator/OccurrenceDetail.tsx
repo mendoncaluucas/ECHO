@@ -4,6 +4,7 @@ import { ArrowLeft, Save, Star, Loader2, UserCheck } from 'lucide-react';
 import {
   atualizarStatusOcorrencia,
   buscarOcorrencia,
+  encerrarSessao,
   type Ocorrencia,
   type StatusOcorrencia,
 } from '../../services/api';
@@ -48,7 +49,7 @@ export function OccurrenceDetail() {
       .catch((e: Error & { status?: number }) => {
         if (!ativo) return;
         if (e.status === 401) {
-          localStorage.removeItem('echo_token');
+          encerrarSessao();
           navigate('/coordenador/login');
           return;
         }
@@ -73,7 +74,7 @@ export function OccurrenceDetail() {
     } catch (e) {
       const status401 = (e as { status?: number }).status === 401;
       if (status401) {
-        localStorage.removeItem('echo_token');
+        encerrarSessao();
         navigate('/coordenador/login');
         return;
       }
