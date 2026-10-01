@@ -49,7 +49,12 @@ metricsRoutes.get(
     const de = new Date(ate.getTime() - dias * MS_POR_DIA);
     const deAnterior = new Date(de.getTime() - dias * MS_POR_DIA);
 
-    const noPeriodo = { criadoEm: { gte: de, lte: ate } };
+    // Sem limite superior de propósito. O `criadoEm` é carimbado pelo banco
+    // (DEFAULT CURRENT_TIMESTAMP) e o `ate` vem do relógio desta API — em produção são
+    // máquinas diferentes. Com `lte: ate`, um feedback gravado milissegundos à frente
+    // sumiria do dashboard até os relógios alinharem. Data futura não existe
+    // legitimamente aqui, então o teto não protege de nada.
+    const noPeriodo = { criadoEm: { gte: de } };
 
     const [
       total,
