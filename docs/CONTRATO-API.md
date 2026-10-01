@@ -27,6 +27,7 @@
   | `QR_NAO_ENCONTRADO` | 404 | `qrToken` inexistente ou inativo |
   | `AREA_NAO_ENCONTRADA` | 404 | `areaId` inexistente |
   | `OCORRENCIA_NAO_ENCONTRADA` | 404 | Ocorrência inexistente |
+  | `USUARIO_NAO_ENCONTRADO` | 404 | Usuário inexistente |
   | `TOKEN_DUPLICADO` / `CONFLITO` | 409 | Token de QR Code já em uso |
   | `ROTA_NAO_ENCONTRADA` | 404 | Rota inexistente |
   | `ERRO_INTERNO` | 500 | Erro inesperado |
@@ -238,7 +239,13 @@ Ordenada por nome. Devolve `{ "itens": [] }` quando não há áreas.
 **Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Devolve os agregados do período, já calculados no servidor — o front não faz conta.
 
 **Parâmetro de consulta:**
-- `dias` — **opcional**, inteiro de `1` a `365`. Padrão `30`. A janela é `[agora - dias, agora]`.
+- `dias` — **opcional**, inteiro de `1` a `365`. Padrão `30`. A janela é **tudo a partir de `agora - dias`**, sem teto.
+
+> **A janela não tem limite superior de propósito.** O `criadoEm` é carimbado pelo banco
+> (`DEFAULT CURRENT_TIMESTAMP`) e o `agora` vem do relógio da API — em produção são máquinas
+> diferentes (Render e Neon). Com teto, um feedback gravado alguns milissegundos à frente sumiria
+> do dashboard até os relógios alinharem. Data futura não existe legitimamente aqui, então o teto
+> não protegeria de nada. O `periodo.ate` da resposta segue informando quando a consulta rodou.
 
 **Resposta `200`:**
 ```json
@@ -286,6 +293,78 @@ Regras que o front pode assumir:
 > que tem a mesma característica.
 
 **Erros:** `400` `VALIDACAO` (`dias` fora de 1–365 ou não inteiro) · `401` (sem token) · `403` `SEM_PERMISSAO`.
+
+---
+
+## 11. `GET /api/users` — listar a equipe de gestão
+**Protegido** (`ADMINISTRADOR`). Lista usuários ativos e inativos, ativos primeiro, depois por nome.
+
+**Resposta `200`:**
+```json
+{
+  "itens": [
+    { "id": "uuid", "nome": "Gerente Sinuelo", "email": "gerente@sinuelo.com",
+      "papel": "GERENTE", "setor": "Salão", "ativo": true, "criadoEm": "2026-08-18T..." }
+  ]
+}
+```
+> `senhaHash` **nunca** sai em nenhuma resposta desta API — há teste travando isso.
+
+**Erros:** `401` · `403` `SEM_PERMISSAO`.
+
+---
+
+## 12. `POST /api/users` — criar usuário
+**Protegido** (`ADMINISTRADOR`).
+
+```json
+{ "nome": "Nova Coordenadora", "email": "nova@sinuelo.com",
+  "senha": "umasenhaboa", "papel": "COORDENADOR", "setor": "Salão" }
+```
+- `setor` é **opcional**; `senha` tem no mínimo **8 caracteres**
+- o e-mail é normalizado (`trim` + minúsculas) antes de gravar
+
+**Resposta `201`:** o usuário criado, no formato da listagem.
+
+**Erros:** `400` `VALIDACAO` · `401` · `403` · `409` `CONFLITO` (e-mail já cadastrado).
+
+---
+
+## 13. `PATCH /api/users/:id` — editar usuário
+**Protegido** (`ADMINISTRADOR`). Aceita `nome`, `email`, `papel`, `setor` e `ativo`, todos opcionais.
+`setor: null` limpa o campo.
+
+**Resposta `200`:** o usuário atualizado.
+
+> **Usuário é desativado, nunca apagado.** As tratativas já registradas apontam para ele e precisam
+> continuar mostrando quem agiu. Usuário inativo não consegue fazer login — e o `POST /auth/login`
+> responde a mesma coisa de senha errada, para não revelar que a conta existe e foi desligada.
+
+> **Duas travas contra o administrador se trancar fora:** ele não pode desativar a própria conta
+> nem remover o próprio papel de `ADMINISTRADOR`. Não existiria caminho de volta pela interface.
+
+**Erros:** `400` `VALIDACAO` · `401` · `403` · `404` `USUARIO_NAO_ENCONTRADO` · `409` `CONFLITO`.
+
+---
+
+## 14. `PATCH /api/users/:id/senha` — administrador redefine a senha de alguém
+**Protegido** (`ADMINISTRADOR`). Corpo: `{ "novaSenha": "..." }`, mínimo 8 caracteres.
+
+Não exige a senha atual de propósito: o caso de uso é justamente quem esqueceu a dela.
+
+**Resposta `204`** (sem corpo). **Erros:** `400` · `401` · `403` · `404`.
+
+---
+
+## 15. `PATCH /api/auth/senha` — trocar a própria senha
+**Protegido** (qualquer papel autenticado). Corpo: `{ "senhaAtual": "...", "novaSenha": "..." }`.
+
+Exige a senha atual, por ser a credencial de quem está logado — diferente do endpoint acima,
+que é administração de terceiros.
+
+**Resposta `204`** (sem corpo).
+
+**Erros:** `400` `VALIDACAO` · `401` `CREDENCIAIS_INVALIDAS` (senha atual incorreta ou sem token).
 
 ---
 

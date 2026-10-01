@@ -44,6 +44,10 @@ model User {
   email     String   @unique
   senhaHash String
   papel     Papel
+  // Desativar em vez de apagar: as tratativas já registradas apontam para o usuário
+  // e precisam continuar mostrando quem agiu, mesmo depois que a pessoa sai da equipe.
+  ativo     Boolean  @default(true)
+  setor     String?
   criadoEm  DateTime @default(now())
 
   tratativas Feedback[]

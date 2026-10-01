@@ -8,6 +8,7 @@ import { areasRoutes } from "./routes/areas.routes.js";
 import { authRoutes } from "./routes/auth.routes.js";
 import { occurrencesRoutes } from "./routes/occurrences.routes.js";
 import { metricsRoutes } from "./routes/metrics.routes.js";
+import { usersRoutes } from "./routes/users.routes.js";
 import { notFoundHandler, errorHandler } from "./middlewares/errorHandler.js";
 
 // A aplicação é montada aqui e exportada sem escutar porta, para que os testes
@@ -29,6 +30,7 @@ app.use("/api/areas", areasRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/occurrences", occurrencesRoutes);
 app.use("/api/metrics", metricsRoutes);
+app.use("/api/users", usersRoutes);
 
 // 404 e error handler — sempre por último.
 app.use(notFoundHandler);
