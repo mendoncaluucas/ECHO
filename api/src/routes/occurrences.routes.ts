@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { Papel, StatusOcorrencia } from "@prisma/client";
+import { Papel, Prisma, StatusOcorrencia, TipoFeedback } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
@@ -41,18 +41,103 @@ function formatar<T extends OcorrenciaBruta>(ocorrencia: T) {
   };
 }
 
-// GET / — lista os feedbacks recebidos. Ver docs/CONTRATO-API.md
-// Sem paginação no MVP 1: o contrato não prevê. Entra no MVP 2, junto com filtros.
+const POR_PAGINA_PADRAO = 20;
+const POR_PAGINA_MAXIMO = 100;
+
+function lerInteiro(valor: unknown, padrao: number, minimo: number, maximo: number) {
+  if (valor === undefined) return padrao;
+  if (typeof valor !== "string" || !/^\d+$/.test(valor)) return null;
+
+  const numero = Number(valor);
+  return numero >= minimo && numero <= maximo ? numero : null;
+}
+
+// Aceita uma data no formato YYYY-MM-DD. `fimDoDia` empurra para o último instante,
+// senão filtrar "até 30/09" excluiria tudo que aconteceu durante o dia 30.
+function lerData(valor: unknown, fimDoDia = false): Date | null | undefined {
+  if (valor === undefined || valor === "") return undefined;
+  if (typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return null;
+
+  const data = new Date(`${valor}T${fimDoDia ? "23:59:59.999" : "00:00:00.000"}`);
+  return Number.isNaN(data.getTime()) ? null : data;
+}
+
+function textoDoFiltro(valor: unknown): string | undefined {
+  return typeof valor === "string" && valor.trim().length > 0 ? valor.trim() : undefined;
+}
+
+// GET / — lista os feedbacks recebidos, paginados e filtrados. Ver docs/CONTRATO-API.md
 occurrencesRoutes.get(
   "/",
   requireAuth(PAPEIS_DA_GESTAO),
-  asyncHandler(async (_req, res) => {
-    const feedbacks = await prisma.feedback.findMany({
-      orderBy: { criadoEm: "desc" },
-      select: camposDaOcorrencia,
-    });
+  asyncHandler(async (req, res) => {
+    const pagina = lerInteiro(req.query.pagina, 1, 1, Number.MAX_SAFE_INTEGER);
+    const porPagina = lerInteiro(
+      req.query.porPagina,
+      POR_PAGINA_PADRAO,
+      1,
+      POR_PAGINA_MAXIMO
+    );
 
-    return res.json({ itens: feedbacks.map(formatar) });
+    if (pagina === null || porPagina === null) {
+      return res.status(400).json({
+        erro: `pagina deve ser inteiro positivo e porPagina um inteiro de 1 a ${POR_PAGINA_MAXIMO}`,
+        codigo: "VALIDACAO",
+      });
+    }
+
+    const { status, tipo } = req.query;
+    if (status !== undefined && !Object.values(StatusOcorrencia).includes(status as never)) {
+      return res.status(400).json({ erro: "status inválido", codigo: "VALIDACAO" });
+    }
+    if (tipo !== undefined && !Object.values(TipoFeedback).includes(tipo as never)) {
+      return res.status(400).json({ erro: "tipo inválido", codigo: "VALIDACAO" });
+    }
+
+    const de = lerData(req.query.de);
+    const ate = lerData(req.query.ate, true);
+    if (de === null || ate === null) {
+      return res.status(400).json({ erro: "data deve ser YYYY-MM-DD", codigo: "VALIDACAO" });
+    }
+
+    const categoria = textoDoFiltro(req.query.categoria);
+    const busca = textoDoFiltro(req.query.busca);
+
+    const where: Prisma.FeedbackWhereInput = {
+      ...(status !== undefined && { status: status as StatusOcorrencia }),
+      ...(tipo !== undefined && { tipo: tipo as TipoFeedback }),
+      ...((de || ate) && { criadoEm: { ...(de && { gte: de }), ...(ate && { lte: ate }) } }),
+      // Categoria é por avaliação: traz quem pontuou aquela categoria.
+      ...(categoria && {
+        avaliacoes: { some: { category: { nome: { equals: categoria, mode: "insensitive" } } } },
+      }),
+      // A busca cobre o comentário e o nome da área, que é o que a tela expõe.
+      ...(busca && {
+        OR: [
+          { comentario: { contains: busca, mode: "insensitive" } },
+          { area: { nome: { contains: busca, mode: "insensitive" } } },
+        ],
+      }),
+    };
+
+    const [total, feedbacks] = await Promise.all([
+      prisma.feedback.count({ where }),
+      prisma.feedback.findMany({
+        where,
+        orderBy: { criadoEm: "desc" },
+        skip: (pagina - 1) * porPagina,
+        take: porPagina,
+        select: camposDaOcorrencia,
+      }),
+    ]);
+
+    return res.json({
+      itens: feedbacks.map(formatar),
+      total,
+      pagina,
+      porPagina,
+      paginas: Math.max(1, Math.ceil(total / porPagina)),
+    });
   })
 );
 
