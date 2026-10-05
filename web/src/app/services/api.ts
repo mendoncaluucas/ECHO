@@ -106,10 +106,40 @@ export interface Ocorrencia {
   avaliacoes: AvaliacaoOcorrencia[];
 }
 
+export interface FiltrosDeOcorrencia {
+  pagina?: number;
+  porPagina?: number;
+  status?: StatusOcorrencia;
+  tipo?: TipoFeedback;
+  categoria?: string;
+  busca?: string;
+  de?: string;
+  ate?: string;
+}
+
+export interface PaginaDeOcorrencias {
+  itens: Ocorrencia[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+  paginas: number;
+}
+
+// Teto do backend. Exportado porque o painel do coordenador carrega de página em
+// página e precisa saber o tamanho do passo.
+export const MAXIMO_POR_PAGINA = 100;
+
 export function listarOcorrencias(
-  token: string
-): Promise<{ itens: Ocorrencia[] }> {
-  return request(`/occurrences`, {
+  token: string,
+  filtros: FiltrosDeOcorrencia = {}
+): Promise<PaginaDeOcorrencias> {
+  const busca = new URLSearchParams();
+  for (const [chave, valor] of Object.entries(filtros)) {
+    if (valor !== undefined && valor !== '') busca.set(chave, String(valor));
+  }
+  const query = busca.toString();
+
+  return request(`/occurrences${query ? `?${query}` : ''}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
