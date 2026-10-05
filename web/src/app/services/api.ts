@@ -125,6 +125,18 @@ export function gerarQRCode(areaId: string): Promise<QRCodeGerado> {
   });
 }
 
+export interface QRCodeCadastrado {
+  id: string;
+  token: string;
+  ativo: boolean;
+  criadoEm: string;
+  area: { nome: string };
+}
+
+export function listarQRCodes(token: string): Promise<{ itens: QRCodeCadastrado[] }> {
+  return request(`/qrcodes`, { headers: { Authorization: `Bearer ${token}` } });
+}
+
 export function buscarOcorrencia(id: string, token: string): Promise<Ocorrencia> {
   return request(`/occurrences/${encodeURIComponent(id)}`, {
     headers: { Authorization: `Bearer ${token}` },
