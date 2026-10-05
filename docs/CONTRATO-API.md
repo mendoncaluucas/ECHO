@@ -103,7 +103,7 @@
 
 ---
 
-## 4. `GET /occurrences` — feedbacks para a gestão
+## 4. `GET /occurrences` — feedbacks para a gestão (paginado)
 **Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Lista, somente leitura, os feedbacks recebidos.
 
 > "Ocorrência" = um feedback registrado. O `status` (`PENDENTE` | `EM_ANDAMENTO` | `RESOLVIDO`) nasce
@@ -111,6 +111,18 @@
 > enquanto ninguém tiver mexido.
 
 **Header:** `Authorization: Bearer <token>`
+
+**Parâmetros de consulta** — todos opcionais:
+
+| Parâmetro | Valores | Observação |
+|---|---|---|
+| `pagina` | inteiro ≥ 1 | padrão `1` |
+| `porPagina` | inteiro de 1 a **100** | padrão `20` |
+| `status` | `PENDENTE` · `EM_ANDAMENTO` · `RESOLVIDO` | |
+| `tipo` | `ELOGIO` · `SUGESTAO` · `RECLAMACAO` | |
+| `categoria` | nome da categoria | traz quem **pontuou** aquela categoria |
+| `busca` | texto livre | procura no comentário e no nome da área, ignorando maiúsculas |
+| `de` / `ate` | `YYYY-MM-DD` | `ate` inclui o dia inteiro, não para à meia-noite |
 
 **Resposta `200`:**
 ```json
@@ -131,11 +143,22 @@
         { "categoria": "Alimento", "estrelas": 4 }
       ]
     }
-  ]
+  ],
+  "total": 30,
+  "pagina": 1,
+  "porPagina": 20,
+  "paginas": 2
 }
 ```
-**Erros:** `401` `NAO_AUTENTICADO` (sem token) · `401` `TOKEN_INVALIDO` (token inválido ou expirado) ·
-`403` `SEM_PERMISSAO` (papel fora da lista).
+
+> **O `total` é do filtro aplicado, não da página.** Quem precisa do conjunto inteiro — exportação,
+> por exemplo — deve percorrer as páginas até `paginas`, e não aumentar o `porPagina`: ele tem teto
+> de 100 justamente para uma requisição não conseguir pedir a base toda.
+
+> Página além do fim devolve `itens: []` com `200`, não erro.
+
+**Erros:** `400` `VALIDACAO` (paginação, status, tipo ou data inválidos) · `401` `NAO_AUTENTICADO` ·
+`401` `TOKEN_INVALIDO` · `403` `SEM_PERMISSAO`.
 
 > Ordenado do mais recente para o mais antigo. `area` vem `null` quando o feedback veio de um QR genérico.
 > O `contatoEmail` **não** é devolvido nesta rota (dado pessoal — LGPD).

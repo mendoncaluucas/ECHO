@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Filter, Droplet, Users, UtensilsCrossed, Lightbulb, ThumbsUp, AlertCircle, Loader2 } from 'lucide-react';
 import { Navigation } from '../Navigation';
 import {
   encerrarSessao,
   listarOcorrencias,
+  MAXIMO_POR_PAGINA,
   type Ocorrencia,
   type StatusOcorrencia,
   type TipoFeedback,
@@ -47,40 +48,52 @@ export function OccurrencesPanel() {
   const [filterTipo, setFilterTipo] = useState<TipoFeedback | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<StatusOcorrencia | 'all'>('all');
   const [filterCategory, setFilterCategory] = useState<string | 'all'>('all');
+  // A API passou a paginar. Os filtros desta tela são locais, então ela carrega em
+  // blocos e acumula — sem isso, filtrar esconderia o que ainda não veio do servidor.
+  const [total, setTotal] = useState(0);
+  const [paginaCarregada, setPaginaCarregada] = useState(0);
+  const [carregandoMais, setCarregandoMais] = useState(false);
+
+  const carregarPagina = useCallback(
+    (pagina: number) => {
+      const token = localStorage.getItem('echo_token');
+      if (!token) {
+        navigate('/coordenador/login');
+        return;
+      }
+
+      if (pagina === 1) setCarregando(true);
+      else setCarregandoMais(true);
+      setErro(null);
+
+      listarOcorrencias(token, { pagina, porPagina: MAXIMO_POR_PAGINA })
+        .then((res) => {
+          setOcorrencias((anteriores) =>
+            pagina === 1 ? res.itens : [...anteriores, ...res.itens]
+          );
+          setTotal(res.total);
+          setPaginaCarregada(res.pagina);
+        })
+        .catch((e: Error & { status?: number }) => {
+          if (e.status === 401) {
+            // sem token ou token expirado (validade de 8h) — volta pro login
+            encerrarSessao();
+            navigate('/coordenador/login');
+            return;
+          }
+          setErro(e.message || 'Não foi possível carregar as ocorrências.');
+        })
+        .finally(() => {
+          setCarregando(false);
+          setCarregandoMais(false);
+        });
+    },
+    [navigate]
+  );
 
   useEffect(() => {
-    const token = localStorage.getItem('echo_token');
-    if (!token) {
-      navigate('/coordenador/login');
-      return;
-    }
-
-    let ativo = true;
-    setCarregando(true);
-    setErro(null);
-
-    listarOcorrencias(token)
-      .then((res) => {
-        if (ativo) setOcorrencias(res.itens);
-      })
-      .catch((e: Error & { status?: number }) => {
-        if (!ativo) return;
-        if (e.status === 401) {
-          // sem token ou token expirado (validade de 8h) — volta pro login
-          encerrarSessao();
-          navigate('/coordenador/login');
-          return;
-        }
-        setErro(e.message || 'Não foi possível carregar as ocorrências.');
-      })
-      .finally(() => {
-        if (ativo) setCarregando(false);
-      });
-
-    return () => {
-      ativo = false;
-    };
-  }, [navigate]);
+    carregarPagina(1);
+  }, [carregarPagina]);
 
   // categorias disponíveis para o filtro, derivadas do que veio da API
   const categoriasDisponiveis = Array.from(
@@ -247,6 +260,24 @@ export function OccurrencesPanel() {
                 </button>
               );
             })}
+
+            {/* Os filtros acima são locais. Enquanto houver ocorrência não carregada,
+                avisar — senão o coordenador filtra e acha que não existe mais nada. */}
+            {ocorrencias.length < total && (
+              <div className="text-center space-y-2 pt-2">
+                <p className="text-sm text-gray-600">
+                  Mostrando {ocorrencias.length} de {total} ocorrências.
+                </p>
+                <button
+                  onClick={() => carregarPagina(paginaCarregada + 1)}
+                  disabled={carregandoMais}
+                  className="bg-white hover:bg-gray-50 text-purple-700 border-2 border-purple-600 px-6 py-3 rounded-xl font-semibold transition-colors inline-flex items-center gap-2 disabled:opacity-60"
+                >
+                  {carregandoMais && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Carregar mais
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
