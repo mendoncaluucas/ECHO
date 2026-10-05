@@ -22,17 +22,30 @@ export interface FeedbackPayload {
   avaliacoes: { categoriaId: string; estrelas: number }[];
 }
 
+type ErroDaApi = Error & { status?: number; codigo?: string };
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
-  });
+  let res: Response;
+
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
+    });
+  } catch {
+    // O fetch só rejeita quando a requisição nem chega ao servidor: API fora do ar,
+    // rede caída ou CORS. A mensagem nativa é "Failed to fetch", que as telas exibiam
+    // cru para o usuário. Sem status, porque não houve resposta HTTP.
+    const erro = new Error(
+      "Não foi possível conectar ao servidor. Tente novamente em alguns instantes."
+    ) as ErroDaApi;
+    erro.codigo = "SEM_CONEXAO";
+    throw erro;
+  }
+
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    const erro = new Error(data?.erro ?? `Erro ${res.status}`) as Error & {
-      status?: number;
-      codigo?: string;
-    };
+    const erro = new Error(data?.erro ?? `Erro ${res.status}`) as ErroDaApi;
     erro.status = res.status;
     erro.codigo = data?.codigo;
     throw erro;
