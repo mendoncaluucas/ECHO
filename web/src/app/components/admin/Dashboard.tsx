@@ -45,7 +45,7 @@ export function AdminDashboard() {
           coordenadores: contar('COORDENADOR'),
           gerentes: contar('GERENTE'),
           qrCodesAtivos: qrCodes.itens.filter((q) => q.ativo).length,
-          areas: areas.itens.length,
+          areas: areas.itens.filter((a) => a.ativo).length,
         });
       })
       .catch((e: Error & { status?: number }) => {

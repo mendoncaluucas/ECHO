@@ -1,15 +1,168 @@
-import { useState } from 'react';
-import { Bell, Clock, Shield, Building2, Save } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Bell,
+  Clock,
+  Shield,
+  Building2,
+  Plus,
+  Check,
+  X,
+  Pencil,
+  Loader2,
+} from 'lucide-react';
 import { Navigation } from '../Navigation';
+import {
+  atualizarArea,
+  criarArea,
+  encerrarSessao,
+  listarAreas,
+  usuarioLogado,
+  type Area,
+} from '../../services/api';
+
+const campo =
+  'w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-700';
+
+// Seções cuja funcionalidade ainda não existe no sistema. Mostrar o controle
+// desligado e dizer de que ele depende é mais honesto do que um botão que finge
+// salvar — e deixa claro para a equipe o que falta.
+function SecaoPendente({
+  icone,
+  titulo,
+  descricao,
+  dependeDe,
+}: {
+  icone: React.ReactNode;
+  titulo: string;
+  descricao: string;
+  dependeDe: string;
+}) {
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6 opacity-75">
+      <div className="flex items-center gap-3 mb-3">
+        {icone}
+        <h2 className="text-xl font-bold text-gray-900">{titulo}</h2>
+        <span className="ml-auto text-xs font-semibold bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
+          Em desenvolvimento
+        </span>
+      </div>
+      <p className="text-gray-600">{descricao}</p>
+      <p className="text-sm text-gray-500 mt-2">Depende de: {dependeDe}</p>
+    </div>
+  );
+}
 
 export function AdminSettings() {
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [sessionTimeout, setSessionTimeout] = useState(30);
-  const [dataRetention, setDataRetention] = useState(90);
-  const [sectors, setSectors] = useState(['Cozinha', 'Salão', 'Banheiro', 'Entrada']);
+  const navigate = useNavigate();
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+  const [semPermissao, setSemPermissao] = useState(false);
 
-  return (
+  const [novoNome, setNovoNome] = useState('');
+  const [criando, setCriando] = useState(false);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [nomeEditado, setNomeEditado] = useState('');
+  const [salvandoId, setSalvandoId] = useState<string | null>(null);
+
+  const token = localStorage.getItem('echo_token');
+  const buscaAtual = useRef(0);
+
+  // A listagem de áreas é aberta, então sem esta checagem um gerente veria os botões
+  // de editar e só descobriria que não pode ao clicar e tomar 403. O backend continua
+  // sendo a autoridade — isto é só para não oferecer o que vai ser recusado.
+  const naoEAdministrador = usuarioLogado()?.papel !== 'ADMINISTRADOR';
+
+  const tratarFalha = (e: unknown) => {
+    const status = (e as { status?: number }).status;
+    if (status === 401) {
+      encerrarSessao();
+      navigate('/gerente/login');
+      return;
+    }
+    if (status === 403) {
+      setSemPermissao(true);
+      return;
+    }
+    if (status === 409) {
+      setErro('Já existe uma área com esse nome neste restaurante.');
+      return;
+    }
+    setErro(e instanceof Error ? e.message : 'Algo deu errado. Tente novamente.');
+  };
+
+  const carregar = () => {
+    const minhaVez = ++buscaAtual.current;
+    listarAreas()
+      .then((res) => {
+        if (minhaVez === buscaAtual.current) setAreas(res.itens);
+      })
+      .catch((e) => {
+        if (minhaVez === buscaAtual.current) tratarFalha(e);
+      })
+      .finally(() => {
+        if (minhaVez === buscaAtual.current) setCarregando(false);
+      });
+  };
+
+  useEffect(() => {
+    if (!token) {
+      navigate('/gerente/login');
+      return;
+    }
+    carregar();
+    return () => {
+      buscaAtual.current++;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const adicionar = async () => {
+    if (!token || novoNome.trim().length === 0) return;
+    setErro(null);
+    setCriando(true);
+    try {
+      await criarArea(novoNome, token);
+      setNovoNome('');
+      carregar();
+    } catch (e) {
+      tratarFalha(e);
+    } finally {
+      setCriando(false);
+    }
+  };
+
+  const salvarNome = async (area: Area) => {
+    if (!token || nomeEditado.trim().length === 0) return;
+    setErro(null);
+    setSalvandoId(area.id);
+    try {
+      await atualizarArea(area.id, { nome: nomeEditado }, token);
+      setEditandoId(null);
+      carregar();
+    } catch (e) {
+      tratarFalha(e);
+    } finally {
+      setSalvandoId(null);
+    }
+  };
+
+  const alternarSituacao = async (area: Area) => {
+    if (!token) return;
+    setErro(null);
+    setSalvandoId(area.id);
+    try {
+      await atualizarArea(area.id, { ativo: !area.ativo }, token);
+      carregar();
+    } catch (e) {
+      tratarFalha(e);
+    } finally {
+      setSalvandoId(null);
+    }
+  };
+
+  const moldura = (conteudo: React.ReactNode) => (
     <div className="min-h-screen bg-slate-50">
       <Navigation title="Configurações do Sistema" role="admin" />
       <div className="max-w-4xl mx-auto p-4 pb-8">
@@ -17,151 +170,177 @@ export function AdminSettings() {
           <h1 className="text-2xl font-bold text-gray-900">Configurações do Sistema</h1>
           <p className="text-gray-600 mt-1">Personalize preferências e segurança</p>
         </div>
+        {conteudo}
+      </div>
+    </div>
+  );
 
-        <div className="space-y-6">
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <Bell className="w-6 h-6 text-slate-700" />
-              <h2 className="text-xl font-bold text-gray-900">Preferências de Notificação</h2>
-            </div>
+  if (semPermissao || naoEAdministrador) {
+    return moldura(
+      <div className="bg-white rounded-2xl shadow-lg p-8 text-center space-y-2">
+        <h2 className="text-lg font-bold text-gray-900">Acesso restrito</h2>
+        <p className="text-gray-600">
+          Apenas administradores podem alterar as configurações do sistema.
+        </p>
+      </div>
+    );
+  }
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
-                <div>
-                  <p className="font-semibold text-gray-900">Notificações por E-mail</p>
-                  <p className="text-sm text-gray-600">Receber alertas de novos feedbacks por e-mail</p>
-                </div>
-                <button
-                  onClick={() => setEmailNotifications(!emailNotifications)}
-                  className={`relative w-14 h-7 rounded-full transition-colors ${
-                    emailNotifications ? 'bg-slate-700' : 'bg-gray-300'
-                  }`}
-                >
-                  <div
-                    className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                      emailNotifications ? 'translate-x-7' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
+  return moldura(
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="flex items-center gap-3 mb-2">
+          <Building2 className="w-6 h-6 text-slate-700" />
+          <h2 className="text-xl font-bold text-gray-900">Setores e Áreas</h2>
+        </div>
+        <p className="text-gray-600 mb-6">
+          Cada área pode receber um QR Code próprio. Áreas desativadas deixam de ser
+          oferecidas na geração de códigos, mas continuam no histórico dos feedbacks.
+        </p>
 
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
-                <div>
-                  <p className="font-semibold text-gray-900">Notificações Push</p>
-                  <p className="text-sm text-gray-600">Receber notificações no navegador</p>
-                </div>
-                <button
-                  onClick={() => setPushNotifications(!pushNotifications)}
-                  className={`relative w-14 h-7 rounded-full transition-colors ${
-                    pushNotifications ? 'bg-slate-700' : 'bg-gray-300'
-                  }`}
-                >
-                  <div
-                    className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                      pushNotifications ? 'translate-x-7' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
+        {erro && (
+          <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            {erro}
+          </p>
+        )}
+
+        {carregando ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="w-7 h-7 animate-spin text-slate-700" />
           </div>
+        ) : (
+          <div className="space-y-3">
+            {areas.map((area) => {
+              const emEdicao = editandoId === area.id;
+              const ocupado = salvandoId === area.id;
 
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <Clock className="w-6 h-6 text-slate-700" />
-              <h2 className="text-xl font-bold text-gray-900">Tempo de Sessão</h2>
-            </div>
-
-            <div className="space-y-3">
-              <label className="block text-sm font-semibold text-gray-700">
-                Tempo máximo de inatividade (minutos)
-              </label>
-              <div className="flex items-center gap-4">
-                <input
-                  type="range"
-                  min="5"
-                  max="120"
-                  step="5"
-                  value={sessionTimeout}
-                  onChange={(e) => setSessionTimeout(Number(e.target.value))}
-                  className="flex-1"
-                />
-                <span className="font-bold text-slate-700 text-lg min-w-[60px] text-right">
-                  {sessionTimeout} min
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <Shield className="w-6 h-6 text-slate-700" />
-              <h2 className="text-xl font-bold text-gray-900">Retenção de Dados (LGPD)</h2>
-            </div>
-
-            <div className="space-y-3">
-              <label className="block text-sm font-semibold text-gray-700">
-                Período de armazenamento de dados (dias)
-              </label>
-              <select
-                value={dataRetention}
-                onChange={(e) => setDataRetention(Number(e.target.value))}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-700"
-              >
-                <option value={30}>30 dias</option>
-                <option value={60}>60 dias</option>
-                <option value={90}>90 dias</option>
-                <option value={180}>180 dias</option>
-                <option value={365}>1 ano</option>
-              </select>
-              <p className="text-xs text-gray-500 mt-2">
-                Após este período, feedbacks anônimos serão automaticamente excluídos conforme a LGPD
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <Building2 className="w-6 h-6 text-slate-700" />
-              <h2 className="text-xl font-bold text-gray-900">Configurar Setores e Áreas</h2>
-            </div>
-
-            <div className="space-y-3">
-              {sectors.map((sector, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  <input
-                    type="text"
-                    value={sector}
-                    onChange={(e) => {
-                      const newSectors = [...sectors];
-                      newSectors[index] = e.target.value;
-                      setSectors(newSectors);
-                    }}
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-700"
-                  />
-                  <button
-                    onClick={() => setSectors(sectors.filter((_, i) => i !== index))}
-                    className="text-red-600 hover:text-red-700 px-4 py-3 font-semibold"
-                  >
-                    Remover
-                  </button>
+              return (
+                <div key={area.id} className="flex items-center gap-3">
+                  {emEdicao ? (
+                    <>
+                      <input
+                        type="text"
+                        value={nomeEditado}
+                        onChange={(e) => setNomeEditado(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') salvarNome(area);
+                          if (e.key === 'Escape') setEditandoId(null);
+                        }}
+                        autoFocus
+                        className="flex-1 px-4 py-3 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-700"
+                      />
+                      <button
+                        onClick={() => salvarNome(area)}
+                        disabled={ocupado}
+                        title="Salvar"
+                        className="text-green-600 hover:text-green-700 p-3 disabled:opacity-50"
+                      >
+                        <Check className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => setEditandoId(null)}
+                        title="Cancelar"
+                        className="text-gray-500 hover:text-gray-700 p-3"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div
+                        className={`flex-1 px-4 py-3 border border-gray-200 rounded-xl flex items-center gap-3 ${
+                          area.ativo ? 'bg-white' : 'bg-gray-50'
+                        }`}
+                      >
+                        <span className={area.ativo ? 'text-gray-900' : 'text-gray-500'}>
+                          {area.nome}
+                        </span>
+                        {!area.ativo && (
+                          <span className="text-xs font-semibold bg-gray-200 text-gray-600 px-2 py-1 rounded-full">
+                            Inativa
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setEditandoId(area.id);
+                          setNomeEditado(area.nome);
+                          setErro(null);
+                        }}
+                        title="Renomear"
+                        className="text-slate-700 hover:text-slate-900 p-3"
+                      >
+                        <Pencil className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => alternarSituacao(area)}
+                        disabled={ocupado}
+                        className={`px-4 py-3 font-semibold disabled:opacity-50 ${
+                          area.ativo
+                            ? 'text-red-600 hover:text-red-700'
+                            : 'text-green-600 hover:text-green-700'
+                        }`}
+                      >
+                        {area.ativo ? 'Desativar' : 'Reativar'}
+                      </button>
+                    </>
+                  )}
                 </div>
-              ))}
+              );
+            })}
+
+            {areas.length === 0 && (
+              <p className="text-center text-gray-600 py-6">Nenhuma área cadastrada ainda.</p>
+            )}
+
+            <div className="flex items-center gap-3 pt-2">
+              <input
+                type="text"
+                value={novoNome}
+                onChange={(e) => setNovoNome(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') adicionar();
+                }}
+                placeholder="Nome da nova área. Ex.: Mesa 15, Varanda"
+                className={campo}
+              />
               <button
-                onClick={() => setSectors([...sectors, ''])}
-                className="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-600 hover:border-slate-700 hover:text-slate-700 font-semibold transition-colors"
+                onClick={adicionar}
+                disabled={criando || novoNome.trim().length === 0}
+                className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-xl font-semibold transition-colors flex items-center gap-2 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                + Adicionar Setor
+                {criando ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Plus className="w-5 h-5" />
+                )}
+                Adicionar
               </button>
             </div>
           </div>
-
-          <button className="w-full bg-slate-700 hover:bg-slate-800 text-white py-4 px-6 rounded-xl font-semibold transition-colors shadow-md hover:shadow-lg flex items-center justify-center gap-2">
-            <Save className="w-5 h-5" />
-            Salvar Configurações
-          </button>
-        </div>
+        )}
       </div>
+
+      <SecaoPendente
+        icone={<Bell className="w-6 h-6 text-slate-700" />}
+        titulo="Preferências de Notificação"
+        descricao="Escolher se os alertas de novos feedbacks chegam por e-mail, no navegador, ou nos dois."
+        dependeDe="envio de notificações, que ainda não existe no sistema"
+      />
+
+      <SecaoPendente
+        icone={<Clock className="w-6 h-6 text-slate-700" />}
+        titulo="Tempo de Sessão"
+        descricao="Definir por quanto tempo um login continua válido. Hoje são 8 horas, fixas na configuração do servidor."
+        dependeDe="tornar a duração do token configurável em tempo de execução"
+      />
+
+      <SecaoPendente
+        icone={<Shield className="w-6 h-6 text-slate-700" />}
+        titulo="Retenção de Dados (LGPD)"
+        descricao="Definir por quanto tempo os feedbacks são guardados antes de serem excluídos."
+        dependeDe="rotina de expurgo periódico — guardar o prazo sem aplicá-lo não protege ninguém"
+      />
     </div>
   );
 }

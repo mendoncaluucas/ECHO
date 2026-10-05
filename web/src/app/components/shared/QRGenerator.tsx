@@ -20,7 +20,9 @@ export function QRGenerator() {
 
     listarAreas()
       .then((res) => {
-        if (ativo) setAreas(res.itens);
+        // Só áreas ativas: gerar QR para uma área desativada criaria um código
+        // apontando para um lugar que a gestão tirou de operação.
+        if (ativo) setAreas(res.itens.filter((area) => area.ativo));
       })
       .catch((e: Error) => {
         if (ativo) setErro(e.message || 'Não foi possível carregar as áreas.');

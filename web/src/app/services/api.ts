@@ -147,11 +147,34 @@ export function listarOcorrencias(
 export interface Area {
   id: string;
   nome: string;
+  ativo: boolean;
   venue: { nome: string };
 }
 
+// Devolve ativas e inativas. Quem só quer oferecer destino para um QR Code novo
+// (o gerador) precisa filtrar pelas ativas.
 export function listarAreas(): Promise<{ itens: Area[] }> {
   return request(`/areas`);
+}
+
+export function criarArea(nome: string, token: string): Promise<Area> {
+  return request(`/areas`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ nome }),
+  });
+}
+
+export function atualizarArea(
+  id: string,
+  dados: { nome?: string; ativo?: boolean },
+  token: string
+): Promise<Area> {
+  return request(`/areas/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(dados),
+  });
 }
 
 export interface QRCodeGerado {
