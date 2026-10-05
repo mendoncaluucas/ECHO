@@ -3,6 +3,8 @@ import { Papel, Prisma, StatusOcorrencia, TipoFeedback } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
+import { ERRO_DE_PAGINACAO, lerData, lerPaginacao } from "../consulta.js";
+import { registrarAuditoria } from "../auditoria.js";
 
 // Feedbacks para a gestão (protegido) — DONO: Victor
 export const occurrencesRoutes = Router();
@@ -41,27 +43,6 @@ function formatar<T extends OcorrenciaBruta>(ocorrencia: T) {
   };
 }
 
-const POR_PAGINA_PADRAO = 20;
-const POR_PAGINA_MAXIMO = 100;
-
-function lerInteiro(valor: unknown, padrao: number, minimo: number, maximo: number) {
-  if (valor === undefined) return padrao;
-  if (typeof valor !== "string" || !/^\d+$/.test(valor)) return null;
-
-  const numero = Number(valor);
-  return numero >= minimo && numero <= maximo ? numero : null;
-}
-
-// Aceita uma data no formato YYYY-MM-DD. `fimDoDia` empurra para o último instante,
-// senão filtrar "até 30/09" excluiria tudo que aconteceu durante o dia 30.
-function lerData(valor: unknown, fimDoDia = false): Date | null | undefined {
-  if (valor === undefined || valor === "") return undefined;
-  if (typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return null;
-
-  const data = new Date(`${valor}T${fimDoDia ? "23:59:59.999" : "00:00:00.000"}`);
-  return Number.isNaN(data.getTime()) ? null : data;
-}
-
 function textoDoFiltro(valor: unknown): string | undefined {
   return typeof valor === "string" && valor.trim().length > 0 ? valor.trim() : undefined;
 }
@@ -71,20 +52,11 @@ occurrencesRoutes.get(
   "/",
   requireAuth(PAPEIS_DA_GESTAO),
   asyncHandler(async (req, res) => {
-    const pagina = lerInteiro(req.query.pagina, 1, 1, Number.MAX_SAFE_INTEGER);
-    const porPagina = lerInteiro(
-      req.query.porPagina,
-      POR_PAGINA_PADRAO,
-      1,
-      POR_PAGINA_MAXIMO
-    );
-
-    if (pagina === null || porPagina === null) {
-      return res.status(400).json({
-        erro: `pagina deve ser inteiro positivo e porPagina um inteiro de 1 a ${POR_PAGINA_MAXIMO}`,
-        codigo: "VALIDACAO",
-      });
+    const paginacao = lerPaginacao(req.query);
+    if (!paginacao) {
+      return res.status(400).json(ERRO_DE_PAGINACAO);
     }
+    const { pagina, porPagina } = paginacao;
 
     const { status, tipo } = req.query;
     if (status !== undefined && !Object.values(StatusOcorrencia).includes(status as never)) {
@@ -175,25 +147,38 @@ occurrencesRoutes.patch(
       });
     }
 
-    const existe = await prisma.feedback.findUnique({
+    const antes = await prisma.feedback.findUnique({
       where: { id: req.params.id },
-      select: { id: true },
+      select: { id: true, status: true, area: { select: { nome: true } } },
     });
-    if (!existe) {
+    if (!antes) {
       return res
         .status(404)
         .json({ erro: "Ocorrência não encontrada", codigo: "OCORRENCIA_NAO_ENCONTRADA" });
     }
 
-    // Registra quem tratou a partir do token, nunca do corpo da requisição.
-    const atualizada = await prisma.feedback.update({
-      where: { id: req.params.id },
-      data: {
-        status,
-        tratadoPorId: req.usuario?.sub,
-        tratadoEm: new Date(),
-      },
-      select: camposDaOcorrencia,
+    const usuarioId = req.usuario!.sub;
+
+    const atualizada = await prisma.$transaction(async (tx) => {
+      // Registra quem tratou a partir do token, nunca do corpo da requisição.
+      const ocorrencia = await tx.feedback.update({
+        where: { id: antes.id },
+        data: { status, tratadoPorId: usuarioId, tratadoEm: new Date() },
+        select: camposDaOcorrencia,
+      });
+
+      // Reenviar o mesmo status não muda nada que valha registrar.
+      if (antes.status !== status) {
+        await registrarAuditoria(tx, {
+          acao: "OCORRENCIA_STATUS",
+          usuarioId,
+          entidade: "Feedback",
+          entidadeId: antes.id,
+          detalhes: { de: antes.status, para: status, area: antes.area?.nome ?? null },
+        });
+      }
+
+      return ocorrencia;
     });
 
     return res.json(formatar(atualizada));

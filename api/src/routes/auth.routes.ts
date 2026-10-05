@@ -4,6 +4,7 @@ import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { assinarToken } from "../jwt.js";
+import { registrarAuditoria } from "../auditoria.js";
 import { senhaValida, TAMANHO_MINIMO_DA_SENHA } from "./users.routes.js";
 
 // Autenticação da gestão — DONO: Victor
@@ -36,6 +37,16 @@ authRoutes.post(
         .status(401)
         .json({ erro: "Credenciais inválidas", codigo: "CREDENCIAIS_INVALIDAS" });
     }
+
+    // Só o login bem-sucedido entra no log. A tentativa falha não tem autor
+    // identificável, e gravar o e-mail digitado guardaria endereço de quem nem tem
+    // conta — sem limite de tentativas, qualquer um encheria a tabela.
+    await registrarAuditoria(prisma, {
+      acao: "LOGIN",
+      usuarioId: usuario.id,
+      entidade: "User",
+      entidadeId: usuario.id,
+    });
 
     return res.json({
       token: assinarToken({ sub: usuario.id, papel: usuario.papel }),
@@ -70,9 +81,15 @@ authRoutes.patch(
         .json({ erro: "Senha atual incorreta", codigo: "CREDENCIAIS_INVALIDAS" });
     }
 
-    await prisma.user.update({
-      where: { id: usuario.id },
-      data: { senhaHash: await bcrypt.hash(novaSenha, 10) },
+    const senhaHash = await bcrypt.hash(novaSenha, 10);
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: usuario.id }, data: { senhaHash } });
+      await registrarAuditoria(tx, {
+        acao: "SENHA_ALTERADA",
+        usuarioId: usuario.id,
+        entidade: "User",
+        entidadeId: usuario.id,
+      });
     });
 
     return res.status(204).send();

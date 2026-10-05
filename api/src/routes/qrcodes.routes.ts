@@ -5,8 +5,10 @@ import { Papel } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
+import { registrarAuditoria } from "../auditoria.js";
 
-// TODO: fechar o POST com RBAC junto com a tela administrativa de QR Codes.
+// QR Codes — geração restrita ao administrador, listagem à gestão.
+// A imagem segue aberta: só serve token ativo, e o token já está impresso na mesa.
 export const qrcodesRoutes = Router();
 
 const PAPEIS_DA_GESTAO = [Papel.COORDENADOR, Papel.GERENTE, Papel.ADMINISTRADOR];
@@ -16,9 +18,8 @@ const urlDoFormulario = (token: string) => `${WEB_BASE_URL}/feedback?t=${token}`
 
 // GET / — lista os QR Codes cadastrados. Ver docs/CONTRATO-API.md
 //
-// Protegido, ao contrário do POST ao lado: a listagem entrega todos os tokens de uma
-// vez, e com eles dá para enviar feedback em nome de qualquer área sem passar por
-// nenhuma mesa. O POST continua aberto por decisão de escopo herdada do MVP.
+// Protegido: a listagem entrega todos os tokens de uma vez, e com eles dá para enviar
+// feedback em nome de qualquer área sem passar por nenhuma mesa.
 qrcodesRoutes.get(
   "/",
   requireAuth(PAPEIS_DA_GESTAO),
@@ -39,8 +40,12 @@ qrcodesRoutes.get(
 );
 
 // POST / — cria um QR Code para uma área. Ver docs/CONTRATO-API.md
+//
+// Era aberto desde o MVP. Fechou junto com a auditoria: sem autenticação não há
+// autor para registrar, e qualquer um na internet podia gravar QR Code no banco.
 qrcodesRoutes.post(
   "/",
+  requireAuth([Papel.ADMINISTRADOR]),
   asyncHandler(async (req, res) => {
     const { areaId, token } = req.body ?? {};
 
@@ -54,6 +59,14 @@ qrcodesRoutes.post(
         .status(404)
         .json({ erro: "Área não encontrada", codigo: "AREA_NAO_ENCONTRADA" });
     }
+    // O QR nasceria morto: os endpoints públicos recusam área desativada. O gerador
+    // já filtra as inativas, mas a regra é do backend.
+    if (!area.ativo) {
+      return res.status(400).json({
+        erro: "Área desativada não recebe QR Code novo",
+        codigo: "AREA_INATIVA",
+      });
+    }
 
     const tokenFinal =
       typeof token === "string" && token.length > 0
@@ -66,9 +79,21 @@ qrcodesRoutes.post(
     }
 
     // Em corrida, a constraint única dispara P2002 → 409 no error handler global.
-    const qr = await prisma.qRCode.create({
-      data: { token: tokenFinal, areaId: area.id },
-      select: { id: true, token: true },
+    const qr = await prisma.$transaction(async (tx) => {
+      const criado = await tx.qRCode.create({
+        data: { token: tokenFinal, areaId: area.id },
+        select: { id: true, token: true },
+      });
+
+      await registrarAuditoria(tx, {
+        acao: "QRCODE_GERADO",
+        usuarioId: req.usuario!.sub,
+        entidade: "QRCode",
+        entidadeId: criado.id,
+        detalhes: { area: area.nome, token: criado.token },
+      });
+
+      return criado;
     });
 
     const url = urlDoFormulario(qr.token);

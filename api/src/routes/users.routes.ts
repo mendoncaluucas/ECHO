@@ -4,6 +4,7 @@ import { Papel } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
+import { registrarAuditoria } from "../auditoria.js";
 
 // Gestão de usuários — restrita ao administrador. DONO: Lucas
 export const usersRoutes = Router();
@@ -80,16 +81,30 @@ usersRoutes.post(
       });
     }
 
+    const senhaHash = await bcrypt.hash(senha, SALT_ROUNDS);
+
     // E-mail duplicado cai no P2002 e o errorHandler devolve 409.
-    const usuario = await prisma.user.create({
-      data: {
-        nome: nome.trim(),
-        email: email.trim().toLowerCase(),
-        senhaHash: await bcrypt.hash(senha, SALT_ROUNDS),
-        papel,
-        setor: textoValido(setor) ? setor.trim() : null,
-      },
-      select: camposDoUsuario,
+    const usuario = await prisma.$transaction(async (tx) => {
+      const criado = await tx.user.create({
+        data: {
+          nome: nome.trim(),
+          email: email.trim().toLowerCase(),
+          senhaHash,
+          papel,
+          setor: textoValido(setor) ? setor.trim() : null,
+        },
+        select: camposDoUsuario,
+      });
+
+      await registrarAuditoria(tx, {
+        acao: "USUARIO_CRIADO",
+        usuarioId: req.usuario!.sub,
+        entidade: "User",
+        entidadeId: criado.id,
+        detalhes: { nome: criado.nome, papel: criado.papel },
+      });
+
+      return criado;
     });
 
     return res.status(201).json(usuario);
@@ -105,8 +120,11 @@ usersRoutes.patch(
     const alvo = req.params.id;
     const eEuMesmo = alvo === req.usuario?.sub;
 
-    const existe = await prisma.user.findUnique({ where: { id: alvo }, select: { id: true } });
-    if (!existe) {
+    const antes = await prisma.user.findUnique({
+      where: { id: alvo },
+      select: { nome: true, email: true, papel: true, setor: true, ativo: true },
+    });
+    if (!antes) {
       return res
         .status(404)
         .json({ erro: "Usuário não encontrado", codigo: "USUARIO_NAO_ENCONTRADO" });
@@ -143,17 +161,54 @@ usersRoutes.patch(
       return res.status(400).json({ erro: "ativo deve ser booleano", codigo: "VALIDACAO" });
     }
 
-    const atualizado = await prisma.user.update({
-      where: { id: alvo },
-      data: {
-        ...(nome !== undefined && { nome: nome.trim() }),
-        ...(email !== undefined && { email: email.trim().toLowerCase() }),
-        ...(papel !== undefined && { papel }),
-        ...(ativo !== undefined && { ativo }),
-        // setor aceita null explícito para limpar o campo.
-        ...(setor !== undefined && { setor: textoValido(setor) ? setor.trim() : null }),
-      },
-      select: camposDoUsuario,
+    const dados = {
+      ...(nome !== undefined && { nome: nome.trim() as string }),
+      ...(email !== undefined && { email: email.trim().toLowerCase() as string }),
+      ...(papel !== undefined && { papel: papel as Papel }),
+      // setor aceita null explícito para limpar o campo.
+      ...(setor !== undefined && { setor: textoValido(setor) ? setor.trim() : null }),
+    };
+
+    // Só o que mudou de fato vai para o log, com o valor anterior: "editou o usuário"
+    // sem dizer o quê não ajuda ninguém a reconstituir o que aconteceu.
+    const alteracoes: Record<string, { de: string | null; para: string | null }> = {};
+    for (const campo of ["nome", "email", "papel", "setor"] as const) {
+      if (campo in dados && dados[campo] !== antes[campo]) {
+        alteracoes[campo] = { de: antes[campo], para: dados[campo] ?? null };
+      }
+    }
+    const mudouSituacao = ativo !== undefined && ativo !== antes.ativo;
+    const usuarioId = req.usuario!.sub;
+
+    const atualizado = await prisma.$transaction(async (tx) => {
+      const usuario = await tx.user.update({
+        where: { id: alvo },
+        data: { ...dados, ...(ativo !== undefined && { ativo }) },
+        select: camposDoUsuario,
+      });
+
+      // Desativar é registrado à parte da edição comum: é o evento que alguém vai
+      // procurar no log ("quem tirou o acesso dela?"), e não pode ficar diluído.
+      if (mudouSituacao) {
+        await registrarAuditoria(tx, {
+          acao: ativo ? "USUARIO_REATIVADO" : "USUARIO_DESATIVADO",
+          usuarioId,
+          entidade: "User",
+          entidadeId: alvo,
+          detalhes: { nome: usuario.nome },
+        });
+      }
+      if (Object.keys(alteracoes).length > 0) {
+        await registrarAuditoria(tx, {
+          acao: "USUARIO_EDITADO",
+          usuarioId,
+          entidade: "User",
+          entidadeId: alvo,
+          detalhes: { nome: usuario.nome, alteracoes },
+        });
+      }
+
+      return usuario;
     });
 
     return res.json(atualizado);
@@ -175,19 +230,26 @@ usersRoutes.patch(
       });
     }
 
-    const existe = await prisma.user.findUnique({
+    const alvo = await prisma.user.findUnique({
       where: { id: req.params.id },
-      select: { id: true },
+      select: { id: true, nome: true },
     });
-    if (!existe) {
+    if (!alvo) {
       return res
         .status(404)
         .json({ erro: "Usuário não encontrado", codigo: "USUARIO_NAO_ENCONTRADO" });
     }
 
-    await prisma.user.update({
-      where: { id: req.params.id },
-      data: { senhaHash: await bcrypt.hash(novaSenha, SALT_ROUNDS) },
+    const senhaHash = await bcrypt.hash(novaSenha, SALT_ROUNDS);
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: alvo.id }, data: { senhaHash } });
+      await registrarAuditoria(tx, {
+        acao: "SENHA_REDEFINIDA",
+        usuarioId: req.usuario!.sub,
+        entidade: "User",
+        entidadeId: alvo.id,
+        detalhes: { nome: alvo.nome },
+      });
     });
 
     return res.status(204).send();

@@ -184,9 +184,11 @@ export interface QRCodeGerado {
   imagem: string;
 }
 
-export function gerarQRCode(areaId: string): Promise<QRCodeGerado> {
+// Exige administrador: a geração entra no log de auditoria, que precisa de um autor.
+export function gerarQRCode(areaId: string, token: string): Promise<QRCodeGerado> {
   return request(`/qrcodes`, {
     method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify({ areaId }),
   });
 }
@@ -303,6 +305,64 @@ export function redefinirSenha(
     headers: comAutorizacao(token),
     body: JSON.stringify({ novaSenha }),
   });
+}
+
+// ---------- Auditoria ----------
+
+export type AcaoAuditoria =
+  | 'LOGIN'
+  | 'SENHA_ALTERADA'
+  | 'SENHA_REDEFINIDA'
+  | 'USUARIO_CRIADO'
+  | 'USUARIO_EDITADO'
+  | 'USUARIO_DESATIVADO'
+  | 'USUARIO_REATIVADO'
+  | 'AREA_CRIADA'
+  | 'AREA_RENOMEADA'
+  | 'AREA_DESATIVADA'
+  | 'AREA_REATIVADA'
+  | 'QRCODE_GERADO'
+  | 'OCORRENCIA_STATUS';
+
+export interface RegistroDeAuditoria {
+  id: string;
+  acao: AcaoAuditoria;
+  entidade: string;
+  entidadeId: string;
+  // O formato varia por ação — ver a tabela do GET /api/audit no contrato.
+  detalhes: Record<string, unknown> | null;
+  criadoEm: string;
+  usuario: { id: string; nome: string };
+}
+
+export interface FiltrosDeAuditoria {
+  pagina?: number;
+  porPagina?: number;
+  usuarioId?: string;
+  acao?: AcaoAuditoria;
+  de?: string;
+  ate?: string;
+}
+
+export interface PaginaDeAuditoria {
+  itens: RegistroDeAuditoria[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+  paginas: number;
+}
+
+export function listarAuditoria(
+  token: string,
+  filtros: FiltrosDeAuditoria = {}
+): Promise<PaginaDeAuditoria> {
+  const busca = new URLSearchParams();
+  for (const [chave, valor] of Object.entries(filtros)) {
+    if (valor !== undefined && valor !== '') busca.set(chave, String(valor));
+  }
+  const query = busca.toString();
+
+  return request(`/audit${query ? `?${query}` : ''}`, { headers: comAutorizacao(token) });
 }
 
 // ---------- Sessão ----------

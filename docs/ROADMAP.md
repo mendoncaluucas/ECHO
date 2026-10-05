@@ -100,7 +100,7 @@ na interface prometendo essas funções.
 | **Typecheck do front no CI** | o `vite build` usa esbuild e só apaga os tipos; erro de tipo passa batido. O front já passa limpo em `strict` — é só adicionar `tsconfig.json` e o script | a qualquer momento, custa pouco |
 | **Testes de front** | zero hoje. Já causou bug real: o clique do card sumiu numa reescrita e ninguém percebeu | antes da meta 1 |
 | **Cold start do Render** | medido em **24s** no plano gratuito. Se o professor abrir o link antes da apresentação começar, espera isso olhando tela parada | antes da meta 1 |
-| **`POST /api/qrcodes` sem autenticação** | qualquer um na internet cria QR Code no banco. Hoje o estrago possível é poluir a base de demonstração | antes da meta 2 |
+| ~~**`POST /api/qrcodes` sem autenticação**~~ | **resolvido** junto com o log de auditoria: sem autor não havia o que registrar | — |
 | **Senhas `echo123`** | três contas administrativas com senha trivial | antes da meta 2 |
 | **LGPD** | a tela de configurações promete retenção de dados; precisa existir de fato antes de coletar e-mail de cliente real | antes da meta 2 |
 

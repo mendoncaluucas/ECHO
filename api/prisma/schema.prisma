@@ -51,6 +51,7 @@ model User {
   criadoEm  DateTime @default(now())
 
   tratativas Feedback[]
+  auditoria  AuditLog[]
 }
 
 // ---------- Estabelecimento e QR ----------
@@ -129,4 +130,43 @@ model FeedbackRating {
   estrelas   Int // 1 a 5
 
   @@unique([feedbackId, categoryId])
+}
+
+// ---------- Auditoria ----------
+
+enum AcaoAuditoria {
+  LOGIN
+  SENHA_ALTERADA
+  SENHA_REDEFINIDA
+  USUARIO_CRIADO
+  USUARIO_EDITADO
+  USUARIO_DESATIVADO
+  USUARIO_REATIVADO
+  AREA_CRIADA
+  AREA_RENOMEADA
+  AREA_DESATIVADA
+  AREA_REATIVADA
+  QRCODE_GERADO
+  OCORRENCIA_STATUS
+}
+
+// Quem fez o quê, sobre qual registro e quando. Só cresce: nenhuma rota edita ou
+// apaga linha daqui.
+//
+// `entidadeId` é texto solto, sem chave estrangeira, de propósito: o registro precisa
+// sobreviver ao alvo (o seed de demonstração apaga feedbacks, por exemplo). Pelo mesmo
+// motivo `detalhes` guarda o nome do alvo no momento da ação — renomear a área depois
+// não pode reescrever o que o log mostra.
+model AuditLog {
+  id         String        @id @default(uuid())
+  acao       AcaoAuditoria
+  usuario    User          @relation(fields: [usuarioId], references: [id])
+  usuarioId  String
+  entidade   String
+  entidadeId String
+  detalhes   Json?
+  criadoEm   DateTime      @default(now())
+
+  @@index([criadoEm])
+  @@index([usuarioId, criadoEm])
 }
