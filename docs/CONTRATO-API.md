@@ -208,6 +208,28 @@ Cria um QR Code para uma área e devolve o token, a URL do formulário e a image
 
 ---
 
+## 7.1. `GET /api/qrcodes` — listar QR Codes
+**Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Ativos primeiro, depois os mais recentes.
+
+**Resposta `200`:**
+```json
+{
+  "itens": [
+    { "id": "uuid", "token": "MESA12", "ativo": true,
+      "criadoEm": "2026-08-18T...", "area": { "nome": "Mesa 12" } }
+  ]
+}
+```
+
+> **Protegido, ao contrário do `POST` acima.** A listagem entrega todos os tokens de uma vez, e
+> com eles dá para enviar feedback em nome de qualquer área sem passar por nenhuma mesa. O `POST`
+> segue aberto por decisão de escopo herdada do MVP — fechá-lo entra junto com a tela
+> administrativa de QR Codes.
+
+**Erros:** `401` · `403` `SEM_PERMISSAO`.
+
+---
+
 ## 8. `GET /api/qrcodes/:token/imagem` — imagem do QR Code
 Devolve a imagem **PNG** do QR (para impressão). Escaneada, abre o formulário do cliente.
 

@@ -1,14 +1,42 @@
 import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import QRCode from "qrcode";
+import { Papel } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
+import { requireAuth } from "../middlewares/auth.js";
 
-// TODO: exigir RBAC quando o middleware de autenticação estiver pronto.
+// TODO: fechar o POST com RBAC junto com a tela administrativa de QR Codes.
 export const qrcodesRoutes = Router();
+
+const PAPEIS_DA_GESTAO = [Papel.COORDENADOR, Papel.GERENTE, Papel.ADMINISTRADOR];
 
 const WEB_BASE_URL = process.env.WEB_BASE_URL ?? "http://localhost:5173";
 const urlDoFormulario = (token: string) => `${WEB_BASE_URL}/feedback?t=${token}`;
+
+// GET / — lista os QR Codes cadastrados. Ver docs/CONTRATO-API.md
+//
+// Protegido, ao contrário do POST ao lado: a listagem entrega todos os tokens de uma
+// vez, e com eles dá para enviar feedback em nome de qualquer área sem passar por
+// nenhuma mesa. O POST continua aberto por decisão de escopo herdada do MVP.
+qrcodesRoutes.get(
+  "/",
+  requireAuth(PAPEIS_DA_GESTAO),
+  asyncHandler(async (_req, res) => {
+    const itens = await prisma.qRCode.findMany({
+      orderBy: [{ ativo: "desc" }, { criadoEm: "desc" }],
+      select: {
+        id: true,
+        token: true,
+        ativo: true,
+        criadoEm: true,
+        area: { select: { nome: true } },
+      },
+    });
+
+    return res.json({ itens });
+  })
+);
 
 // POST / — cria um QR Code para uma área. Ver docs/CONTRATO-API.md
 qrcodesRoutes.post(
