@@ -272,11 +272,43 @@ Lista as áreas cadastradas (mesas, salão etc.), usada pela tela de geração d
 ```json
 {
   "itens": [
-    { "id": "uuid", "nome": "Mesa 12", "venue": { "nome": "Restaurante Sinuelo" } }
+    { "id": "uuid", "nome": "Mesa 12", "ativo": true, "venue": { "nome": "Restaurante Sinuelo" } }
   ]
 }
 ```
-Ordenada por nome. Devolve `{ "itens": [] }` quando não há áreas.
+Ativas primeiro, depois por nome. Devolve `{ "itens": [] }` quando não há áreas.
+
+> **Devolve ativas e inativas.** Quem oferece destino para um QR Code novo precisa filtrar pelas
+> ativas; a tela de configurações mostra as duas, para permitir reativar.
+
+---
+
+## 9.1. `POST /api/areas` — cadastrar área
+**Protegido** (`ADMINISTRADOR`).
+
+```json
+{ "nome": "Varanda" }
+```
+- `venueId` é **opcional** quando há um único restaurante cadastrado — que é o caso do Sinuelo.
+  Com mais de um, passa a ser obrigatório.
+- O nome é gravado com `trim()`: a constraint `@@unique([venueId, nome])` é por texto exato, então
+  sem isso `"Mesa 1"` e `"Mesa 1 "` conviveriam como áreas distintas.
+
+**Resposta `201`:** a área criada, no formato da listagem.
+
+**Erros:** `400` `VALIDACAO` · `401` · `403` · `409` `CONFLITO` (nome já usado no restaurante).
+
+---
+
+## 9.2. `PATCH /api/areas/:id` — renomear ou ativar/desativar
+**Protegido** (`ADMINISTRADOR`). Aceita `nome` e `ativo`, ambos opcionais.
+
+**Resposta `200`:** a área atualizada.
+
+> **Área é desativada, nunca apagada.** Feedbacks e QR Codes já emitidos apontam para ela, e o
+> histórico precisa continuar fazendo sentido. Desativar só a retira das opções de novos QR Codes.
+
+**Erros:** `400` `VALIDACAO` · `401` · `403` · `404` `AREA_NAO_ENCONTRADA` · `409` `CONFLITO`.
 
 ---
 

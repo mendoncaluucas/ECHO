@@ -66,6 +66,9 @@ model Venue {
 model Area {
   id        String     @id @default(uuid())
   nome      String
+  // Desativar em vez de apagar, como em User: feedbacks e QR Codes já emitidos
+  // apontam para a área e o histórico precisa continuar fazendo sentido.
+  ativo     Boolean    @default(true)
   venue     Venue      @relation(fields: [venueId], references: [id])
   venueId   String
   qrCodes   QRCode[]

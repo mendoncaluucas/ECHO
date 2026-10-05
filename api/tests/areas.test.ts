@@ -16,6 +16,7 @@ describe("GET /api/areas", () => {
     expect(res.body.itens[0]).toEqual({
       id: cenario.area.id,
       nome: "Mesa 1",
+      ativo: true,
       venue: { nome: "Restaurante Teste" },
     });
   });
