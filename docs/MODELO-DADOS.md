@@ -64,7 +64,7 @@ erDiagram
 |---|---|---|
 | **User** | Usuário de gestão que faz login | `nome`, `email` (único), `senhaHash`, `papel` |
 | **Venue** | O restaurante | `nome` |
-| **Area** | Mesa / área / setor do restaurante | `nome`, `venueId` — único por `(venueId, nome)` |
+| **Area** | Mesa / área / setor do restaurante | `nome`, `ativo`, `venueId` — único por `(venueId, nome)` |
 | **QRCode** | QR físico que aponta para uma área | `token` (único), `ativo`, `areaId` |
 | **Category** | Categoria avaliável | `nome` (ex.: Higiene, Atendimento, Alimento) |
 | **Feedback** | Manifestação enviada pelo cliente | `tipo`, `comentario`, `anonimo`, `contatoEmail`, `venueId`, `areaId?`, `criadoEm` |

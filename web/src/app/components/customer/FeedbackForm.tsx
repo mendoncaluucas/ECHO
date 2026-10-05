@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Droplet, Users, UtensilsCrossed, Star, QrCode } from 'lucide-react';
+import { Droplet, Users, UtensilsCrossed, Star, QrCode, Loader2 } from 'lucide-react';
+import { getVenue } from '../../services/api';
 
 type Category = 'higiene' | 'atendimento' | 'alimento';
 type FeedbackType = 'reclamacao' | 'sugestao' | 'elogio';
@@ -27,6 +28,30 @@ export function FeedbackForm() {
     alimento: '',
   });
   const [feedbackType, setFeedbackType] = useState<FeedbackType>('sugestao');
+  // O QR pode ter deixado de valer depois de impresso — a área dele foi desativada,
+  // ou o próprio código foi. Validar na abertura evita o cliente preencher tudo e só
+  // descobrir no envio, que é o pior momento possível.
+  const [qrValido, setQrValido] = useState<boolean | null>(qrToken ? null : false);
+
+  useEffect(() => {
+    if (!qrToken) return;
+
+    let ativo = true;
+    getVenue(qrToken)
+      .then(() => {
+        if (ativo) setQrValido(true);
+      })
+      .catch((e: Error & { status?: number }) => {
+        if (!ativo) return;
+        // Só 404 significa QR inválido. Falha de rede não pode bloquear o cliente:
+        // nesse caso deixa seguir, e o envio cuida do erro.
+        setQrValido(e.status === 404 ? false : true);
+      });
+
+    return () => {
+      ativo = false;
+    };
+  }, [qrToken]);
 
   const handleSubmit = () => {
     const feedbackData = {
@@ -40,9 +65,17 @@ export function FeedbackForm() {
     navigate('/identificacao');
   };
 
-  // Sem o token do QR não há como saber de qual mesa veio o feedback. Avisa aqui,
+  if (qrValido === null) {
+    return (
+      <div className="min-h-screen bg-teal-50 flex items-center justify-center p-6">
+        <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+      </div>
+    );
+  }
+
+  // Sem token, ou com um token que o servidor não reconhece mais. Avisa aqui,
   // antes de o cliente preencher o formulário à toa.
-  if (!qrToken) {
+  if (!qrValido) {
     return (
       <div className="min-h-screen bg-teal-50 flex items-center justify-center p-6">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 text-center space-y-4">

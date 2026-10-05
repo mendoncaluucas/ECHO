@@ -19,7 +19,9 @@ publicRoutes.get(
       include: { area: { include: { venue: true } } },
     });
 
-    if (!qr || !qr.ativo) {
+    // A área também precisa estar ativa: desativar uma área tem que tirar de operação
+    // os QR Codes já impressos e colados nela, senão a desativação não desativa nada.
+    if (!qr || !qr.ativo || !qr.area.ativo) {
       return res
         .status(404)
         .json({ erro: "QR Code inválido ou inativo", codigo: "QR_NAO_ENCONTRADO" });
@@ -91,7 +93,8 @@ publicRoutes.post(
       where: { token: qrToken },
       include: { area: true },
     });
-    if (!qr || !qr.ativo) {
+    // Mesma regra do GET acima: área desativada derruba o QR impresso nela.
+    if (!qr || !qr.ativo || !qr.area.ativo) {
       return res
         .status(404)
         .json({ erro: "QR Code inválido ou inativo", codigo: "QR_NAO_ENCONTRADO" });
