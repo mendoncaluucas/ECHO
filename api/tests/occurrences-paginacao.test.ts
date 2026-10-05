@@ -211,6 +211,20 @@ describe("GET /api/occurrences — filtros", () => {
     expect(res.body.total).toBe(1);
   });
 
+  // O dia do filtro é o do restaurante. Em servidor UTC (o Render), "até 05/10"
+  // terminava às 20:59 de Brasília e o jantar sumia do registro e do CSV.
+  it("o dia do filtro é o de Brasília, não o do servidor", async () => {
+    // 05/10 às 23:30 em Brasília = 06/10 às 02:30 UTC.
+    await gravar(cenario, { criadoEm: new Date("2026-10-06T02:30:00Z"), comentario: "jantar" });
+    const { token } = await autenticar(Papel.GERENTE);
+
+    const ate05 = await buscar(token, "?ate=2026-10-05");
+    const de06 = await buscar(token, "?de=2026-10-06");
+
+    expect(ate05.body.total).toBe(1);
+    expect(de06.body.total).toBe(0);
+  });
+
   it("combina filtros", async () => {
     await gravar(cenario, { tipo: "RECLAMACAO", status: "PENDENTE" });
     await gravar(cenario, { tipo: "RECLAMACAO", status: "RESOLVIDO" });

@@ -44,6 +44,7 @@ Todas estão no `.env.example` com valores prontos para desenvolvimento.
 | `JWT_EXPIRES_IN` | não | Validade do token (padrão `8h`) |
 | `WEB_BASE_URL` | não | Para onde o QR Code aponta (padrão `http://localhost:5173`) |
 | `CORS_ORIGIN` | não | Origens permitidas, separadas por vírgula. Vazio libera todas |
+| `TZ` | não | Fuso dos filtros por data (padrão `America/Sao_Paulo`). O servidor do Render roda em UTC; sem este padrão, "até 05/10" terminava às 20:59 de Brasília |
 
 ### Por que existem duas URLs de banco
 
@@ -89,8 +90,10 @@ api/
 │  ├─ server.ts           # ponto de entrada (Express)
 │  ├─ prisma.ts           # client do Prisma
 │  ├─ jwt.ts              # assina e verifica o token da gestão
+│  ├─ auditoria.ts        # grava no log de auditoria, na transação de quem chama
+│  ├─ consulta.ts         # leitura de paginação e datas das listagens
 │  ├─ middlewares/        # asyncHandler, errorHandler e requireAuth (RBAC)
-│  └─ routes/             # public, auth, occurrences, qrcodes, areas e metrics
+│  └─ routes/             # public, auth, occurrences, qrcodes, areas, metrics, users e audit
 ├─ tests/                 # suíte Vitest + Supertest (banco de teste isolado)
 ├─ docker-compose.yml     # Postgres local (dev e teste)
 └─ .env.example           # variáveis de ambiente
@@ -99,8 +102,9 @@ api/
 ## Autenticação
 
 Rotas da gestão exigem `Authorization: Bearer <token>`. O token sai do `POST /api/auth/login`
-e vale 8h (configurável em `JWT_EXPIRES_IN`). O papel do usuário vai dentro do token e é
-conferido pelo `requireAuth` a cada requisição.
+e vale 8h (configurável em `JWT_EXPIRES_IN`). O `requireAuth` confere o papel e a situação do
+usuário **no banco** a cada requisição, não no token: desativar ou rebaixar alguém vale na hora,
+sem esperar o token expirar.
 
 Usuários criados pelo seed — **apenas para desenvolvimento**, senha `echo123` nos três:
 

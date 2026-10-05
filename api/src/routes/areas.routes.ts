@@ -3,6 +3,7 @@ import { Papel } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
+import { registrarAuditoria } from "../auditoria.js";
 
 // Áreas do restaurante — listagem aberta (alimenta o gerador de QR Code),
 // escrita restrita ao administrador.
@@ -88,9 +89,21 @@ areasRoutes.post(
     }
 
     // Nome repetido no mesmo restaurante cai no P2002 e vira 409 no error handler.
-    const area = await prisma.area.create({
-      data: { nome: normalizar(nome), venueId: venue.id },
-      select: camposDaArea,
+    const area = await prisma.$transaction(async (tx) => {
+      const criada = await tx.area.create({
+        data: { nome: normalizar(nome), venueId: venue.id },
+        select: camposDaArea,
+      });
+
+      await registrarAuditoria(tx, {
+        acao: "AREA_CRIADA",
+        usuarioId: req.usuario!.sub,
+        entidade: "Area",
+        entidadeId: criada.id,
+        detalhes: { nome: criada.nome },
+      });
+
+      return criada;
     });
 
     return res.status(201).json(area);
@@ -111,23 +124,51 @@ areasRoutes.patch(
       return res.status(400).json({ erro: "ativo deve ser booleano", codigo: "VALIDACAO" });
     }
 
-    const existe = await prisma.area.findUnique({
+    const antes = await prisma.area.findUnique({
       where: { id: req.params.id },
-      select: { id: true },
+      select: { id: true, nome: true, ativo: true },
     });
-    if (!existe) {
+    if (!antes) {
       return res
         .status(404)
         .json({ erro: "Área não encontrada", codigo: "AREA_NAO_ENCONTRADA" });
     }
 
-    const atualizada = await prisma.area.update({
-      where: { id: req.params.id },
-      data: {
-        ...(nome !== undefined && { nome: normalizar(nome) }),
-        ...(ativo !== undefined && { ativo }),
-      },
-      select: camposDaArea,
+    const nomeNovo = nome !== undefined ? normalizar(nome) : undefined;
+    const renomeou = nomeNovo !== undefined && nomeNovo !== antes.nome;
+    const mudouSituacao = ativo !== undefined && ativo !== antes.ativo;
+    const usuarioId = req.usuario!.sub;
+
+    const atualizada = await prisma.$transaction(async (tx) => {
+      const area = await tx.area.update({
+        where: { id: antes.id },
+        data: {
+          ...(nomeNovo !== undefined && { nome: nomeNovo }),
+          ...(ativo !== undefined && { ativo }),
+        },
+        select: camposDaArea,
+      });
+
+      if (renomeou) {
+        await registrarAuditoria(tx, {
+          acao: "AREA_RENOMEADA",
+          usuarioId,
+          entidade: "Area",
+          entidadeId: antes.id,
+          detalhes: { de: antes.nome, para: area.nome },
+        });
+      }
+      if (mudouSituacao) {
+        await registrarAuditoria(tx, {
+          acao: ativo ? "AREA_REATIVADA" : "AREA_DESATIVADA",
+          usuarioId,
+          entidade: "Area",
+          entidadeId: antes.id,
+          detalhes: { nome: area.nome },
+        });
+      }
+
+      return area;
     });
 
     return res.json(atualizada);
