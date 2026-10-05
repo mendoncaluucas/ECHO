@@ -206,11 +206,11 @@
 ---
 
 ## 7. `POST /api/qrcodes` — gerar QR Code
-Cria um QR Code para uma área e devolve o token, a URL do formulário e a imagem (PNG em data URL).
+**Protegido** (`ADMINISTRADOR`). Cria um QR Code para uma área e devolve o token, a URL do
+formulário e a imagem (PNG em data URL).
 
-> **Setup/administrativo.** O middleware de RBAC já existe (`requireAuth`), mas esta rota segue **aberta**
-> por decisão de escopo: fechá-la entra junto com a tela administrativa de QR Codes, no MVP 2.
-> Para proteger, basta `requireAuth([Papel.ADMINISTRADOR])` antes do handler.
+> Ficou aberta do MVP até o log de auditoria: sem autenticação não há autor para registrar, e
+> qualquer um na internet podia gravar QR Code no banco.
 
 **Requisição:**
 ```json
@@ -227,7 +227,9 @@ Cria um QR Code para uma área e devolve o token, a URL do formulário e a image
   "imagem": "data:image/png;base64,iVBORw0KGgo..."
 }
 ```
-**Erros:** `400` (areaId ausente) · `404` (área não encontrada) · `409` (token já em uso).
+**Erros:** `400` `VALIDACAO` (areaId ausente) · `400` `AREA_INATIVA` (o código nasceria sem
+funcionar: os endpoints públicos recusam área desativada) · `401` · `403` `SEM_PERMISSAO` ·
+`404` (área não encontrada) · `409` (token já em uso).
 
 ---
 
@@ -244,10 +246,9 @@ Cria um QR Code para uma área e devolve o token, a URL do formulário e a image
 }
 ```
 
-> **Protegido, ao contrário do `POST` acima.** A listagem entrega todos os tokens de uma vez, e
-> com eles dá para enviar feedback em nome de qualquer área sem passar por nenhuma mesa. O `POST`
-> segue aberto por decisão de escopo herdada do MVP — fechá-lo entra junto com a tela
-> administrativa de QR Codes.
+> Aberto a toda a gestão, não só ao administrador, mas nunca ao público: a listagem entrega todos
+> os tokens de uma vez, e com eles dá para enviar feedback em nome de qualquer área sem passar por
+> nenhuma mesa.
 
 **Erros:** `401` · `403` `SEM_PERMISSAO`.
 
@@ -266,7 +267,8 @@ Devolve a imagem **PNG** do QR (para impressão). Escaneada, abre o formulário 
 
 Lista as áreas cadastradas (mesas, salão etc.), usada pela tela de geração de QR Code para escolher o destino do código.
 
-> Mesma decisão de escopo do `POST /api/qrcodes`: segue aberta no MVP e passa a exigir RBAC quando a tela administrativa for fechada.
+> **Aberta**, ao contrário do `POST /api/qrcodes`: devolve só nomes de mesa e de salão, que estão
+> à vista de qualquer cliente no restaurante. Nenhum token sai por aqui.
 
 **Resposta `200`:**
 ```json
@@ -445,10 +447,75 @@ que é administração de terceiros.
 
 ---
 
+## 16. `GET /api/audit` — log de auditoria
+**Protegido** (`ADMINISTRADOR`). Quem fez o quê, sobre qual registro e quando — do mais recente
+ao mais antigo. Somente leitura: nenhuma rota edita ou apaga registro do log.
+
+**Parâmetros de consulta** — todos opcionais:
+
+| Parâmetro | Valores | Observação |
+|---|---|---|
+| `pagina` / `porPagina` | como no `GET /occurrences` | padrão `1` e `20`, teto de **100** |
+| `usuarioId` | id de um usuário | só o que essa pessoa fez |
+| `acao` | uma das ações da tabela abaixo | |
+| `de` / `ate` | `YYYY-MM-DD` | `ate` inclui o dia inteiro |
+
+**Resposta `200`:**
+```json
+{
+  "itens": [
+    {
+      "id": "uuid",
+      "acao": "AREA_RENOMEADA",
+      "entidade": "Area",
+      "entidadeId": "uuid",
+      "detalhes": { "de": "Mesa 1", "para": "Mesa 1 - Janela" },
+      "criadoEm": "2026-10-05T18:50:00.000Z",
+      "usuario": { "id": "uuid", "nome": "Admin Sinuelo" }
+    }
+  ],
+  "total": 1, "pagina": 1, "porPagina": 20, "paginas": 1
+}
+```
+
+**O que é registrado, e o que vai em `detalhes`:**
+
+| `acao` | Quando | `detalhes` |
+|---|---|---|
+| `LOGIN` | login bem-sucedido | — |
+| `SENHA_ALTERADA` | o usuário troca a própria senha | — |
+| `SENHA_REDEFINIDA` | o administrador redefine a de alguém | `nome` do alvo |
+| `USUARIO_CRIADO` | | `nome`, `papel` |
+| `USUARIO_EDITADO` | nome, e-mail, papel ou setor mudou | `nome`, `alteracoes: { campo: { de, para } }` |
+| `USUARIO_DESATIVADO` / `USUARIO_REATIVADO` | | `nome` |
+| `AREA_CRIADA` | | `nome` |
+| `AREA_RENOMEADA` | | `de`, `para` |
+| `AREA_DESATIVADA` / `AREA_REATIVADA` | | `nome` |
+| `QRCODE_GERADO` | | `area`, `token` |
+| `OCORRENCIA_STATUS` | o status mudou | `de`, `para`, `area` |
+
+> **Gravado na mesma transação da ação.** Ou os dois entram, ou nenhum: um log que às vezes falta
+> não serve para auditar.
+
+> **Só o que mudou de fato.** Reenviar o mesmo status, ou um `PATCH` com os mesmos valores, não
+> gera registro. Desativar alguém é um evento próprio, separado de editar — é o que alguém vai
+> procurar no log.
+
+> **`detalhes` guarda o nome da época.** Renomear a área depois não reescreve o que o log mostra.
+> Pelo mesmo motivo `entidadeId` não tem chave estrangeira: o registro sobrevive ao alvo.
+
+> **Tentativa de login falha não entra.** Não tem autor identificável, e gravar o e-mail digitado
+> guardaria endereço de quem nem tem conta. Senha, em qualquer forma, nunca vai para o log.
+
+**Erros:** `400` `VALIDACAO` (paginação, `acao` ou data inválidos) · `401` · `403` `SEM_PERMISSAO`.
+
+---
+
 ## Convenção de erro adicional
 Rotas inexistentes retornam `404` com `{ "erro": "Rota não encontrada", "codigo": "ROTA_NAO_ENCONTRADA" }`. Erros inesperados retornam `500` com `codigo: "ERRO_INTERNO"`.
 
 ---
 
 ## Fora do escopo deste contrato (MVP 2+)
-Respostas prontas na tratativa, retorno ao cliente por e-mail, série histórica por dia (o `GET /metrics` devolve o total do período, não a curva), exportação PDF/CSV, notificações em tempo real, gestão de usuários e a **tela administrativa** de QR Codes.
+Respostas prontas na tratativa, retorno ao cliente por e-mail, série histórica por dia (o `GET /metrics` devolve o total do período, não a curva), exportação PDF, notificações em tempo real e a **tela administrativa** de QR Codes (listar,
+desativar e reimprimir os já emitidos).

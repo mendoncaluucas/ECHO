@@ -14,6 +14,16 @@ erDiagram
     Area     |o--o{ Feedback       : origem
     Feedback ||--o{ FeedbackRating : contém
     Category ||--o{ FeedbackRating : avaliada
+    User     ||--o{ AuditLog       : autor
+    AuditLog {
+        string   id PK
+        enum     acao
+        string   usuarioId FK
+        string   entidade
+        string   entidadeId
+        json     detalhes
+        datetime criadoEm
+    }
     User     {
         string id PK
         string nome
@@ -69,10 +79,14 @@ erDiagram
 | **Category** | Categoria avaliável | `nome` (ex.: Higiene, Atendimento, Alimento) |
 | **Feedback** | Manifestação enviada pelo cliente | `tipo`, `comentario`, `anonimo`, `contatoEmail`, `venueId`, `areaId?`, `criadoEm` |
 | **FeedbackRating** | Nota por categoria de um feedback | `estrelas` (1–5), `feedbackId`, `categoryId` |
+| **AuditLog** | Quem fez o quê, sobre qual registro e quando | `acao`, `usuarioId`, `entidade`, `entidadeId`, `detalhes` (JSON), `criadoEm` |
 
 ## Enums
 - **Papel:** `COORDENADOR` · `GERENTE` · `ADMINISTRADOR` *(Cliente não faz login)*
 - **TipoFeedback:** `ELOGIO` · `SUGESTAO` · `RECLAMACAO`
+- **AcaoAuditoria:** `LOGIN` · `SENHA_ALTERADA` · `SENHA_REDEFINIDA` · `USUARIO_CRIADO` · `USUARIO_EDITADO` ·
+  `USUARIO_DESATIVADO` · `USUARIO_REATIVADO` · `AREA_CRIADA` · `AREA_RENOMEADA` · `AREA_DESATIVADA` ·
+  `AREA_REATIVADA` · `QRCODE_GERADO` · `OCORRENCIA_STATUS`
 
 ## Decisões e observações
 - **Anonimato por padrão:** `Feedback.anonimo = true`; `contatoEmail` só é usado quando o cliente opta por se identificar (LGPD).
@@ -85,5 +99,10 @@ erDiagram
   aplicar `trim()` no nome, senão `"Mesa 1"` e `"Mesa 1 "` passam como áreas diferentes.
 - **"Ocorrência" no MVP 1** = um `Feedback`. Status, tratativa e respostas prontas viram entidades próprias no **MVP 2**.
 
+- **`AuditLog` só cresce.** Nenhuma rota edita ou apaga linha. `entidadeId` é texto sem chave
+  estrangeira, de propósito: o registro precisa sobreviver ao alvo. E `detalhes` guarda o nome do alvo
+  na hora da ação, para que renomear depois não reescreva o passado. É gravado na **mesma transação**
+  da ação que registra. Ver `GET /api/audit` no [contrato](CONTRATO-API.md).
+
 ## Fora do escopo (MVP 2+)
-`Occurrence` (com status/tratativa), `CannedResponse`, `AuditLog`, `Notification`, `Sector` (múltiplos setores por usuário) e políticas de retenção/anonimização automática.
+`Occurrence` (com status/tratativa), `CannedResponse`, `Notification`, `Sector` (múltiplos setores por usuário) e políticas de retenção/anonimização automática.
