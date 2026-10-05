@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Filter, Droplet, Users, UtensilsCrossed, Lightbulb, ThumbsUp, AlertCircle, Loader2 } from 'lucide-react';
 import { Navigation } from '../Navigation';
 import {
+  encerrarSessao,
   listarOcorrencias,
   type Ocorrencia,
   type StatusOcorrencia,
@@ -66,8 +67,7 @@ export function OccurrencesPanel() {
         if (!ativo) return;
         if (e.status === 401) {
           // sem token ou token expirado (validade de 8h) — volta pro login
-          localStorage.removeItem('echo_token');
-          localStorage.removeItem('echo_usuario');
+          encerrarSessao();
           navigate('/coordenador/login');
           return;
         }
