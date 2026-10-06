@@ -76,8 +76,8 @@ na interface prometendo essas funções.
 
 - **Respostas prontas** na tratativa — modelo próprio, CRUD e seleção na tela de detalhe
 - **Retorno ao cliente por e-mail** — exige provedor de envio, template e tratamento de falha
-- **Notificações** para a gestão, com regra de negócio a definir (ocorrência parada há X horas?
-  reclamação com nota 1?)
+- ~~**Notificações** para a gestão~~ — **feito**, dentro do sistema. Regra definida pelo Lucas: todo
+  feedback novo notifica, de qualquer tipo. Falta o envio por e-mail/push, que depende de provedor
 
 > Vieram do cliente real durante a validação do protótipo. Entregar o sistema sem eles é entregar
 > menos do que foi combinado.

@@ -80,6 +80,9 @@
 ```
 **Erros:** `400` (dados inválidos) · `404` (qrToken inexistente).
 
+> **Todo feedback aceito notifica a gestão**, de qualquer tipo, para cada usuário ativo. A
+> notificação nasce no mesmo comando que grava o feedback. Ver `GET /api/notifications` (seção 17).
+
 ---
 
 ## 3. `POST /auth/login` — login da gestão
@@ -511,11 +514,80 @@ ao mais antigo. Somente leitura: nenhuma rota edita ou apaga registro do log.
 
 ---
 
+## 17. `GET /api/notifications` — notificações de quem está logado
+**Protegido** (qualquer papel). Cada usuário vê só as próprias, das mais recentes às mais antigas.
+
+> **Regra de negócio:** todo feedback novo notifica, de qualquer tipo — elogio, sugestão ou
+> reclamação — sem limiar de nota. Cada pessoa da gestão **ativa** recebe a sua notificação, com o
+> próprio "lida": o coordenador abrir o alerta não apaga o do gerente. Entrega só dentro do sistema;
+> e-mail e push do navegador dependem de provedor e ficam para depois.
+
+**Parâmetros de consulta:** `pagina` / `porPagina` (como no `GET /occurrences`) e `lida`
+(`true` | `false`), todos opcionais.
+
+**Resposta `200`:**
+```json
+{
+  "itens": [
+    {
+      "id": "uuid",
+      "lida": false,
+      "criadoEm": "2026-10-05T22:12:48.224Z",
+      "feedback": {
+        "id": "uuid",
+        "tipo": "RECLAMACAO",
+        "comentario": "Demora para trazer a conta.",
+        "status": "PENDENTE",
+        "area": { "nome": "Mesa 12" },
+        "avaliacoes": [{ "categoria": "Atendimento", "estrelas": 2 }]
+      }
+    }
+  ],
+  "total": 30, "naoLidas": 3, "pagina": 1, "porPagina": 20, "paginas": 2
+}
+```
+
+> `naoLidas` é sempre o total de não lidas de quem pergunta, **independente** do filtro `lida`.
+> A mensagem não é gravada: vem do feedback, então o `status` é o atual — dá para ver de relance se
+> alguém já tratou. O `contatoEmail` do cliente **não** sai aqui (LGPD).
+
+**Erros:** `400` `VALIDACAO` · `401`.
+
+---
+
+## 18. `GET /api/notifications/contagem` — número de não lidas
+**Protegido** (qualquer papel). Resposta `200`: `{ "naoLidas": 3 }`.
+
+Existe à parte da listagem porque o sino do cabeçalho consulta a cada minuto e não precisa de mais
+nada.
+
+---
+
+## 19. `PATCH /api/notifications/:id` — marcar como lida ou não lida
+**Protegido** (qualquer papel). Corpo: `{ "lida": true }`.
+
+**Resposta `200`:** a notificação, no formato da listagem.
+
+> A notificação de **outra pessoa** responde `404`, igual à inexistente — não confirmar que um id
+> existe para quem não é o dono. Marcar como lida **não** entra no log de auditoria: é rotina
+> pessoal, não alteração no sistema.
+
+**Erros:** `400` `VALIDACAO` (`lida` não booleano) · `401` · `404` `NOTIFICACAO_NAO_ENCONTRADA`.
+
+---
+
+## 20. `POST /api/notifications/marcar-todas-lidas`
+**Protegido** (qualquer papel). Marca como lidas todas as não lidas **de quem pediu**.
+
+**Resposta `200`:** `{ "atualizadas": 3 }`.
+
+---
+
 ## Convenção de erro adicional
 Rotas inexistentes retornam `404` com `{ "erro": "Rota não encontrada", "codigo": "ROTA_NAO_ENCONTRADA" }`. Erros inesperados retornam `500` com `codigo: "ERRO_INTERNO"`.
 
 ---
 
 ## Fora do escopo deste contrato (MVP 2+)
-Respostas prontas na tratativa, retorno ao cliente por e-mail, série histórica por dia (o `GET /metrics` devolve o total do período, não a curva), exportação PDF, notificações em tempo real e a **tela administrativa** de QR Codes (listar,
+Respostas prontas na tratativa, retorno ao cliente por e-mail, série histórica por dia (o `GET /metrics` devolve o total do período, não a curva), exportação PDF, notificação por e-mail ou push do navegador e a **tela administrativa** de QR Codes (listar,
 desativar e reimprimir os já emitidos).
