@@ -5,7 +5,7 @@ import { prisma } from "../src/prisma.js";
 // CASCADE resolve a ordem das chaves estrangeiras.
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "FeedbackRating", "Feedback", "QRCode", "Area", "Venue", "Category", "User" RESTART IDENTITY CASCADE'
+    'TRUNCATE TABLE "Notification", "AuditLog","FeedbackRating", "Feedback", "QRCode", "Area", "Venue", "Category", "User" RESTART IDENTITY CASCADE'
   );
 });
 

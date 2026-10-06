@@ -324,8 +324,8 @@ export function AdminSettings() {
       <SecaoPendente
         icone={<Bell className="w-6 h-6 text-slate-700" />}
         titulo="Preferências de Notificação"
-        descricao="Escolher se os alertas de novos feedbacks chegam por e-mail, no navegador, ou nos dois."
-        dependeDe="envio de notificações, que ainda não existe no sistema"
+        descricao="Os alertas de feedback novo já chegam dentro do sistema, no sino do cabeçalho, para toda a gestão ativa. Falta poder recebê-los também por e-mail ou como notificação do navegador."
+        dependeDe="um provedor de envio de e-mail e o push do navegador, que exigem infraestrutura fora do sistema"
       />
 
       <SecaoPendente

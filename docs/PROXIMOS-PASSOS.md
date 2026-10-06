@@ -6,15 +6,15 @@
 
 ## Onde estamos
 
-**10 telas ligadas à API**, 2 ainda mock. 19 endpoints, 175 testes, CI verde, sistema publicado.
+**11 telas ligadas à API**, 1 ainda mock. 23 endpoints, 196 testes, CI verde, sistema publicado.
 
 | Ligadas | Mock |
 |---|---|
-| fluxo do cliente · dois logins · painel e detalhe de ocorrências · dashboard do gerente · gerador de QR · gestão de usuários · painel administrativo · registro de ocorrências · configurações (áreas) · log de auditoria | **relatórios** · **notificações** |
+| fluxo do cliente · dois logins · painel e detalhe de ocorrências · dashboard do gerente · gerador de QR · gestão de usuários · painel administrativo · registro de ocorrências · configurações (áreas) · log de auditoria · notificações | **relatórios** |
 
 ## Migrations em produção
 
-Todas aplicadas até o PR #18. Quando uma PR trouxer migration nova, **aplicar antes do merge** —
+Todas aplicadas até o PR #19. Quando uma PR trouxer migration nova, **aplicar antes do merge** —
 migration que só adiciona coluna com valor padrão não quebra o código antigo, e o contrário derruba
 a API até alguém rodar:
 
@@ -41,17 +41,17 @@ a usar o fuso de Brasília.
 > com `registrarAuditoria(tx, ...)` dentro da transação. Nas notificações, mudar a configuração
 > entra no log; marcar uma notificação como lida não (é rotina pessoal, não ação sobre o sistema).
 
-## 2. Notificações
+## ~~2. Notificações~~ — feito
 
-**Regra definida pelo Lucas:** dispara **a cada feedback novo**, de qualquer tipo — elogio, sugestão
-ou reclamação. Sem limiar de nota, sem prazo de ociosidade.
+Todo feedback novo, de qualquer tipo, notifica cada pessoa da gestão ativa — cada uma com o próprio
+"lida". Tela `/notificacoes` com dados reais (abrir marca como lida e leva à ocorrência), sino do
+cabeçalho com contador que consulta a cada minuto com a aba visível. `seed-demo` gera notificações,
+com as dos últimos 3 dias não lidas.
 
-- Modelo `Notification`, criada no mesmo fluxo do `POST /public/feedback`
-- `GET /api/notifications` e marcar como lida
-- Ligar `/notificacoes` e o sino do cabeçalho, que hoje é decorativo
-- **Entrega por e-mail/push fica fora**: exige provedor e infraestrutura. A notificação é dentro do
-  sistema. Isso destrava a seção "Preferências de Notificação" das configurações, hoje marcada
-  como em desenvolvimento
+A entrega por **e-mail ou push do navegador** segue fora: depende de provedor. A seção de
+preferências das configurações agora diz isso, em vez de dizer que notificação não existe.
+
+**Depois do merge:** rodar o `seed-demo` em produção, senão o sino aparece zerado na apresentação.
 
 ## 3. Relatórios históricos
 

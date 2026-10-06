@@ -116,6 +116,15 @@ publicRoutes.post(
         .json({ erro: "alguma categoriaId não existe", codigo: "VALIDACAO" });
     }
 
+    // Regra de negócio: todo feedback novo notifica, de qualquer tipo — elogio,
+    // sugestão ou reclamação. Vai para toda a gestão ativa; quem está desativado
+    // não entra mais no sistema e não tem por que acumular alerta.
+    const destinatarios = await prisma.user.findMany({
+      where: { ativo: true },
+      select: { id: true },
+    });
+
+    // Criado no mesmo comando do feedback: não existe feedback novo sem o alerta dele.
     const feedback = await prisma.feedback.create({
       data: {
         venueId: qr.area.venueId,
@@ -130,6 +139,9 @@ publicRoutes.post(
             categoryId: a.categoriaId,
             estrelas: a.estrelas,
           })),
+        },
+        notificacoes: {
+          create: destinatarios.map((usuario) => ({ usuarioId: usuario.id })),
         },
       },
       select: { id: true, criadoEm: true },

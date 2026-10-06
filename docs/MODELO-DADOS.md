@@ -15,6 +15,15 @@ erDiagram
     Feedback ||--o{ FeedbackRating : contém
     Category ||--o{ FeedbackRating : avaliada
     User     ||--o{ AuditLog       : autor
+    User     ||--o{ Notification   : recebe
+    Feedback ||--o{ Notification   : dispara
+    Notification {
+        string   id PK
+        string   usuarioId FK
+        string   feedbackId FK
+        boolean  lida
+        datetime criadoEm
+    }
     AuditLog {
         string   id PK
         enum     acao
@@ -79,6 +88,7 @@ erDiagram
 | **Category** | Categoria avaliável | `nome` (ex.: Higiene, Atendimento, Alimento) |
 | **Feedback** | Manifestação enviada pelo cliente | `tipo`, `comentario`, `anonimo`, `contatoEmail`, `venueId`, `areaId?`, `criadoEm` |
 | **FeedbackRating** | Nota por categoria de um feedback | `estrelas` (1–5), `feedbackId`, `categoryId` |
+| **Notification** | Alerta de feedback novo para uma pessoa da gestão | `usuarioId`, `feedbackId`, `lida`, `criadoEm` — único por `(usuarioId, feedbackId)` |
 | **AuditLog** | Quem fez o quê, sobre qual registro e quando | `acao`, `usuarioId`, `entidade`, `entidadeId`, `detalhes` (JSON), `criadoEm` |
 
 ## Enums
@@ -104,5 +114,10 @@ erDiagram
   na hora da ação, para que renomear depois não reescreva o passado. É gravado na **mesma transação**
   da ação que registra. Ver `GET /api/audit` no [contrato](CONTRATO-API.md).
 
+- **`Notification` é uma linha por destinatário**, não uma por feedback: cada pessoa tem o próprio
+  "lida". Não guarda texto — a mensagem vem do feedback na leitura —, e por isso apaga em cascata com
+  ele. Criada junto com o feedback para toda a gestão ativa; quem entra na equipe depois não herda
+  alertas antigos.
+
 ## Fora do escopo (MVP 2+)
-`Occurrence` (com status/tratativa), `CannedResponse`, `Notification`, `Sector` (múltiplos setores por usuário) e políticas de retenção/anonimização automática.
+`Occurrence` (com status/tratativa), `CannedResponse`, `Sector` (múltiplos setores por usuário) e políticas de retenção/anonimização automática.
