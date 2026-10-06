@@ -32,6 +32,15 @@ export function OccurrenceDetail() {
 
   const token = localStorage.getItem('echo_token');
 
+  // A ocorrência abre do painel, do registro, do log e das notificações. Mandar
+  // sempre para o painel do coordenador deixava o gerente que veio do sino numa tela
+  // que não é a dele. Volta de onde veio; link aberto direto, sem histórico, cai no painel.
+  const voltarParaOrigem = () => {
+    const temDeOndeVoltar = (window.history.state?.idx ?? 0) > 0;
+    if (temDeOndeVoltar) navigate(-1);
+    else navigate('/coordenador/ocorrencias');
+  };
+
   useEffect(() => {
     if (!token || !id) {
       navigate('/coordenador/login');
@@ -70,7 +79,7 @@ export function OccurrenceDetail() {
     setSalvando(true);
     try {
       await atualizarStatusOcorrencia(id, status, token);
-      navigate('/coordenador/ocorrencias');
+      voltarParaOrigem();
     } catch (e) {
       const status401 = (e as { status?: number }).status === 401;
       if (status401) {
@@ -86,7 +95,7 @@ export function OccurrenceDetail() {
 
   const voltar = (
     <button
-      onClick={() => navigate('/coordenador/ocorrencias')}
+      onClick={voltarParaOrigem}
       className="flex items-center gap-2 text-purple-600 hover:text-purple-700 mb-6 mt-4 font-semibold"
     >
       <ArrowLeft className="w-5 h-5" />

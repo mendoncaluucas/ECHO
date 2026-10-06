@@ -365,6 +365,71 @@ export function listarAuditoria(
   return request(`/audit${query ? `?${query}` : ''}`, { headers: comAutorizacao(token) });
 }
 
+// ---------- Notificações ----------
+
+export interface Notificacao {
+  id: string;
+  lida: boolean;
+  criadoEm: string;
+  feedback: {
+    id: string;
+    tipo: TipoFeedback;
+    comentario: string | null;
+    status: StatusOcorrencia;
+    area: { nome: string } | null;
+    avaliacoes: AvaliacaoOcorrencia[];
+  };
+}
+
+export interface PaginaDeNotificacoes {
+  itens: Notificacao[];
+  total: number;
+  naoLidas: number;
+  pagina: number;
+  porPagina: number;
+  paginas: number;
+}
+
+export function listarNotificacoes(
+  token: string,
+  filtros: { pagina?: number; porPagina?: number; lida?: boolean } = {}
+): Promise<PaginaDeNotificacoes> {
+  const busca = new URLSearchParams();
+  for (const [chave, valor] of Object.entries(filtros)) {
+    if (valor !== undefined) busca.set(chave, String(valor));
+  }
+  const query = busca.toString();
+
+  return request(`/notifications${query ? `?${query}` : ''}`, { headers: comAutorizacao(token) });
+}
+
+export function contarNotificacoes(token: string): Promise<{ naoLidas: number }> {
+  return request(`/notifications/contagem`, { headers: comAutorizacao(token) });
+}
+
+export function marcarNotificacao(id: string, lida: boolean, token: string): Promise<Notificacao> {
+  return request(`/notifications/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: comAutorizacao(token),
+    body: JSON.stringify({ lida }),
+  });
+}
+
+export function marcarTodasComoLidas(token: string): Promise<{ atualizadas: number }> {
+  return request(`/notifications/marcar-todas-lidas`, {
+    method: 'POST',
+    headers: comAutorizacao(token),
+  });
+}
+
+// O sino do cabeçalho e a tela de notificações não se enxergam. Quem muda o "lida"
+// avisa por este evento, e o sino reconta na hora em vez de esperar o próximo minuto.
+export const EVENTO_NOTIFICACOES = 'echo:notificacoes';
+
+export function avisarMudancaNasNotificacoes() {
+  window.dispatchEvent(new Event(EVENTO_NOTIFICACOES));
+}
+
 // ---------- Sessão ----------
 //
 // As três chaves nascem e morrem juntas. Limpar só o token deixava o `echo_usuario`
