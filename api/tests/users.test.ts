@@ -256,7 +256,7 @@ describe("PATCH /api/users/:id/senha", () => {
   });
 });
 
-// O token carrega o papel e vale 8h. Se a autorização confiasse só nele, desativar ou
+// O token carrega o papel e vale horas. Se a autorização confiasse só nele, desativar ou
 // rebaixar alguém não teria efeito nenhum até o token expirar — e um administrador
 // rebaixado conseguiria desfazer o próprio rebaixamento dentro dessa janela.
 describe("o token não sobrevive à mudança de acesso", () => {

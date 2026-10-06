@@ -10,7 +10,7 @@ import { prisma } from "./prisma.js";
 
 type Cliente = Prisma.TransactionClient | typeof prisma;
 
-export type EntidadeAuditada = "User" | "Area" | "QRCode" | "Feedback";
+export type EntidadeAuditada = "User" | "Area" | "QRCode" | "Feedback" | "Configuracao";
 
 export interface RegistroDeAuditoria {
   acao: AcaoAuditoria;

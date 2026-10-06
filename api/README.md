@@ -41,10 +41,12 @@ Todas estão no `.env.example` com valores prontos para desenvolvimento.
 | `JWT_SECRET` | sim | Assina os tokens. A API **não sobe** sem ela |
 | `PORT` | não | Porta da API (padrão `3333`) |
 | `DB_PORT` | não | Porta do Postgres no host, lida pelo `docker-compose` (padrão `5432`) |
-| `JWT_EXPIRES_IN` | não | Validade do token (padrão `8h`) |
 | `WEB_BASE_URL` | não | Para onde o QR Code aponta (padrão `http://localhost:5173`) |
 | `CORS_ORIGIN` | não | Origens permitidas, separadas por vírgula. Vazio libera todas |
 | `TZ` | não | Fuso dos filtros por data (padrão `America/Sao_Paulo`). O servidor do Render roda em UTC; sem este padrão, "até 05/10" terminava às 20:59 de Brasília |
+
+> A antiga `JWT_EXPIRES_IN` não é mais lida: a validade do login é configurada pelo administrador
+> na tela de configurações (`PATCH /api/configuracoes`), e fica no banco.
 
 ### Por que existem duas URLs de banco
 
@@ -102,9 +104,10 @@ api/
 ## Autenticação
 
 Rotas da gestão exigem `Authorization: Bearer <token>`. O token sai do `POST /api/auth/login`
-e vale 8h (configurável em `JWT_EXPIRES_IN`). O `requireAuth` confere o papel e a situação do
-usuário **no banco** a cada requisição, não no token: desativar ou rebaixar alguém vale na hora,
-sem esperar o token expirar.
+e a sessão vale pelo tempo que o administrador configurou (padrão 8h, de 1h a 24h). O
+`requireAuth` confere **no banco**, a cada requisição, o papel e a situação do usuário e a idade
+da sessão contra a duração configurada. Por isso desativar ou rebaixar alguém, e encurtar o
+tempo de sessão, valem na hora, sem esperar o token expirar.
 
 Usuários criados pelo seed — **apenas para desenvolvimento**, senha `echo123` nos três:
 
