@@ -225,6 +225,16 @@ describe("GET /api/occurrences — filtros", () => {
     expect(de06.body.total).toBe(0);
   });
 
+  // Mesma leitura de data do relatório e da auditoria: "até 31/02" não pode virar
+  // "até 03/03" em silêncio.
+  it("recusa data que não existe no calendário", async () => {
+    const { token } = await autenticar(Papel.GERENTE);
+
+    const res = await buscar(token, "?ate=2026-02-31");
+
+    expect(res.status).toBe(400);
+  });
+
   it("combina filtros", async () => {
     await gravar(cenario, { tipo: "RECLAMACAO", status: "PENDENTE" });
     await gravar(cenario, { tipo: "RECLAMACAO", status: "RESOLVIDO" });
