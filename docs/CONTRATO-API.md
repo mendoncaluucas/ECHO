@@ -8,7 +8,9 @@
 - **Base URL:** `/api` (ex.: `http://localhost:3333/api`)
 - **Formato:** JSON em requisição e resposta (`Content-Type: application/json`)
 - **Autenticação:** rotas protegidas exigem o header `Authorization: Bearer <token>` (JWT).
-  O token é obtido em `POST /auth/login` e vale 8h por padrão (`JWT_EXPIRES_IN`).
+  O token é obtido em `POST /auth/login`. A sessão vale pelo **tempo configurado pelo
+  administrador** (padrão 8h, de 1h a 24h — ver `PATCH /api/configuracoes`), conferido a cada
+  requisição; o token em si sai sempre com o teto de 24h.
 - **Datas:** ISO 8601 (ex.: `2026-08-27T14:30:00.000Z`)
 - **Erro padrão:**
   ```json
@@ -22,7 +24,7 @@
   | `VALIDACAO` | 400 | Campo obrigatório ausente ou valor inválido |
   | `CREDENCIAIS_INVALIDAS` | 401 | E-mail ou senha incorretos no login |
   | `NAO_AUTENTICADO` | 401 | Header `Authorization` ausente ou fora do formato `Bearer <token>` |
-  | `TOKEN_INVALIDO` | 401 | Token adulterado, assinado com outro segredo ou expirado |
+  | `TOKEN_INVALIDO` | 401 | Token adulterado, assinado com outro segredo ou expirado; sessão mais velha que o tempo configurado; usuário desativado |
   | `SEM_PERMISSAO` | 403 | Autenticado, mas o papel não está na lista da rota |
   | `QR_NAO_ENCONTRADO` | 404 | `qrToken` inexistente ou inativo |
   | `AREA_NAO_ENCONTRADA` | 404 | `areaId` inexistente |
@@ -554,6 +556,7 @@ ao mais antigo. Somente leitura: nenhuma rota edita ou apaga registro do log.
 | `AREA_DESATIVADA` / `AREA_REATIVADA` | | `nome` |
 | `QRCODE_GERADO` | | `area`, `token` |
 | `OCORRENCIA_STATUS` | o status mudou | `de`, `para`, `area` |
+| `CONFIGURACAO_ALTERADA` | uma configuração do sistema mudou | `campo`, `de`, `para` |
 
 > **Gravado na mesma transação da ação.** Ou os dois entram, ou nenhum: um log que às vezes falta
 > não serve para auditar.
@@ -638,6 +641,33 @@ nada.
 **Protegido** (qualquer papel). Marca como lidas todas as não lidas **de quem pediu**.
 
 **Resposta `200`:** `{ "atualizadas": 3 }`.
+
+---
+
+## 21. `GET /api/configuracoes` — configurações do sistema
+**Protegido** (`ADMINISTRADOR`). Resposta `200`: `{ "duracaoSessaoHoras": 8 }`.
+
+Enquanto ninguém salvou nada, devolve os padrões.
+
+**Erros:** `401` · `403` `SEM_PERMISSAO`.
+
+---
+
+## 22. `PATCH /api/configuracoes` — alterar configurações
+**Protegido** (`ADMINISTRADOR`). Corpo: `{ "duracaoSessaoHoras": 4 }`, inteiro de **1 a 24**.
+
+**Resposta `200`:** as configurações salvas.
+
+> **A duração da sessão vale na hora, nos dois sentidos.** O token sai do login sempre com o teto
+> de 24h; o `requireAuth` compara a **idade da sessão** com a duração configurada **agora**, a cada
+> requisição. Encurtar derruba as sessões mais velhas que o novo limite, inclusive a de quem salvou;
+> alongar estende as que ainda valem. Se a duração ficasse gravada no token, encurtar por segurança
+> não teria efeito sobre quem já estava logado.
+
+> Toda mudança entra no log de auditoria (`CONFIGURACAO_ALTERADA`, com `de` e `para`). Salvar o
+> mesmo valor não gera registro.
+
+**Erros:** `400` `VALIDACAO` (fora de 1–24 ou não inteiro) · `401` · `403` `SEM_PERMISSAO`.
 
 ---
 

@@ -6,13 +6,13 @@
 
 ## Onde estamos
 
-**Todas as 12 telas ligadas à API — nenhuma mock.** 24 endpoints, 212 testes, CI verde, sistema publicado.
+**Todas as 12 telas ligadas à API — nenhuma mock.** 26 endpoints, 231 testes, CI verde, sistema publicado.
 
 fluxo do cliente · dois logins · painel e detalhe de ocorrências · dashboard do gerente · gerador de QR · gestão de usuários · painel administrativo · registro de ocorrências · configurações (áreas) · log de auditoria · notificações · relatórios
 
 ## Migrations em produção
 
-Todas aplicadas até o PR #20. Quando uma PR trouxer migration nova, **aplicar antes do merge** —
+Todas aplicadas até o PR #21. Quando uma PR trouxer migration nova, **aplicar antes do merge** —
 migration que só adiciona coluna com valor padrão não quebra o código antigo, e o contrário derruba
 a API até alguém rodar:
 
@@ -63,13 +63,15 @@ módulo comum (`web/src/app/services/csv.ts`), usado também pelo registro de oc
 
 ## Depois das telas: o que ainda está "Em desenvolvimento"
 
-Nenhuma tela é mock. Restam duas seções das configurações, marcadas com o que falta:
+Nenhuma tela é mock. Das duas seções das configurações marcadas com o que faltava:
 
-1. **Tempo de sessão** — tornar a validade do token configurável pelo administrador (hoje 8h fixas
-   no `JWT_EXPIRES_IN`). Pequeno: um registro de configuração, leitura no login e entrada no log
-   de auditoria
+1. ~~**Tempo de sessão**~~ — **feito.** O administrador escolhe de 1h a 24h (padrão 8h), e vale na
+   hora para as sessões abertas: o token sai com teto de 24h e o `requireAuth` confere a idade da
+   sessão contra a configuração a cada requisição. Fica na tabela `Configuracao` (linha única) e
+   entra no log de auditoria. A antiga `JWT_EXPIRES_IN` deixou de ser lida
 2. **Retenção LGPD** — prazo configurável **e** a rotina que apaga ou anonimiza o que passou dele.
-   Guardar o prazo sem aplicar não protege ninguém. É o mais importante para a entrega ao Sinuelo
+   Guardar o prazo sem aplicar não protege ninguém. É o mais importante para a entrega ao Sinuelo.
+   O prazo entra como nova coluna da `Configuracao`, com o mesmo padrão de leitura e auditoria
 
 Outros ganhos de qualidade, sem tela nova: typecheck do front no CI (já passa limpo em `strict`) e
 os primeiros testes de front.
