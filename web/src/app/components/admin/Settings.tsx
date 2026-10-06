@@ -14,9 +14,12 @@ import {
 import { Navigation } from '../Navigation';
 import {
   atualizarArea,
+  buscarConfiguracoes,
   criarArea,
   encerrarSessao,
+  idadeDaSessaoEmHoras,
   listarAreas,
+  salvarConfiguracoes,
   usuarioLogado,
   type Area,
 } from '../../services/api';
@@ -49,6 +52,156 @@ function SecaoPendente({
       </div>
       <p className="text-gray-600">{descricao}</p>
       <p className="text-sm text-gray-500 mt-2">Depende de: {dependeDe}</p>
+    </div>
+  );
+}
+
+const OPCOES_DE_DURACAO = [1, 2, 4, 8, 12, 24];
+
+function rotuloDeHoras(horas: number) {
+  return horas === 1 ? '1 hora' : `${horas} horas`;
+}
+
+// Tempo de sessão: por quanto tempo um login vale. O backend confere a idade da
+// sessão a cada requisição, então salvar vale na hora para todas as sessões abertas.
+function SecaoTempoDeSessao({
+  token,
+  aoFalhar,
+}: {
+  token: string;
+  aoFalhar: (e: unknown) => void;
+}) {
+  const navigate = useNavigate();
+  const [salvo, setSalvo] = useState<number | null>(null);
+  const [escolhido, setEscolhido] = useState<number | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [confirmacao, setConfirmacao] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  // Sessão vencida e falta de permissão são da página (login, "acesso restrito").
+  // O resto fica aqui: a página mostra erro dentro do cartão de áreas.
+  const tratarFalha = (e: unknown) => {
+    const status = (e as { status?: number }).status;
+    if (status === 401 || status === 403) {
+      aoFalhar(e);
+      return;
+    }
+    setErro(e instanceof Error ? e.message : 'Não foi possível salvar.');
+  };
+
+  useEffect(() => {
+    let ativo = true;
+    buscarConfiguracoes(token)
+      .then((res) => {
+        if (!ativo) return;
+        setSalvo(res.duracaoSessaoHoras);
+        setEscolhido(res.duracaoSessaoHoras);
+      })
+      .catch((e) => {
+        if (ativo) tratarFalha(e);
+      });
+    return () => {
+      ativo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  // Valor salvo fora da lista (gravado pela API, por exemplo) continua selecionável.
+  const opcoes =
+    salvo !== null && !OPCOES_DE_DURACAO.includes(salvo)
+      ? [...OPCOES_DE_DURACAO, salvo].sort((a, b) => a - b)
+      : OPCOES_DE_DURACAO;
+
+  // Encurtar abaixo da idade da própria sessão desloga quem está salvando. Melhor
+  // avisar antes do que surpreender com a tela de login.
+  const idade = idadeDaSessaoEmHoras();
+  const vaiEncerrarAPropria = escolhido !== null && idade !== null && idade > escolhido;
+
+  const salvar = async () => {
+    if (escolhido === null) return;
+    setSalvando(true);
+    setConfirmacao(null);
+    setErro(null);
+    try {
+      const res = await salvarConfiguracoes({ duracaoSessaoHoras: escolhido }, token);
+      if (vaiEncerrarAPropria) {
+        encerrarSessao();
+        navigate('/gerente/login');
+        return;
+      }
+      setSalvo(res.duracaoSessaoHoras);
+      setConfirmacao('Salvo. Já vale para todas as sessões abertas.');
+    } catch (e) {
+      tratarFalha(e);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6">
+      <div className="flex items-center gap-3 mb-2">
+        <Clock className="w-6 h-6 text-slate-700" />
+        <h2 className="text-xl font-bold text-gray-900">Tempo de Sessão</h2>
+      </div>
+      <p className="text-gray-600 mb-4">
+        Por quanto tempo um login continua válido. Depois disso, é preciso entrar de novo.
+      </p>
+
+      {erro && (
+        <p className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+          {erro}
+        </p>
+      )}
+
+      {salvo === null ? (
+        !erro && <Loader2 className="w-6 h-6 animate-spin text-slate-700" />
+      ) : (
+        <>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <select
+              value={escolhido ?? ''}
+              onChange={(e) => {
+                setEscolhido(Number(e.target.value));
+                setConfirmacao(null);
+              }}
+              className={campo}
+            >
+              {opcoes.map((horas) => (
+                <option key={horas} value={horas}>
+                  {rotuloDeHoras(horas)}
+                  {horas === 8 ? ' (padrão)' : ''}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={salvar}
+              disabled={salvando || escolhido === salvo}
+              className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {salvando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+              Salvar
+            </button>
+          </div>
+
+          <p className="text-sm text-gray-500 mt-3">
+            Vale na hora para todas as sessões abertas: encurtar encerra as que já passaram do
+            novo limite, e alongar estende as que ainda estão valendo.
+          </p>
+
+          {vaiEncerrarAPropria && escolhido !== salvo && (
+            <p className="mt-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+              A sua sessão está aberta há mais de {rotuloDeHoras(escolhido!)}. Ao salvar, você vai
+              precisar entrar de novo.
+            </p>
+          )}
+          {confirmacao && (
+            <p className="mt-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+              {confirmacao}
+            </p>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -328,12 +481,7 @@ export function AdminSettings() {
         dependeDe="um provedor de envio de e-mail e o push do navegador, que exigem infraestrutura fora do sistema"
       />
 
-      <SecaoPendente
-        icone={<Clock className="w-6 h-6 text-slate-700" />}
-        titulo="Tempo de Sessão"
-        descricao="Definir por quanto tempo um login continua válido. Hoje são 8 horas, fixas na configuração do servidor."
-        dependeDe="tornar a duração do token configurável em tempo de execução"
-      />
+      {token && <SecaoTempoDeSessao token={token} aoFalhar={tratarFalha} />}
 
       <SecaoPendente
         icone={<Shield className="w-6 h-6 text-slate-700" />}

@@ -29,6 +29,7 @@ const ROTULO_ACAO: Record<AcaoAuditoria, string> = {
   AREA_REATIVADA: 'Área reativada',
   QRCODE_GERADO: 'QR Code gerado',
   OCORRENCIA_STATUS: 'Status de ocorrência',
+  CONFIGURACAO_ALTERADA: 'Configuração alterada',
 };
 
 const ROTULO_ENTIDADE: Record<string, string> = {
@@ -36,6 +37,7 @@ const ROTULO_ENTIDADE: Record<string, string> = {
   Area: 'Área',
   QRCode: 'QR Code',
   Feedback: 'Ocorrência',
+  Configuracao: 'Configuração',
 };
 
 const ROTULO_VALOR: Record<string, string> = {
@@ -119,6 +121,11 @@ function descrever(registro: RegistroDeAuditoria): string {
       const area = ler(d, 'area');
       return `Mudou o status de uma ocorrência${area !== '—' ? ` (${area})` : ''}: ${ler(d, 'de')} → ${ler(d, 'para')}`;
     }
+    case 'CONFIGURACAO_ALTERADA':
+      // Hoje só existe a duração da sessão; outro campo cai na frase genérica.
+      return d?.campo === 'duracaoSessaoHoras'
+        ? `Alterou o tempo de sessão de ${ler(d, 'de')}h para ${ler(d, 'para')}h`
+        : `Alterou a configuração "${ler(d, 'campo')}" de ${ler(d, 'de')} para ${ler(d, 'para')}`;
     default:
       // Ação nova no backend que o front ainda não conhece: mostra o código cru
       // em vez de quebrar.
