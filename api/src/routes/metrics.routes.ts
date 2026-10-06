@@ -3,6 +3,7 @@ import { Papel, StatusOcorrencia, TipoFeedback } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
+import { lerData } from "../consulta.js";
 
 // Métricas agregadas para o dashboard da gestão — DONO: Lucas
 export const metricsRoutes = Router();
@@ -172,6 +173,200 @@ metricsRoutes.get(
       porTipo,
       porArea,
       porCategoria,
+    });
+  })
+);
+
+// ---------- Relatório histórico ----------
+
+const MESES_PADRAO = 6;
+const MESES_MAXIMO = 24;
+
+// Mês no fuso do restaurante (o app.ts fixa America/Sao_Paulo). Um feedback das
+// 23h30 do dia 31 é do mês que termina, não do seguinte — em UTC ele já seria.
+function chaveDoMes(data: Date) {
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function diaLocal(data: Date) {
+  return `${chaveDoMes(data)}-${String(data.getDate()).padStart(2, "0")}`;
+}
+
+function media(soma: number, quantidade: number) {
+  // null, e não 0: zero estrelas seria lido como nota péssima quando o caso é
+  // "ninguém avaliou".
+  return quantidade === 0 ? null : arredondar(soma / quantidade, 1);
+}
+
+function percentual(parte: number, total: number) {
+  return total === 0 ? 0 : Math.round((parte / total) * 100);
+}
+
+type Acumulado = { soma: number; quantidade: number };
+
+// GET /relatorio — série mês a mês e resumo por setor num intervalo explícito.
+// Ver docs/CONTRATO-API.md
+metricsRoutes.get(
+  "/relatorio",
+  requireAuth(PAPEIS_DA_GESTAO),
+  asyncHandler(async (req, res) => {
+    const deInformado = lerData(req.query.de);
+    const ateInformado = lerData(req.query.ate, true);
+    if (deInformado === null || ateInformado === null) {
+      return res.status(400).json({ erro: "data deve ser YYYY-MM-DD", codigo: "VALIDACAO" });
+    }
+
+    const hoje = new Date();
+    const fim =
+      ateInformado ??
+      new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59, 999);
+    // Padrão: os últimos 6 meses fechados até hoje, começando no dia 1 — uma série
+    // que começa no meio de um mês teria o primeiro ponto artificialmente baixo.
+    const inicio =
+      deInformado ?? new Date(fim.getFullYear(), fim.getMonth() - (MESES_PADRAO - 1), 1);
+
+    if (inicio > fim) {
+      return res
+        .status(400)
+        .json({ erro: "a data inicial deve ser anterior à final", codigo: "VALIDACAO" });
+    }
+
+    const quantidadeDeMeses =
+      (fim.getFullYear() - inicio.getFullYear()) * 12 + (fim.getMonth() - inicio.getMonth()) + 1;
+    if (quantidadeDeMeses > MESES_MAXIMO) {
+      return res.status(400).json({
+        erro: `o intervalo pode ter no máximo ${MESES_MAXIMO} meses`,
+        codigo: "VALIDACAO",
+      });
+    }
+
+    // Período anterior de mesmo tamanho, colado no atual, para a comparação.
+    const duracao = fim.getTime() - inicio.getTime() + 1;
+    const inicioAnterior = new Date(inicio.getTime() - duracao);
+
+    const [feedbacks, gruposAnteriores, areas, categorias] = await Promise.all([
+      // Agregação em JS, como no tempo de tratativa acima: o mês precisa ser o do fuso
+      // do restaurante, e o volume do MVP é baixo. Com a base grande, trocar por
+      // date_trunc('month', "criadoEm" AT TIME ZONE 'America/Sao_Paulo') em SQL.
+      prisma.feedback.findMany({
+        where: { criadoEm: { gte: inicio, lte: fim } },
+        select: {
+          criadoEm: true,
+          tipo: true,
+          status: true,
+          areaId: true,
+          avaliacoes: { select: { categoryId: true, estrelas: true } },
+        },
+      }),
+      prisma.feedbackRating.groupBy({
+        by: ["categoryId"],
+        where: { feedback: { criadoEm: { gte: inicioAnterior, lt: inicio } } },
+        _avg: { estrelas: true },
+      }),
+      prisma.area.findMany({ select: { id: true, nome: true } }),
+      prisma.category.findMany({ select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
+    ]);
+
+    const nomeDaArea = new Map(areas.map((area) => [area.id, area.nome]));
+
+    // Todos os meses do intervalo, inclusive os sem feedback: um mês vazio é
+    // informação ("não veio nada"), e pular o ponto deixaria o gráfico mentindo.
+    const meses = new Map<
+      string,
+      { total: number; porTipo: Record<TipoFeedback, number>; categorias: Map<string, Acumulado> }
+    >();
+    for (let i = 0; i < quantidadeDeMeses; i++) {
+      const mes = new Date(inicio.getFullYear(), inicio.getMonth() + i, 1);
+      meses.set(chaveDoMes(mes), {
+        total: 0,
+        porTipo: { ELOGIO: 0, SUGESTAO: 0, RECLAMACAO: 0 },
+        categorias: new Map(categorias.map((c) => [c.id, { soma: 0, quantidade: 0 }])),
+      });
+    }
+
+    const porArea = new Map<string, Record<StatusOcorrencia, number>>();
+    const noPeriodo = new Map(categorias.map((c) => [c.id, { soma: 0, quantidade: 0 }]));
+    const porStatus: Record<StatusOcorrencia, number> = {
+      PENDENTE: 0,
+      EM_ANDAMENTO: 0,
+      RESOLVIDO: 0,
+    };
+
+    for (const feedback of feedbacks) {
+      const mes = meses.get(chaveDoMes(feedback.criadoEm));
+      if (mes) {
+        mes.total++;
+        mes.porTipo[feedback.tipo]++;
+      }
+
+      porStatus[feedback.status]++;
+
+      const area = (feedback.areaId && nomeDaArea.get(feedback.areaId)) || SEM_AREA;
+      const contagem = porArea.get(area) ?? { PENDENTE: 0, EM_ANDAMENTO: 0, RESOLVIDO: 0 };
+      contagem[feedback.status]++;
+      porArea.set(area, contagem);
+
+      for (const avaliacao of feedback.avaliacoes) {
+        for (const acumulado of [
+          mes?.categorias.get(avaliacao.categoryId),
+          noPeriodo.get(avaliacao.categoryId),
+        ]) {
+          if (!acumulado) continue;
+          acumulado.soma += avaliacao.estrelas;
+          acumulado.quantidade++;
+        }
+      }
+    }
+
+    const mediaAnterior = new Map(
+      gruposAnteriores.map((g) => [g.categoryId, g._avg.estrelas ?? null])
+    );
+
+    return res.json({
+      periodo: { de: diaLocal(inicio), ate: diaLocal(fim) },
+      resumo: {
+        total: feedbacks.length,
+        pendentes: porStatus.PENDENTE,
+        emAndamento: porStatus.EM_ANDAMENTO,
+        resolvidos: porStatus.RESOLVIDO,
+        percentualResolvido: percentual(porStatus.RESOLVIDO, feedbacks.length),
+      },
+      meses: [...meses.entries()].map(([mes, dados]) => ({
+        mes,
+        total: dados.total,
+        porTipo: dados.porTipo,
+        categorias: categorias.map((c) => {
+          const acumulado = dados.categorias.get(c.id)!;
+          return {
+            categoria: c.nome,
+            avaliacoes: acumulado.quantidade,
+            mediaEstrelas: media(acumulado.soma, acumulado.quantidade),
+          };
+        }),
+      })),
+      porArea: [...porArea.entries()]
+        .map(([area, contagem]) => {
+          const total = contagem.PENDENTE + contagem.EM_ANDAMENTO + contagem.RESOLVIDO;
+          return {
+            area,
+            total,
+            pendentes: contagem.PENDENTE,
+            emAndamento: contagem.EM_ANDAMENTO,
+            resolvidos: contagem.RESOLVIDO,
+            percentualResolvido: percentual(contagem.RESOLVIDO, total),
+          };
+        })
+        .sort((a, b) => b.total - a.total || a.area.localeCompare(b.area, "pt-BR")),
+      porCategoria: categorias.map((c) => {
+        const acumulado = noPeriodo.get(c.id)!;
+        const anterior = mediaAnterior.get(c.id);
+        return {
+          categoria: c.nome,
+          avaliacoes: acumulado.quantidade,
+          mediaEstrelas: media(acumulado.soma, acumulado.quantidade),
+          mediaAnterior: anterior === undefined || anterior === null ? null : arredondar(anterior, 1),
+        };
+      }),
     });
   })
 );

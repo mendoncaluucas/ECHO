@@ -1,3 +1,35 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+/* Gráfico do relatório na impressão. O Recharts mede a largura da tela em pixels, e o
+   papel é mais estreito: sem isto, o gráfico sai cortado no PDF. O SVG tem viewBox,
+   então largura 100% o escala inteiro. Os !important vencem o estilo inline que o
+   Recharts calcula. Vale também para Ctrl+P, sem depender do botão da tela. */
+@media print {
+  .grafico-imprimivel .recharts-responsive-container,
+  .grafico-imprimivel .recharts-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Só o SVG do gráfico (filho direto): os ícones da legenda também são
+     .recharts-surface e cresceriam junto. */
+  .grafico-imprimivel .recharts-wrapper > .recharts-surface {
+    width: 100%;
+    height: auto;
+  }
+
+  /* A legenda é posicionada em absoluto sobre o rodapé do gráfico; com o SVG
+     escalado ela ficaria em cima das linhas. No papel, vai para baixo dele. */
+  .grafico-imprimivel .recharts-legend-wrapper {
+    position: static !important;
+    width: 100% !important;
+  }
+
+  .grafico-imprimivel .recharts-tooltip-wrapper {
+    display: none !important;
+  }
+}

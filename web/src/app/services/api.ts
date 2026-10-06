@@ -245,6 +245,53 @@ export function buscarMetricas(dias: number, token: string): Promise<Metricas> {
   });
 }
 
+export interface RelatorioHistorico {
+  periodo: { de: string; ate: string };
+  resumo: {
+    total: number;
+    pendentes: number;
+    emAndamento: number;
+    resolvidos: number;
+    percentualResolvido: number;
+  };
+  meses: {
+    mes: string; // YYYY-MM, no fuso do restaurante
+    total: number;
+    porTipo: Record<TipoFeedback, number>;
+    // null quando ninguém avaliou a categoria no mês — não confundir com nota zero.
+    categorias: { categoria: string; avaliacoes: number; mediaEstrelas: number | null }[];
+  }[];
+  porArea: {
+    area: string;
+    total: number;
+    pendentes: number;
+    emAndamento: number;
+    resolvidos: number;
+    percentualResolvido: number;
+  }[];
+  porCategoria: {
+    categoria: string;
+    avaliacoes: number;
+    mediaEstrelas: number | null;
+    mediaAnterior: number | null;
+  }[];
+}
+
+// Sem datas, a API devolve os últimos 6 meses. Intervalo máximo de 24 meses.
+export function buscarRelatorio(
+  token: string,
+  periodo: { de?: string; ate?: string } = {}
+): Promise<RelatorioHistorico> {
+  const busca = new URLSearchParams();
+  if (periodo.de) busca.set('de', periodo.de);
+  if (periodo.ate) busca.set('ate', periodo.ate);
+  const query = busca.toString();
+
+  return request(`/metrics/relatorio${query ? `?${query}` : ''}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export interface UsuarioGestao {
   id: string;
   nome: string;

@@ -11,6 +11,7 @@ import {
   type StatusOcorrencia,
   type TipoFeedback,
 } from '../../services/api';
+import { baixarCsv, montarCsv } from '../../services/csv';
 
 const POR_PAGINA = 20;
 
@@ -34,14 +35,7 @@ const CATEGORIAS = ['Higiene', 'Atendimento', 'Alimento'];
 const campo =
   'px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500';
 
-// Uma célula de CSV: aspas duplicadas e o valor entre aspas. Comentário de cliente
-// vem com vírgula, aspas e quebra de linha — sem isso o arquivo abre torto no Excel.
-function celula(valor: string | number | null | undefined) {
-  const texto = valor === null || valor === undefined ? '' : String(valor);
-  return `"${texto.replace(/"/g, '""')}"`;
-}
-
-function montarCsv(ocorrencias: Ocorrencia[]) {
+function csvDasOcorrencias(ocorrencias: Ocorrencia[]) {
   const cabecalho = [
     'ID',
     'Data',
@@ -63,22 +57,10 @@ function montarCsv(ocorrencias: Ocorrencia[]) {
       o.avaliacoes.map((a) => `${a.categoria}: ${a.estrelas}`).join(' | '),
       o.comentario ?? '',
       o.tratadoPor?.nome ?? '',
-    ].map(celula)
+    ]
   );
 
-  // Ponto e vírgula e BOM: é o que o Excel em português espera. Com vírgula ele joga
-  // a linha inteira numa coluna só, e sem o BOM os acentos saem quebrados.
-  return '﻿' + [cabecalho.map(celula), ...linhas].map((l) => l.join(';')).join('\r\n');
-}
-
-function baixar(nome: string, conteudo: string) {
-  const blob = new Blob([conteudo], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = nome;
-  link.click();
-  URL.revokeObjectURL(url);
+  return montarCsv([cabecalho, ...linhas]);
 }
 
 export function IssueRegistry() {
@@ -184,7 +166,7 @@ export function IssueRegistry() {
       } while (paginaAtual <= totalDePaginas);
 
       const hoje = new Date().toISOString().slice(0, 10);
-      baixar(`ocorrencias-${hoje}.csv`, montarCsv(todas));
+      baixarCsv(`ocorrencias-${hoje}.csv`, csvDasOcorrencias(todas));
     } catch (e) {
       tratarFalha(e as Error & { status?: number });
     } finally {

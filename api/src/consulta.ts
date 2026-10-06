@@ -20,7 +20,14 @@ export function lerData(valor: unknown, fimDoDia = false): Date | null | undefin
   if (typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return null;
 
   const data = new Date(`${valor}T${fimDoDia ? "23:59:59.999" : "00:00:00.000"}`);
-  return Number.isNaN(data.getTime()) ? null : data;
+  if (Number.isNaN(data.getTime())) return null;
+
+  // O JavaScript aceita dia que não existe e rola em silêncio: 2026-02-31 vira 3 de
+  // março. Se a data montada não devolve o mesmo ano, mês e dia, ela não existe.
+  const [ano, mes, dia] = valor.split("-").map(Number);
+  const existe =
+    data.getFullYear() === ano && data.getMonth() + 1 === mes && data.getDate() === dia;
+  return existe ? data : null;
 }
 
 // Lê `pagina` e `porPagina` juntos; `null` se qualquer um vier malformado.
