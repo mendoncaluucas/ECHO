@@ -15,6 +15,9 @@ const CONFIRMACAO = "confirmo";
 const HORA = 60 * 60 * 1000;
 const DIA = 24 * HORA;
 
+// Feedbacks com até este tanto de dias chegam com a notificação ainda não lida.
+const DIAS_NAO_LIDOS = 3;
+
 const MESA = "Mesa 12";
 const SALAO = "Salão";
 
@@ -165,6 +168,10 @@ async function main() {
   const coordenador = await prisma.user.findFirst({ where: { papel: Papel.COORDENADOR } });
   const gerente = await prisma.user.findFirst({ where: { papel: Papel.GERENTE } });
 
+  // Mesma regra do POST /public/feedback: todo feedback notifica a gestão ativa.
+  const destinatarios = await prisma.user.findMany({ where: { ativo: true }, select: { id: true } });
+
+  // As notificações dos feedbacks apagados saem junto (cascade).
   const apagados = await prisma.feedback.deleteMany();
   console.log(`${apagados.count} feedback(s) anteriores apagados.`);
 
@@ -192,6 +199,15 @@ async function main() {
           create: Object.entries(item.notas).map(([categoria, estrelas]) => ({
             categoryId: idDaCategoria.get(categoria)!,
             estrelas,
+          })),
+        },
+        // Só os dos últimos dias chegam como não lidos: uma gestão em dia já teria
+        // visto os antigos, e o sino com 30 pendências não pareceria real.
+        notificacoes: {
+          create: destinatarios.map((usuario) => ({
+            usuarioId: usuario.id,
+            criadoEm,
+            lida: item.diasAtras > DIAS_NAO_LIDOS,
           })),
         },
       },

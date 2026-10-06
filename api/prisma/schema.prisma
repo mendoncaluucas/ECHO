@@ -50,8 +50,9 @@ model User {
   setor     String?
   criadoEm  DateTime @default(now())
 
-  tratativas Feedback[]
-  auditoria  AuditLog[]
+  tratativas   Feedback[]
+  auditoria    AuditLog[]
+  notificacoes Notification[]
 }
 
 // ---------- Estabelecimento e QR ----------
@@ -117,6 +118,8 @@ model Feedback {
   tratadoPorId String?
   tratadoEm    DateTime?
 
+  notificacoes Notification[]
+
   @@index([venueId, criadoEm])
   @@index([status])
 }
@@ -130,6 +133,26 @@ model FeedbackRating {
   estrelas   Int // 1 a 5
 
   @@unique([feedbackId, categoryId])
+}
+
+// ---------- Notificações ----------
+
+// Uma linha por destinatário: cada pessoa da gestão tem o próprio "lida". Se fosse
+// uma por feedback, o coordenador abrir o alerta apagaria o do gerente.
+//
+// Não guarda texto: a mensagem é montada do feedback na leitura. Por isso o cascade —
+// sem o feedback não há o que notificar.
+model Notification {
+  id         String   @id @default(uuid())
+  usuario    User     @relation(fields: [usuarioId], references: [id])
+  usuarioId  String
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  feedbackId String
+  lida       Boolean  @default(false)
+  criadoEm   DateTime @default(now())
+
+  @@unique([usuarioId, feedbackId])
+  @@index([usuarioId, lida, criadoEm])
 }
 
 // ---------- Auditoria ----------
