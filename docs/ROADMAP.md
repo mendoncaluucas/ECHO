@@ -84,12 +84,11 @@ na interface prometendo essas funções.
 
 ---
 
-## Fase 4 — Relatórios históricos
+## ~~Fase 4 — Relatórios históricos~~ — feito
 
-- `GET /metrics/series` — agregação por mês, com intervalo `de`/`até` explícito (o `/metrics`
-  atual devolve o total de uma janela móvel, não a curva)
-- `porArea` quebrado por status
-- Exportação **CSV** primeiro; **PDF** se houver tempo
+- `GET /api/metrics/relatorio` — agregação por mês com intervalo `de`/`até` explícito, setor
+  quebrado por status e nota média comparada ao período anterior
+- Exportação **CSV**; **PDF** pela impressão do navegador, com estilo de impressão próprio
 
 ---
 

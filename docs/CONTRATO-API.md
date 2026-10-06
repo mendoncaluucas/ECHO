@@ -125,7 +125,7 @@
 | `tipo` | `ELOGIO` · `SUGESTAO` · `RECLAMACAO` | |
 | `categoria` | nome da categoria | traz quem **pontuou** aquela categoria |
 | `busca` | texto livre | procura no comentário e no nome da área, ignorando maiúsculas |
-| `de` / `ate` | `YYYY-MM-DD` | `ate` inclui o dia inteiro, não para à meia-noite |
+| `de` / `ate` | `YYYY-MM-DD` | `ate` inclui o dia inteiro, não para à meia-noite. Data que não existe no calendário (31/02) responde `400` |
 
 **Resposta `200`:**
 ```json
@@ -378,6 +378,64 @@ Regras que o front pode assumir:
 
 ---
 
+## 10.1. `GET /api/metrics/relatorio` — relatório histórico
+**Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Série mês a mês e resumo por setor num
+intervalo de datas explícito. É o que alimenta `/gerente/relatorios`; o `GET /metrics` acima segue
+servindo o dashboard, com janela móvel.
+
+**Parâmetros de consulta:**
+
+| Parâmetro | Valores | Observação |
+|---|---|---|
+| `de` | `YYYY-MM-DD` | padrão: dia 1 do mês de 5 meses atrás (6 meses fechados até hoje) |
+| `ate` | `YYYY-MM-DD` | padrão: hoje. Inclui o dia inteiro |
+
+Intervalo de no máximo **24 meses**, para uma requisição não conseguir varrer a base inteira.
+
+**Resposta `200`:**
+```json
+{
+  "periodo": { "de": "2026-05-01", "ate": "2026-10-06" },
+  "resumo": { "total": 31, "pendentes": 6, "emAndamento": 2, "resolvidos": 23, "percentualResolvido": 74 },
+  "meses": [
+    {
+      "mes": "2026-08",
+      "total": 7,
+      "porTipo": { "ELOGIO": 4, "SUGESTAO": 1, "RECLAMACAO": 2 },
+      "categorias": [
+        { "categoria": "Alimento", "avaliacoes": 7, "mediaEstrelas": 4.4 },
+        { "categoria": "Higiene", "avaliacoes": 0, "mediaEstrelas": null }
+      ]
+    }
+  ],
+  "porArea": [
+    { "area": "Mesa 12", "total": 16, "pendentes": 5, "emAndamento": 1, "resolvidos": 10, "percentualResolvido": 63 }
+  ],
+  "porCategoria": [
+    { "categoria": "Alimento", "avaliacoes": 22, "mediaEstrelas": 4.4, "mediaAnterior": 4.0 }
+  ]
+}
+```
+
+> **Todos os meses do intervalo vêm na série**, inclusive os sem feedback. Mês vazio é informação, e
+> pular o ponto faria o gráfico ligar março a maio como se abril não tivesse existido.
+
+> **O mês é o do restaurante** (fuso de Brasília). O feedback das 23h30 do dia 31 é do mês que
+> termina, não do seguinte, que é onde ele cairia em UTC.
+
+> **`mediaEstrelas` é `null`, nunca `0`, quando ninguém avaliou.** Zero estrelas seria lido como nota
+> péssima. `mediaAnterior` é a média da categoria no período **anterior de mesmo tamanho**, colado
+> antes do `de`. Ela é `null` quando não há base de comparação.
+
+**Erros:** `400` `VALIDACAO` (data malformada ou inexistente, intervalo invertido ou maior que
+24 meses) · `401` · `403` `SEM_PERMISSAO`.
+
+> **Data inexistente é recusada** em todos os filtros por data (ocorrências, auditoria e este). O
+> JavaScript aceitaria `2026-02-31` e rolaria em silêncio para 3 de março, e a resposta viria de um
+> período diferente do pedido.
+
+---
+
 ## 11. `GET /api/users` — listar a equipe de gestão
 **Protegido** (`ADMINISTRADOR`). Lista usuários ativos e inativos, ativos primeiro, depois por nome.
 
@@ -589,5 +647,5 @@ Rotas inexistentes retornam `404` com `{ "erro": "Rota não encontrada", "codigo
 ---
 
 ## Fora do escopo deste contrato (MVP 2+)
-Respostas prontas na tratativa, retorno ao cliente por e-mail, série histórica por dia (o `GET /metrics` devolve o total do período, não a curva), exportação PDF, notificação por e-mail ou push do navegador e a **tela administrativa** de QR Codes (listar,
+Respostas prontas na tratativa, retorno ao cliente por e-mail, série histórica **por dia** (o relatório agrega por mês), PDF gerado no servidor (hoje sai pela impressão do navegador), notificação por e-mail ou push do navegador e a **tela administrativa** de QR Codes (listar,
 desativar e reimprimir os já emitidos).

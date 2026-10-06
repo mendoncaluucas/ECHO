@@ -1,20 +1,18 @@
 # Próximos passos — até a apresentação
 
-> Atualizado em 05/10/2026. Complementa o [ROADMAP](ROADMAP.md) com o estado atual e a ordem
+> Atualizado em 06/10/2026. Complementa o [ROADMAP](ROADMAP.md) com o estado atual e a ordem
 > recomendada. A apresentação ao professor é no fim de outubro, e o critério é **projeto inteiro
 > funcional: nenhuma tela pode ser mock**.
 
 ## Onde estamos
 
-**11 telas ligadas à API**, 1 ainda mock. 23 endpoints, 196 testes, CI verde, sistema publicado.
+**Todas as 12 telas ligadas à API — nenhuma mock.** 24 endpoints, 212 testes, CI verde, sistema publicado.
 
-| Ligadas | Mock |
-|---|---|
-| fluxo do cliente · dois logins · painel e detalhe de ocorrências · dashboard do gerente · gerador de QR · gestão de usuários · painel administrativo · registro de ocorrências · configurações (áreas) · log de auditoria · notificações | **relatórios** |
+fluxo do cliente · dois logins · painel e detalhe de ocorrências · dashboard do gerente · gerador de QR · gestão de usuários · painel administrativo · registro de ocorrências · configurações (áreas) · log de auditoria · notificações · relatórios
 
 ## Migrations em produção
 
-Todas aplicadas até o PR #19. Quando uma PR trouxer migration nova, **aplicar antes do merge** —
+Todas aplicadas até o PR #20. Quando uma PR trouxer migration nova, **aplicar antes do merge** —
 migration que só adiciona coluna com valor padrão não quebra o código antigo, e o contrário derruba
 a API até alguém rodar:
 
@@ -53,19 +51,30 @@ preferências das configurações agora diz isso, em vez de dizer que notificaç
 
 **Depois do merge:** rodar o `seed-demo` em produção, senão o sino aparece zerado na apresentação.
 
-## 3. Relatórios históricos
+## ~~3. Relatórios históricos~~ — feito
 
-**O maior risco do prazo.** É a única tela que precisa de agregação nova.
-
-- `GET /api/metrics/series`: agregação por mês, com intervalo `de`/`ate` explícito (o `/metrics`
-  atual devolve o total de uma janela móvel, não a curva)
-- `porArea` quebrado por status
-- Exportação: **CSV primeiro**. O código de CSV do registro de ocorrências já serve de base —
-  ponto e vírgula, BOM, aspas escapadas
-- **PDF só se sobrar tempo.** Se algo ficar de fora, que seja ele: é trabalhoso e entrega pouco
+`GET /api/metrics/relatorio`: série mês a mês (no fuso do restaurante, com os meses vazios), setor
+quebrado por status e nota média por categoria comparada ao período anterior. Tela
+`/gerente/relatorios` com período livre, gráfico de nota média ou de quantidade, **CSV** e
+**PDF pela impressão do navegador** (a página tem estilo de impressão próprio). O código de CSV virou
+módulo comum (`web/src/app/services/csv.ts`), usado também pelo registro de ocorrências.
 
 ---
 
+## Depois das telas: o que ainda está "Em desenvolvimento"
+
+Nenhuma tela é mock. Restam duas seções das configurações, marcadas com o que falta:
+
+1. **Tempo de sessão** — tornar a validade do token configurável pelo administrador (hoje 8h fixas
+   no `JWT_EXPIRES_IN`). Pequeno: um registro de configuração, leitura no login e entrada no log
+   de auditoria
+2. **Retenção LGPD** — prazo configurável **e** a rotina que apaga ou anonimiza o que passou dele.
+   Guardar o prazo sem aplicar não protege ninguém. É o mais importante para a entrega ao Sinuelo
+
+Outros ganhos de qualidade, sem tela nova: typecheck do front no CI (já passa limpo em `strict`) e
+os primeiros testes de front.
+
+---
 ## Antes da apresentação
 
 - **Cold start do Render: ~22 segundos.** Abrir o sistema alguns minutos antes, ou assinar o plano
