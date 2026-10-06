@@ -135,6 +135,19 @@ model FeedbackRating {
   @@unique([feedbackId, categoryId])
 }
 
+// ---------- Configurações do sistema ----------
+
+// Linha única (id fixo "sistema"), com uma coluna por configuração: tipada e com
+// padrão no banco, ao contrário de uma tabela chave/valor em texto. Enquanto a linha
+// não existe, valem os padrões das colunas (ver src/configuracao.ts).
+model Configuracao {
+  id                 String   @id @default("sistema")
+  // Por quanto tempo um login vale, em horas. Conferido a cada requisição contra a
+  // idade da sessão, então mudar vale na hora para as sessões abertas.
+  duracaoSessaoHoras Int      @default(8)
+  atualizadoEm       DateTime @updatedAt
+}
+
 // ---------- Notificações ----------
 
 // Uma linha por destinatário: cada pessoa da gestão tem o próprio "lida". Se fosse
@@ -171,6 +184,7 @@ enum AcaoAuditoria {
   AREA_REATIVADA
   QRCODE_GERADO
   OCORRENCIA_STATUS
+  CONFIGURACAO_ALTERADA
 }
 
 // Quem fez o quê, sobre qual registro e quando. Só cresce: nenhuma rota edita ou

@@ -90,13 +90,14 @@ erDiagram
 | **FeedbackRating** | Nota por categoria de um feedback | `estrelas` (1–5), `feedbackId`, `categoryId` |
 | **Notification** | Alerta de feedback novo para uma pessoa da gestão | `usuarioId`, `feedbackId`, `lida`, `criadoEm` — único por `(usuarioId, feedbackId)` |
 | **AuditLog** | Quem fez o quê, sobre qual registro e quando | `acao`, `usuarioId`, `entidade`, `entidadeId`, `detalhes` (JSON), `criadoEm` |
+| **Configuracao** | Configurações do sistema, numa linha única (`id = "sistema"`) | `duracaoSessaoHoras` (padrão 8), `atualizadoEm` |
 
 ## Enums
 - **Papel:** `COORDENADOR` · `GERENTE` · `ADMINISTRADOR` *(Cliente não faz login)*
 - **TipoFeedback:** `ELOGIO` · `SUGESTAO` · `RECLAMACAO`
 - **AcaoAuditoria:** `LOGIN` · `SENHA_ALTERADA` · `SENHA_REDEFINIDA` · `USUARIO_CRIADO` · `USUARIO_EDITADO` ·
   `USUARIO_DESATIVADO` · `USUARIO_REATIVADO` · `AREA_CRIADA` · `AREA_RENOMEADA` · `AREA_DESATIVADA` ·
-  `AREA_REATIVADA` · `QRCODE_GERADO` · `OCORRENCIA_STATUS`
+  `AREA_REATIVADA` · `QRCODE_GERADO` · `OCORRENCIA_STATUS` · `CONFIGURACAO_ALTERADA`
 
 ## Decisões e observações
 - **Anonimato por padrão:** `Feedback.anonimo = true`; `contatoEmail` só é usado quando o cliente opta por se identificar (LGPD).
@@ -118,6 +119,10 @@ erDiagram
   "lida". Não guarda texto — a mensagem vem do feedback na leitura —, e por isso apaga em cascata com
   ele. Criada junto com o feedback para toda a gestão ativa; quem entra na equipe depois não herda
   alertas antigos.
+
+- **`Configuracao` é uma linha só, com uma coluna tipada por configuração** — não uma tabela
+  chave/valor em texto, que aceitaria "oito" como duração. Enquanto ninguém salva nada a linha não
+  existe e valem os padrões das colunas. A retenção LGPD entra aqui como nova coluna.
 
 ## Fora do escopo (MVP 2+)
 `Occurrence` (com status/tratativa), `CannedResponse`, `Sector` (múltiplos setores por usuário) e políticas de retenção/anonimização automática.

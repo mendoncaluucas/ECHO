@@ -354,6 +354,27 @@ export function redefinirSenha(
   });
 }
 
+// ---------- Configurações do sistema ----------
+
+export interface Configuracoes {
+  duracaoSessaoHoras: number;
+}
+
+export function buscarConfiguracoes(token: string): Promise<Configuracoes> {
+  return request(`/configuracoes`, { headers: comAutorizacao(token) });
+}
+
+export function salvarConfiguracoes(
+  dados: Configuracoes,
+  token: string
+): Promise<Configuracoes> {
+  return request(`/configuracoes`, {
+    method: 'PATCH',
+    headers: comAutorizacao(token),
+    body: JSON.stringify(dados),
+  });
+}
+
 // ---------- Auditoria ----------
 
 export type AcaoAuditoria =
@@ -369,7 +390,8 @@ export type AcaoAuditoria =
   | 'AREA_DESATIVADA'
   | 'AREA_REATIVADA'
   | 'QRCODE_GERADO'
-  | 'OCORRENCIA_STATUS';
+  | 'OCORRENCIA_STATUS'
+  | 'CONFIGURACAO_ALTERADA';
 
 export interface RegistroDeAuditoria {
   id: string;
@@ -500,6 +522,20 @@ export function usuarioLogado(): Usuario | null {
   try {
     const bruto = localStorage.getItem('echo_usuario');
     return bruto ? (JSON.parse(bruto) as Usuario) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Há quanto tempo a sessão atual foi aberta, em horas, lida do `iat` do token. Só
+// para avisar na tela: quem decide se a sessão vale é o backend.
+export function idadeDaSessaoEmHoras(): number | null {
+  try {
+    const token = localStorage.getItem('echo_token');
+    const parte = token?.split('.')[1];
+    if (!parte) return null;
+    const { iat } = JSON.parse(atob(parte.replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof iat === 'number' ? (Date.now() / 1000 - iat) / 3600 : null;
   } catch {
     return null;
   }
