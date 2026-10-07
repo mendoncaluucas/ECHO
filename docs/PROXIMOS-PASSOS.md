@@ -124,7 +124,11 @@ inicial levava a um formulário que nunca funciona sem QR. O diagnóstico de 06/
      **Retorno ao cliente:** quem pede resposta deixa nome e e-mail, que aparecem só no detalhe
      da ocorrência, com "Responder por e-mail". O nome passou a ser gravado (antes era pedido e
      descartado). Os QR já impressos continuam funcionando
-   - gerador de QR pronto para a demonstração: código grande e nítido para escanear da tela
+   - ~~gerador de QR pronto para a demonstração~~ — **feito (07/10):** um cartão por área com o
+     código atual; **Apresentar** abre o QR em tela cheia (SVG, nítido no projetor) para escanear
+     na hora; **Imprimir cartão de mesa** (A6), **Baixar PNG** e **Copiar link**. **Substituir**
+     gera um código novo e desativa os anteriores da área na mesma transação; um código perdido
+     pode ser **desativado** sozinho e reativado depois, tudo no log de auditoria
 3. **Telas da gestão no visual novo**, na ordem do que mais aparece na apresentação: dashboards →
    painel e detalhe de ocorrências → notificações → registro e relatórios → telas do administrador.
    Usando os componentes que já estão no projeto; avisos curtos ("Salvo") no lugar de parágrafos

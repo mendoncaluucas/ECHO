@@ -27,6 +27,8 @@ const ROTULO_ACAO: Record<AcaoAuditoria, string> = {
   AREA_DESATIVADA: 'Área desativada',
   AREA_REATIVADA: 'Área reativada',
   QRCODE_GERADO: 'QR Code gerado',
+  QRCODE_DESATIVADO: 'QR Code desativado',
+  QRCODE_REATIVADO: 'QR Code reativado',
   OCORRENCIA_STATUS: 'Status de ocorrência',
   CONFIGURACAO_ALTERADA: 'Configuração alterada',
 };
@@ -116,6 +118,12 @@ function descrever(registro: RegistroDeAuditoria): string {
       return `Reativou a área "${ler(d, 'nome')}"`;
     case 'QRCODE_GERADO':
       return `Gerou QR Code para "${ler(d, 'area')}"`;
+    case 'QRCODE_DESATIVADO':
+      return d?.motivo === 'substituido'
+        ? `Substituiu o QR Code de "${ler(d, 'area')}" por um novo`
+        : `Desativou um QR Code de "${ler(d, 'area')}"`;
+    case 'QRCODE_REATIVADO':
+      return `Reativou um QR Code de "${ler(d, 'area')}"`;
     case 'OCORRENCIA_STATUS': {
       const area = ler(d, 'area');
       return `Mudou o status de uma ocorrência${area !== '—' ? ` (${area})` : ''}: ${ler(d, 'de')} → ${ler(d, 'para')}`;
