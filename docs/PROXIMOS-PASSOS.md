@@ -68,7 +68,11 @@ Nenhuma tela é mock. Das duas seções das configurações marcadas com o que f
 1. ~~**Tempo de sessão**~~ — **feito.** O administrador escolhe de 1h a 24h (padrão 8h), e vale na
    hora para as sessões abertas: o token sai com teto de 24h e o `requireAuth` confere a idade da
    sessão contra a configuração a cada requisição. Fica na tabela `Configuracao` (linha única) e
-   entra no log de auditoria. A antiga `JWT_EXPIRES_IN` deixou de ser lida
+   entra no log de auditoria. A antiga `JWT_EXPIRES_IN` deixou de ser lida.
+   **Manter conectado (07/10):** caixa no login, desmarcada por padrão. Desmarcada, a sessão fica
+   num cookie de sessão e fechar o navegador encerra o login (o computador do restaurante é
+   compartilhado); marcada, fica no `localStorage` até vencer o tempo acima. Cookie e não
+   `sessionStorage` porque este é de uma aba só. As telas leem o token por `tokenDaSessao()`
 2. **Retenção LGPD** — **adiada para depois do redesenho** (decisão de 06/10). Prazo configurável
    **e** a rotina que apaga ou anonimiza o que passou dele: guardar o prazo sem aplicar não protege
    ninguém. Não é necessária para a apresentação, mas é obrigatória antes da entrega ao Sinuelo. O

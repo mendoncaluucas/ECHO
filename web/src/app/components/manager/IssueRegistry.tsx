@@ -5,6 +5,7 @@ import {
   encerrarSessao,
   listarOcorrencias,
   MAXIMO_POR_PAGINA,
+  tokenDaSessao,
   type FiltrosDeOcorrencia,
   type Ocorrencia,
   type StatusOcorrencia,
@@ -100,7 +101,7 @@ export function IssueRegistry() {
   };
 
   const carregar = useCallback(() => {
-    const token = localStorage.getItem('echo_token');
+    const token = tokenDaSessao();
     if (!token) {
       navigate('/gerente/login');
       return;
@@ -141,7 +142,7 @@ export function IssueRegistry() {
   };
 
   const exportar = async () => {
-    const token = localStorage.getItem('echo_token');
+    const token = tokenDaSessao();
     if (!token) return;
     setErro(null);
     setExportando(true);

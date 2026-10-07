@@ -27,6 +27,9 @@ export function Entrar() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  // Desmarcado por padrão: o computador do restaurante é de todo mundo, e fechar o
+  // navegador tem que bastar para sair.
+  const [manterConectado, setManterConectado] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [demorando, setDemorando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -51,7 +54,7 @@ export function Entrar() {
 
     try {
       const { token, usuario } = await login(email.trim(), senha);
-      salvarSessao(token, usuario);
+      salvarSessao(token, usuario, manterConectado);
 
       // Volta à tela de antes só se o papel puder abri-la: quem entra com outra conta
       // não deve cair numa tela de "acesso restrito".
@@ -60,13 +63,15 @@ export function Entrar() {
         de && caminho && papelPodeAbrir(usuario.papel, caminho) ? de : telaInicialDe(usuario.papel);
       navigate(destino, { replace: true });
     } catch (falha) {
-      const status = (falha as { status?: number }).status;
+      const { status, codigo } = falha as { status?: number; codigo?: string };
       // 401 é credencial errada; qualquer outra coisa (API fora, rede) merece mensagem
       // própria, senão a pessoa procura o problema na senha.
       setErro(
         status === 401
           ? 'E-mail ou senha incorretos.'
-          : 'Não foi possível conectar ao servidor. Tente de novo em alguns instantes.'
+          : codigo === 'SESSAO_NAO_GRAVADA'
+            ? 'O navegador não deixou guardar o login. Libere os cookies deste site e tente de novo.'
+            : 'Não foi possível conectar ao servidor. Tente de novo em alguns instantes.'
       );
       setEnviando(false);
     } finally {
@@ -172,6 +177,28 @@ export function Entrar() {
               Esqueceu a senha? O administrador do restaurante redefine para você.
             </span>
           </div>
+
+          <label className="-my-1 flex cursor-pointer items-start gap-3 py-1">
+            <input
+              type="checkbox"
+              checked={manterConectado}
+              onChange={(e) => setManterConectado(e.target.checked)}
+              // Nome só pelo título: o rótulo envolve também a dica, que o leitor de
+              // tela leria duas vezes (no nome e na descrição).
+              aria-labelledby="manter-conectado-rotulo"
+              aria-describedby="manter-conectado-dica"
+              className="mt-0.5 size-5 flex-none cursor-pointer accent-primary"
+            />
+            <span className="text-sm">
+              <span id="manter-conectado-rotulo" className="font-semibold">
+                Manter conectado neste aparelho
+              </span>
+              <span id="manter-conectado-dica" className="block text-[13px] text-muted-foreground">
+                Desmarcado, fechar o navegador encerra a sessão. Deixe assim em computador
+                compartilhado.
+              </span>
+            </span>
+          </label>
 
           {erro && (
             <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

@@ -557,30 +557,82 @@ export function avisarMudancaNasNotificacoes() {
 
 // ---------- Sessão ----------
 //
-// As chaves nascem e morrem juntas. Limpar só o token deixava o `echo_usuario`
+// Guardada de um de dois jeitos, conforme o "Manter conectado" do login:
+// - marcado: no localStorage, que sobrevive a fechar o navegador (até vencer o tempo
+//   de sessão configurado);
+// - desmarcado: num cookie de sessão, sem data de validade, que o navegador apaga ao
+//   fechar. É o padrão, porque o computador do restaurante é de todo mundo. Cookie e
+//   não sessionStorage: o sessionStorage é de uma aba só, e abrir uma ocorrência em
+//   outra aba pediria login de novo.
+//
+// Token e usuário nascem e morrem juntos. Limpar só o token deixava o `echo_usuario`
 // desatualizado, e a tela de usuários depende dele para saber quem está logado.
 // `userRole` não é mais gravada (vinha dos logins antigos), mas segue na lista para
 // sair de navegadores que ainda a tenham.
 
 const CHAVES_DA_SESSAO = ['echo_token', 'echo_usuario', 'userRole'];
+const COOKIE_DA_SESSAO = 'echo_sessao';
+
+type Sessao = { token: string; usuario: Usuario };
 
 // O login fica na raiz: não existe mais tela de escolher papel.
 export const ROTA_DE_LOGIN = '/';
 
-export function salvarSessao(token: string, usuario: Usuario) {
-  localStorage.setItem('echo_token', token);
-  localStorage.setItem('echo_usuario', JSON.stringify(usuario));
+function gravarCookieDaSessao(sessao: Sessao | null) {
+  // Secure só em https: no localhost o navegador recusaria o cookie.
+  const atributos = `; Path=/; SameSite=Strict${location.protocol === 'https:' ? '; Secure' : ''}`;
+  document.cookie = sessao
+    ? `${COOKIE_DA_SESSAO}=${encodeURIComponent(JSON.stringify(sessao))}${atributos}`
+    : `${COOKIE_DA_SESSAO}=; Max-Age=0${atributos}`;
+}
+
+function lerCookieDaSessao(): Sessao | null {
+  const prefixo = `${COOKIE_DA_SESSAO}=`;
+  const par = document.cookie.split('; ').find((p) => p.startsWith(prefixo));
+  if (!par) return null;
+  const sessao = JSON.parse(decodeURIComponent(par.slice(prefixo.length)));
+  return typeof sessao?.token === 'string' && sessao.usuario ? sessao : null;
+}
+
+export function salvarSessao(token: string, usuario: Usuario, manterConectado: boolean) {
+  // Sai a sessão anterior, onde quer que esteja: duas ao mesmo tempo, uma em cada
+  // lugar, e não se saberia qual vale.
+  encerrarSessao();
+  try {
+    if (manterConectado) {
+      localStorage.setItem('echo_token', token);
+      localStorage.setItem('echo_usuario', JSON.stringify(usuario));
+    } else {
+      gravarCookieDaSessao({ token, usuario });
+    }
+  } catch {
+    // Armazenamento bloqueado: cai na conferência abaixo.
+  }
+  // Com cookies bloqueados a gravação falha calada: o login "daria certo" e a guarda
+  // de rota devolveria a pessoa à entrada, sem explicação.
+  if (!sessaoAtual()) {
+    const erro = new Error('Sessão não gravada') as ErroDaApi;
+    erro.codigo = 'SESSAO_NAO_GRAVADA';
+    throw erro;
+  }
 }
 
 // Token e usuário juntos, ou nada: um sem o outro é sessão pela metade.
-export function sessaoAtual(): { token: string; usuario: Usuario } | null {
+export function sessaoAtual(): Sessao | null {
   try {
     const token = localStorage.getItem('echo_token');
-    const usuario = usuarioLogado();
-    return token && usuario ? { token, usuario } : null;
+    const bruto = localStorage.getItem('echo_usuario');
+    if (token && bruto) return { token, usuario: JSON.parse(bruto) as Usuario };
+    return lerCookieDaSessao();
   } catch {
     return null;
   }
+}
+
+// O token para as chamadas autenticadas. As telas leem por aqui, nunca direto do
+// armazenamento: ele pode estar em qualquer um dos dois lugares.
+export function tokenDaSessao(): string | null {
+  return sessaoAtual()?.token ?? null;
 }
 
 // Recado para a tela de login, que sobrevive à troca de rota (o state do router se
@@ -617,24 +669,24 @@ export function encerrarSessao() {
       // Navegador com armazenamento bloqueado: não há sessão para encerrar.
     }
   }
+  try {
+    gravarCookieDaSessao(null);
+  } catch {
+    // Cookies bloqueados: idem.
+  }
 }
 
 // Quem está logado, gravado no login. Usado para não oferecer ao administrador
 // ações que o backend recusa sobre a própria conta.
 export function usuarioLogado(): Usuario | null {
-  try {
-    const bruto = localStorage.getItem('echo_usuario');
-    return bruto ? (JSON.parse(bruto) as Usuario) : null;
-  } catch {
-    return null;
-  }
+  return sessaoAtual()?.usuario ?? null;
 }
 
 // Há quanto tempo a sessão atual foi aberta, em horas, lida do `iat` do token. Só
 // para avisar na tela: quem decide se a sessão vale é o backend.
 export function idadeDaSessaoEmHoras(): number | null {
   try {
-    const token = localStorage.getItem('echo_token');
+    const token = tokenDaSessao();
     const parte = token?.split('.')[1];
     if (!parte) return null;
     const { iat } = JSON.parse(atob(parte.replace(/-/g, '+').replace(/_/g, '/')));

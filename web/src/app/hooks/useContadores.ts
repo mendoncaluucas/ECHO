@@ -3,6 +3,7 @@ import {
   contarNotificacoes,
   EVENTO_NOTIFICACOES,
   listarOcorrencias,
+  tokenDaSessao,
 } from '../services/api';
 
 // Um minuto basta para quem está no salão: o feedback não some se o número demorar.
@@ -29,7 +30,7 @@ export function useContadores(chave: string): Contadores {
     let ativo = true;
 
     const contar = () => {
-      const token = localStorage.getItem('echo_token');
+      const token = tokenDaSessao();
       if (!token || document.visibilityState !== 'visible') return;
 
       Promise.allSettled([

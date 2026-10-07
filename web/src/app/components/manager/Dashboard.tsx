@@ -23,6 +23,7 @@ import {
 import {
   buscarMetricas,
   encerrarSessao,
+  tokenDaSessao,
   type Metricas,
   type StatusOcorrencia,
   type TipoFeedback,
@@ -87,7 +88,7 @@ export function ManagerDashboard() {
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('echo_token');
+    const token = tokenDaSessao();
     if (!token) {
       navigate('/gerente/login');
       return;

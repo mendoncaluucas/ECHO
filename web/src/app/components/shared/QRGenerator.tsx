@@ -21,6 +21,7 @@ import {
   gerarQRCode,
   listarAreas,
   listarQRCodes,
+  tokenDaSessao,
   urlDaImagemDoQR,
   type Area,
   type QRCodeCadastrado,
@@ -451,7 +452,7 @@ export function QRGenerator() {
   const [imprimindo, setImprimindo] = useState<QRCodeCadastrado | null>(null);
   const requisicaoAtual = useRef(0);
 
-  const token = localStorage.getItem('echo_token') ?? '';
+  const token = tokenDaSessao() ?? '';
 
   const carregar = useCallback(() => {
     const minhaVez = ++requisicaoAtual.current;

@@ -19,6 +19,7 @@ import {
   idadeDaSessaoEmHoras,
   listarAreas,
   salvarConfiguracoes,
+  tokenDaSessao,
   usuarioLogado,
   type Area,
 } from '../../services/api';
@@ -145,6 +146,7 @@ function SecaoTempoDeSessao({
       </div>
       <p className="text-gray-600 mb-4">
         Por quanto tempo um login continua válido. Depois disso, é preciso entrar de novo.
+        Quem não marca "Manter conectado" ao entrar sai antes, ao fechar o navegador.
       </p>
 
       {erro && (
@@ -218,7 +220,7 @@ export function AdminSettings() {
   const [nomeEditado, setNomeEditado] = useState('');
   const [salvandoId, setSalvandoId] = useState<string | null>(null);
 
-  const token = localStorage.getItem('echo_token');
+  const token = tokenDaSessao();
   const buscaAtual = useRef(0);
 
   // A listagem de áreas é aberta, então sem esta checagem um gerente veria os botões
