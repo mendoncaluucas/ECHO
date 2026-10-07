@@ -11,7 +11,7 @@ import {
   Legend,
   CartesianGrid,
 } from 'recharts';
-import { buscarRelatorio, encerrarSessao, type RelatorioHistorico } from '../../services/api';
+import { buscarRelatorio, encerrarSessao, tokenDaSessao, type RelatorioHistorico } from '../../services/api';
 import { baixarCsv, decimal, montarCsv, type Celula } from '../../services/csv';
 
 // Classes inteiras: o Tailwind só gera o que encontra escrito.
@@ -141,7 +141,7 @@ export function Reports() {
   const problemaNoPeriodo = validarPeriodo(de, ate);
 
   useEffect(() => {
-    const token = localStorage.getItem('echo_token');
+    const token = tokenDaSessao();
     if (!token) {
       navigate('/gerente/login');
       return;

@@ -7,6 +7,7 @@ import {
   encerrarSessao,
   listarUsuarios,
   redefinirSenha,
+  tokenDaSessao,
   usuarioLogado,
   type EdicaoUsuario,
   type Papel,
@@ -62,7 +63,7 @@ export function UserManagement() {
   const [erroDoModal, setErroDoModal] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
-  const token = localStorage.getItem('echo_token');
+  const token = tokenDaSessao();
   const euId = usuarioLogado()?.id ?? null;
 
   const tratarFalha = (e: unknown, ondeMostrar: (mensagem: string) => void) => {

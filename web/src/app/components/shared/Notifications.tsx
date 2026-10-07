@@ -8,6 +8,7 @@ import {
   marcarNotificacao,
   marcarTodasComoLidas,
   ROTA_DE_LOGIN,
+  tokenDaSessao,
   type Notificacao,
   type StatusOcorrencia,
   type TipoFeedback,
@@ -44,7 +45,7 @@ export function Notifications() {
   const [marcandoTodas, setMarcandoTodas] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const token = localStorage.getItem('echo_token');
+  const token = tokenDaSessao();
   // O login é um só, na raiz, para qualquer papel.
   const telaDeLogin = ROTA_DE_LOGIN;
   const requisicaoAtual = useRef(0);

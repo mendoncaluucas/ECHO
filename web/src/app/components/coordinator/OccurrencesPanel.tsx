@@ -5,6 +5,7 @@ import {
   encerrarSessao,
   listarOcorrencias,
   MAXIMO_POR_PAGINA,
+  tokenDaSessao,
   type Ocorrencia,
   type StatusOcorrencia,
   type TipoFeedback,
@@ -55,7 +56,7 @@ export function OccurrencesPanel() {
 
   const carregarPagina = useCallback(
     (pagina: number) => {
-      const token = localStorage.getItem('echo_token');
+      const token = tokenDaSessao();
       if (!token) {
         navigate('/coordenador/login');
         return;

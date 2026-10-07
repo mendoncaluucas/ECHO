@@ -6,6 +6,7 @@ import {
   listarAreas,
   listarQRCodes,
   listarUsuarios,
+  tokenDaSessao,
   type Papel,
 } from '../../services/api';
 
@@ -23,7 +24,7 @@ export function AdminDashboard() {
   const [erro, setErro] = useState<string | null>(null);
   const [semPermissao, setSemPermissao] = useState(false);
 
-  const token = localStorage.getItem('echo_token');
+  const token = tokenDaSessao();
   const buscaAtual = useRef(0);
 
   useEffect(() => {

@@ -5,6 +5,7 @@ import {
   encerrarSessao,
   listarAuditoria,
   listarUsuarios,
+  tokenDaSessao,
   usuarioLogado,
   type AcaoAuditoria,
   type FiltrosDeAuditoria,
@@ -156,7 +157,7 @@ export function AuditLog() {
   const [de, setDe] = useState('');
   const [ate, setAte] = useState('');
 
-  const token = localStorage.getItem('echo_token');
+  const token = tokenDaSessao();
   const requisicaoAtual = useRef(0);
 
   // O log é do administrador. Checar aqui evita mostrar a tela e só então o 403;

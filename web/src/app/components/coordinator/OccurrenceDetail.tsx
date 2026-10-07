@@ -5,6 +5,7 @@ import {
   atualizarStatusOcorrencia,
   buscarOcorrencia,
   encerrarSessao,
+  tokenDaSessao,
   type Ocorrencia,
   type StatusOcorrencia,
 } from '../../services/api';
@@ -97,7 +98,7 @@ export function OccurrenceDetail() {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const token = localStorage.getItem('echo_token');
+  const token = tokenDaSessao();
 
   // A ocorrência abre do painel, do registro, do log e das notificações. Mandar
   // sempre para o painel do coordenador deixava o gerente que veio do sino numa tela
