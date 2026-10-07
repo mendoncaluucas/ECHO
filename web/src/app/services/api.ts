@@ -207,11 +207,17 @@ export interface QRCodeGerado {
 }
 
 // Exige administrador: a geração entra no log de auditoria, que precisa de um autor.
-export function gerarQRCode(areaId: string, token: string): Promise<QRCodeGerado> {
+// `desativarAnteriores` é o "substituir": os códigos ativos da área param de valer
+// junto com o nascimento do novo.
+export function gerarQRCode(
+  areaId: string,
+  token: string,
+  opcoes: { desativarAnteriores?: boolean } = {}
+): Promise<QRCodeGerado> {
   return request(`/qrcodes`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ areaId }),
+    body: JSON.stringify({ areaId, ...opcoes }),
   });
 }
 
@@ -220,11 +226,37 @@ export interface QRCodeCadastrado {
   token: string;
   ativo: boolean;
   criadoEm: string;
-  area: { nome: string };
+  area: { id: string; nome: string };
+  // Para onde o código leva (o formulário da mesa), já montada pela API.
+  url: string;
 }
 
 export function listarQRCodes(token: string): Promise<{ itens: QRCodeCadastrado[] }> {
   return request(`/qrcodes`, { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function atualizarQRCode(
+  id: string,
+  ativo: boolean,
+  token: string
+): Promise<QRCodeCadastrado> {
+  return request(`/qrcodes/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ ativo }),
+  });
+}
+
+// Imagem do código, servida pela API (rota pública, só para código ativo). SVG é
+// vetorial e fica nítido no projetor e no papel; PNG é para quem precisa de arquivo.
+export function urlDaImagemDoQR(
+  qrToken: string,
+  formato: 'svg' | 'png' = 'svg',
+  tamanho?: number
+): string {
+  const busca = new URLSearchParams({ formato });
+  if (tamanho) busca.set('tamanho', String(tamanho));
+  return `${API_URL}/qrcodes/${encodeURIComponent(qrToken)}/imagem?${busca}`;
 }
 
 export function buscarOcorrencia(id: string, token: string): Promise<Ocorrencia> {
@@ -412,6 +444,8 @@ export type AcaoAuditoria =
   | 'AREA_DESATIVADA'
   | 'AREA_REATIVADA'
   | 'QRCODE_GERADO'
+  | 'QRCODE_DESATIVADO'
+  | 'QRCODE_REATIVADO'
   | 'OCORRENCIA_STATUS'
   | 'CONFIGURACAO_ALTERADA';
 
