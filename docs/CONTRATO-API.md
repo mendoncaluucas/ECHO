@@ -64,8 +64,9 @@
   "qrToken": "abc123",
   "tipo": "RECLAMACAO",
   "comentario": "Demora no atendimento.",
-  "anonimo": true,
-  "contatoEmail": null,
+  "anonimo": false,
+  "contatoNome": "Ana Souza",
+  "contatoEmail": "ana@exemplo.com",
   "avaliacoes": [
     { "categoriaId": "uuid", "estrelas": 2 },
     { "categoriaId": "uuid", "estrelas": 4 }
@@ -73,8 +74,15 @@
 }
 ```
 - `tipo`: `ELOGIO` | `SUGESTAO` | `RECLAMACAO`
-- `anonimo`: se `false`, `contatoEmail` pode ser preenchido
+- `anonimo: false` é o cliente pedindo **resposta da equipe**: `contatoEmail` e, se quiser,
+  `contatoNome` (até 100 caracteres). Os dois são gravados sem espaços sobrando
+- `contatoEmail` aceita só os caracteres de um endereço comum (letras, números e `. _ + -`) e no
+  máximo 254 caracteres. Ele vira link `mailto:` na tela da equipe, e com `?`, `&` ou `%` o
+  cliente conseguiria pôr cópia ou trocar o assunto da resposta que a equipe envia
 - `estrelas`: inteiro de 1 a 5
+
+> **Sem e-mail não há resposta possível**, então `anonimo: false` sem `contatoEmail` é gravado como
+> anônimo. De anônimo nada de contato é guardado, nem o que vier no corpo por engano.
 
 **Resposta `201`:**
 ```json
@@ -171,7 +179,8 @@
 ---
 
 ## 5. `GET /occurrences/:id` — detalhe da ocorrência
-**Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Mesmo formato de um item da listagem.
+**Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). O formato de um item da listagem, mais
+o `contato`.
 
 **Resposta `200`:**
 ```json
@@ -179,15 +188,21 @@
   "id": "uuid",
   "tipo": "RECLAMACAO",
   "comentario": "Demora no atendimento.",
-  "anonimo": true,
+  "anonimo": false,
   "criadoEm": "2026-08-27T14:30:00.000Z",
   "status": "EM_ANDAMENTO",
   "tratadoPor": { "nome": "Coordenadora Sinuelo" },
   "tratadoEm": "2026-09-21T18:00:00.000Z",
   "area": { "nome": "Mesa 12" },
-  "avaliacoes": [{ "categoria": "Atendimento", "estrelas": 2 }]
+  "avaliacoes": [{ "categoria": "Atendimento", "estrelas": 2 }],
+  "contato": { "nome": "Ana Souza", "email": "ana@exemplo.com" }
 }
 ```
+
+> **O único lugar em que o contato do cliente sai.** Quem abre a ocorrência é quem vai responder;
+> listagens, notificações e métricas nunca o trazem (LGPD), e há teste travando isso. `contato` é
+> `null` para feedback anônimo, e `nome` pode vir `null` (é opcional para o cliente).
+
 **Erros:** `401` (sem token) · `404` `OCORRENCIA_NAO_ENCONTRADA`.
 
 ---

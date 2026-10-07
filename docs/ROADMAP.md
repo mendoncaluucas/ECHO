@@ -75,7 +75,9 @@ na interface prometendo essas funções.
 ## Fase 3 — O que o Sinuelo pediu na validação
 
 - **Respostas prontas** na tratativa — modelo próprio, CRUD e seleção na tela de detalhe
-- **Retorno ao cliente por e-mail** — exige provedor de envio, template e tratamento de falha
+- ~~**Retorno ao cliente por e-mail**~~ — **atendido sem provedor (07/10):** quem pede resposta deixa
+  nome e e-mail; a equipe responde pelo próprio e-mail, a partir do detalhe da ocorrência. Envio
+  automático pelo sistema (provedor, template, falha) segue fora
 - ~~**Notificações** para a gestão~~ — **feito**, dentro do sistema. Regra definida pelo Lucas: todo
   feedback novo notifica, de qualquer tipo. Falta o envio por e-mail/push, que depende de provedor
 
