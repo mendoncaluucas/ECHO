@@ -68,7 +68,8 @@ export function OptionalId() {
       });
 
       localStorage.removeItem('pendingFeedback');
-      navigate('/sucesso');
+      // O QR vai junto para a tela de sucesso oferecer outra avaliação da mesma mesa.
+      navigate('/sucesso', { state: { qrToken } });
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao enviar. Tente novamente.');
     } finally {

@@ -20,7 +20,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { Navigation } from '../Navigation';
 import {
   buscarMetricas,
   encerrarSessao,
@@ -161,8 +160,7 @@ export function ManagerDashboard() {
   );
 
   const moldura = (conteudo: React.ReactNode) => (
-    <div className="min-h-screen bg-orange-50">
-      <Navigation title="Dashboard Gerencial" role="manager" />
+    <div>
       <div className="max-w-6xl mx-auto p-4 pb-8">
         <div className="pt-6 pb-4 flex flex-wrap items-end justify-between gap-4">
           <div>

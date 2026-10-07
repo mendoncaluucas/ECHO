@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QrCode, Download, Loader2 } from 'lucide-react';
-import { Navigation } from '../Navigation';
 import {
   encerrarSessao,
   gerarQRCode,
@@ -83,8 +82,7 @@ export function QRGenerator() {
   const nomeDaArea = areas.find((a) => a.id === selectedArea)?.nome ?? '';
 
   const moldura = (conteudo: React.ReactNode) => (
-    <div className="min-h-screen bg-gray-50">
-      <Navigation title="Gerador de QR Code" role="admin" />
+    <div>
       <div className="max-w-3xl mx-auto p-4 pb-8">
         <div className="pt-6 pb-4">
           <h1 className="text-2xl font-bold text-gray-900">Gerador de QR Code</h1>

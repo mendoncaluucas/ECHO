@@ -62,6 +62,8 @@ jobs:
         run: npm test
 
   web:
+    # O nome continua "Front — build" mesmo fazendo typecheck: a proteção da main exige
+    # o check por este nome exato, e renomear deixaria todo PR esperando para sempre.
     name: Front — build
     runs-on: ubuntu-latest
     defaults:
@@ -80,6 +82,10 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
-      # O front não tem typecheck próprio; o build é o que pega import quebrado.
+      # O build do Vite (esbuild) apaga os tipos sem checar nada; quem pega erro de
+      # tipo é este passo.
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Build
         run: npm run build

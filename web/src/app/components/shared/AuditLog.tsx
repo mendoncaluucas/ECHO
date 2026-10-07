@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Filter, Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
-import { Navigation } from '../Navigation';
 import {
   encerrarSessao,
   listarAuditoria,
@@ -236,8 +235,7 @@ export function AuditLog() {
   const ultimoDaPagina = Math.min(pagina * POR_PAGINA, total);
 
   const moldura = (conteudo: React.ReactNode) => (
-    <div className="min-h-screen bg-slate-50">
-      <Navigation title="Log de Atividades" role="admin" />
+    <div>
       <div className="max-w-6xl mx-auto p-4 pb-8">
         <div className="pt-6 pb-4">
           <h1 className="text-2xl font-bold text-gray-900">Log de Atividades</h1>
