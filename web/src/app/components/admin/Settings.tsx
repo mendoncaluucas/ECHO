@@ -11,7 +11,6 @@ import {
   Pencil,
   Loader2,
 } from 'lucide-react';
-import { Navigation } from '../Navigation';
 import {
   atualizarArea,
   buscarConfiguracoes,
@@ -316,8 +315,7 @@ export function AdminSettings() {
   };
 
   const moldura = (conteudo: React.ReactNode) => (
-    <div className="min-h-screen bg-slate-50">
-      <Navigation title="Configurações do Sistema" role="admin" />
+    <div>
       <div className="max-w-4xl mx-auto p-4 pb-8">
         <div className="pt-6 pb-4">
           <h1 className="text-2xl font-bold text-gray-900">Configurações do Sistema</h1>

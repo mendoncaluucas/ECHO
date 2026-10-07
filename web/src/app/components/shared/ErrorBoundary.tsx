@@ -33,6 +33,12 @@ export class ErrorBoundary extends Component<Props, State> {
     const { erro } = this.state;
     if (!erro) return this.props.children;
 
+    // A raiz é o login da equipe: para o cliente na mesa, "Início" levaria a uma tela
+    // que não é para ele. No fluxo do cliente fica só o "Recarregar".
+    const ehDoCliente = ['/feedback', '/identificacao', '/sucesso', '/boas-vindas'].some((rota) =>
+      window.location.pathname.startsWith(rota)
+    );
+
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 text-center space-y-4">
@@ -65,13 +71,15 @@ export class ErrorBoundary extends Component<Props, State> {
             </button>
             {/* Link de verdade, não navegação do router: recarrega a página inteira
                 e garante estado limpo mesmo se o erro tiver vindo do próprio router. */}
-            <a
-              href="/"
-              className="flex-1 bg-white hover:bg-gray-50 text-gray-900 border-2 border-gray-300 py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"
-            >
-              <Home className="w-4 h-4" />
-              Início
-            </a>
+            {!ehDoCliente && (
+              <a
+                href="/"
+                className="flex-1 bg-white hover:bg-gray-50 text-gray-900 border-2 border-gray-300 py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <Home className="w-4 h-4" />
+                Meu painel
+              </a>
+            )}
           </div>
         </div>
       </div>

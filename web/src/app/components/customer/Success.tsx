@@ -1,8 +1,11 @@
-import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Home } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { CheckCircle2, MessageSquarePlus } from 'lucide-react';
 
 export function Success() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // QR da mesa, vindo da etapa anterior. Ausente se a página foi aberta direto.
+  const qrToken = (location.state as { qrToken?: string } | null)?.qrToken;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-teal-50 to-white flex items-center justify-center p-6">
@@ -25,17 +28,22 @@ export function Success() {
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <p className="text-sm text-gray-600 mb-4">
-            Nossa equipe vai analisar seu feedback e trabalhar nas melhorias necessárias.
+        <div className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
+          <p className="text-sm text-gray-600">
+            Nossa equipe vai analisar seu feedback e trabalhar nas melhorias necessárias. Pode
+            fechar esta página.
           </p>
-          <button
-            onClick={() => navigate('/')}
-            className="w-full bg-teal-600 hover:bg-teal-700 text-white py-3 px-6 rounded-xl font-semibold transition-colors shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-          >
-            <Home className="w-5 h-5" />
-            Voltar ao Início
-          </button>
+          {/* Não há "início" para o cliente: a raiz é o login da equipe. O que faz sentido
+              é outra pessoa da mesma mesa avaliar também. */}
+          {qrToken && (
+            <button
+              onClick={() => navigate(`/feedback?t=${encodeURIComponent(qrToken)}`)}
+              className="w-full bg-teal-600 hover:bg-teal-700 text-white py-3 px-6 rounded-xl font-semibold transition-colors shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+            >
+              <MessageSquarePlus className="w-5 h-5" />
+              Enviar outra avaliação
+            </button>
+          )}
         </div>
       </div>
     </div>

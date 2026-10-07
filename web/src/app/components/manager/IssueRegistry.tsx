@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Download, Eye, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Navigation } from '../Navigation';
 import {
   encerrarSessao,
   listarOcorrencias,
@@ -178,8 +177,7 @@ export function IssueRegistry() {
   const ultimoDaPagina = Math.min(pagina * POR_PAGINA, total);
 
   return (
-    <div className="min-h-screen bg-orange-50">
-      <Navigation title="Registro de Ocorrências" role="manager" />
+    <div>
       <div className="max-w-6xl mx-auto p-4 pb-8">
         <div className="pt-6 pb-4">
           <h1 className="text-2xl font-bold text-gray-900">Registro de Ocorrências</h1>

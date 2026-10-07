@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit, UserX, UserCheck, Search, KeyRound, Loader2 } from 'lucide-react';
-import { Navigation } from '../Navigation';
 import {
   atualizarUsuario,
   criarUsuario,
@@ -212,8 +211,7 @@ export function UserManagement() {
     : usuarios;
 
   const moldura = (conteudo: React.ReactNode) => (
-    <div className="min-h-screen bg-slate-50">
-      <Navigation title="Gerenciamento de Usuários" role="admin" />
+    <div>
       <div className="max-w-6xl mx-auto p-4 pb-8">
         <div className="pt-6 pb-4">
           <h1 className="text-2xl font-bold text-gray-900">Gerenciamento de Usuários</h1>

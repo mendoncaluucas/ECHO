@@ -19,12 +19,14 @@ export function NotFound() {
           atendente.
         </p>
 
+        {/* A raiz é o login da equipe, então o link diz isso: o cliente que chegou por
+            um QR errado não tem o que fazer lá, e o texto acima já o orienta. */}
         <Link
           to="/"
           className="inline-flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white py-3 px-6 rounded-xl font-semibold transition-colors"
         >
           <Home className="w-4 h-4" />
-          Ir para o início
+          Sou da equipe: entrar
         </Link>
       </div>
     </div>

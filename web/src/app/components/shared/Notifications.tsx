@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, Lightbulb, Loader2, ThumbsUp, TriangleAlert } from 'lucide-react';
-import { Navigation } from '../Navigation';
 import {
   avisarMudancaNasNotificacoes,
   encerrarSessao,
   listarNotificacoes,
   marcarNotificacao,
   marcarTodasComoLidas,
-  usuarioLogado,
+  ROTA_DE_LOGIN,
   type Notificacao,
-  type Papel,
   type StatusOcorrencia,
   type TipoFeedback,
 } from '../../services/api';
@@ -32,13 +30,6 @@ const CONFIG_STATUS: Record<StatusOcorrencia, { rotulo: string; classe: string }
   RESOLVIDO: { rotulo: 'Resolvido', classe: 'bg-green-100 text-green-700' },
 };
 
-// A tela é compartilhada pelos três papéis; a barra segue a cor de quem está logado.
-const BARRA_POR_PAPEL: Record<Papel, 'coordinator' | 'manager' | 'admin'> = {
-  COORDENADOR: 'coordinator',
-  GERENTE: 'manager',
-  ADMINISTRADOR: 'admin',
-};
-
 type Filtro = 'todas' | 'nao-lidas';
 
 export function Notifications() {
@@ -54,8 +45,8 @@ export function Notifications() {
   const [erro, setErro] = useState<string | null>(null);
 
   const token = localStorage.getItem('echo_token');
-  const papel = usuarioLogado()?.papel;
-  const telaDeLogin = papel === 'COORDENADOR' ? '/coordenador/login' : '/gerente/login';
+  // O login é um só, na raiz, para qualquer papel.
+  const telaDeLogin = ROTA_DE_LOGIN;
   const requisicaoAtual = useRef(0);
 
   const tratarFalha = useCallback(
@@ -172,8 +163,7 @@ export function Notifications() {
   const haMais = notificacoes.length < total && paginaCarregada > 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navigation title="Notificações" role={papel ? BARRA_POR_PAPEL[papel] ?? 'admin' : 'admin'} />
+    <div>
       <div className="max-w-3xl mx-auto p-4 pb-8">
         <div className="pt-6 pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>

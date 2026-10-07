@@ -45,6 +45,23 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   const data = await res.json().catch(() => null);
   if (!res.ok) {
+    // Sessão vencida, encerrada pelo administrador ou cortada pelo tempo de sessão:
+    // trata aqui, uma vez, em vez de cada tela redirecionar por conta própria. Só os
+    // códigos de sessão: o 401 de senha atual errada (CREDENCIAIS_INVALIDAS) não pode
+    // deslogar ninguém.
+    const comToken = Boolean(
+      (options?.headers as Record<string, string> | undefined)?.Authorization
+    );
+    if (
+      res.status === 401 &&
+      comToken &&
+      (data?.codigo === 'TOKEN_INVALIDO' || data?.codigo === 'NAO_AUTENTICADO')
+    ) {
+      encerrarSessao();
+      deixarAvisoParaOLogin('Sua sessão terminou. Entre de novo para continuar.');
+      window.dispatchEvent(new Event(EVENTO_SESSAO_ENCERRADA));
+    }
+
     const erro = new Error(data?.erro ?? `Erro ${res.status}`) as ErroDaApi;
     erro.status = res.status;
     erro.codigo = data?.codigo;
@@ -501,10 +518,57 @@ export function avisarMudancaNasNotificacoes() {
 
 // ---------- Sessão ----------
 //
-// As três chaves nascem e morrem juntas. Limpar só o token deixava o `echo_usuario`
+// As chaves nascem e morrem juntas. Limpar só o token deixava o `echo_usuario`
 // desatualizado, e a tela de usuários depende dele para saber quem está logado.
+// `userRole` não é mais gravada (vinha dos logins antigos), mas segue na lista para
+// sair de navegadores que ainda a tenham.
 
 const CHAVES_DA_SESSAO = ['echo_token', 'echo_usuario', 'userRole'];
+
+// O login fica na raiz: não existe mais tela de escolher papel.
+export const ROTA_DE_LOGIN = '/';
+
+export function salvarSessao(token: string, usuario: Usuario) {
+  localStorage.setItem('echo_token', token);
+  localStorage.setItem('echo_usuario', JSON.stringify(usuario));
+}
+
+// Token e usuário juntos, ou nada: um sem o outro é sessão pela metade.
+export function sessaoAtual(): { token: string; usuario: Usuario } | null {
+  try {
+    const token = localStorage.getItem('echo_token');
+    const usuario = usuarioLogado();
+    return token && usuario ? { token, usuario } : null;
+  } catch {
+    return null;
+  }
+}
+
+// Recado para a tela de login, que sobrevive à troca de rota (o state do router se
+// perderia quando duas telas redirecionam ao mesmo tempo). Lido uma vez e apagado.
+const CHAVE_DO_AVISO = 'echo_aviso_login';
+
+export function deixarAvisoParaOLogin(aviso: string) {
+  try {
+    sessionStorage.setItem(CHAVE_DO_AVISO, aviso);
+  } catch {
+    // Sem armazenamento: o login só não mostra o motivo.
+  }
+}
+
+export function lerAvisoDoLogin(): string | null {
+  try {
+    const aviso = sessionStorage.getItem(CHAVE_DO_AVISO);
+    sessionStorage.removeItem(CHAVE_DO_AVISO);
+    return aviso;
+  } catch {
+    return null;
+  }
+}
+
+// Disparado quando uma chamada autenticada volta 401 por sessão vencida ou encerrada.
+// O App escuta e leva ao login: assim nenhuma tela precisa saber para onde mandar.
+export const EVENTO_SESSAO_ENCERRADA = 'echo:sessao-encerrada';
 
 export function encerrarSessao() {
   for (const chave of CHAVES_DA_SESSAO) {
@@ -541,8 +605,7 @@ export function idadeDaSessaoEmHoras(): number | null {
   }
 }
 
-// Cada papel entra direto na sua área. Os dois formulários de login usam este mapa,
-// senão um administrador entrando pela tela do coordenador cairia no painel errado.
+// Cada papel entra direto na sua área, a partir do login único.
 export const TELA_INICIAL_POR_PAPEL: Record<Papel, string> = {
   ADMINISTRADOR: '/admin/dashboard',
   GERENTE: '/gerente/dashboard',

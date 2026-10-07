@@ -105,7 +105,7 @@ export function OccurrenceDetail() {
 
   if (carregando) {
     return (
-      <div className="min-h-screen bg-purple-50 flex items-center justify-center">
+      <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
       </div>
     );
@@ -113,7 +113,7 @@ export function OccurrenceDetail() {
 
   if (!ocorrencia) {
     return (
-      <div className="min-h-screen bg-purple-50 p-4">
+      <div className="p-4">
         <div className="max-w-3xl mx-auto">
           {voltar}
           <p className="bg-white rounded-2xl shadow-lg p-6 text-gray-700">
@@ -130,7 +130,7 @@ export function OccurrenceDetail() {
   };
 
   return (
-    <div className="min-h-screen bg-purple-50 p-4 pb-8">
+    <div className="p-4 pb-8">
       <div className="max-w-3xl mx-auto">
         {voltar}
 

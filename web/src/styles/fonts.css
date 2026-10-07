@@ -1,0 +1,4 @@
+/* Manrope servida pelo próprio sistema, não pelo Google Fonts: carregar a fonte de
+   lá faria cada visita, inclusive a do cliente na mesa, avisar o Google do acesso.
+   Variável: um arquivo cobre todos os pesos. */
+@import '@fontsource-variable/manrope';
