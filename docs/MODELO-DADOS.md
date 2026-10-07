@@ -98,7 +98,8 @@ erDiagram
 - **TipoFeedback:** `ELOGIO` · `SUGESTAO` · `RECLAMACAO`
 - **AcaoAuditoria:** `LOGIN` · `SENHA_ALTERADA` · `SENHA_REDEFINIDA` · `USUARIO_CRIADO` · `USUARIO_EDITADO` ·
   `USUARIO_DESATIVADO` · `USUARIO_REATIVADO` · `AREA_CRIADA` · `AREA_RENOMEADA` · `AREA_DESATIVADA` ·
-  `AREA_REATIVADA` · `QRCODE_GERADO` · `OCORRENCIA_STATUS` · `CONFIGURACAO_ALTERADA`
+  `AREA_REATIVADA` · `QRCODE_GERADO` · `QRCODE_DESATIVADO` · `QRCODE_REATIVADO` · `OCORRENCIA_STATUS` ·
+  `CONFIGURACAO_ALTERADA`
 
 ## Decisões e observações
 - **Anonimato por padrão:** `Feedback.anonimo = true`. `contatoNome` e `contatoEmail` só são gravados quando o cliente pede resposta da equipe (sem e-mail, o feedback é gravado como anônimo). O contato só sai da API no detalhe da ocorrência, para quem vai responder; nunca em listas (LGPD).

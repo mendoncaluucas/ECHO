@@ -234,9 +234,13 @@ formulário e a imagem (PNG em data URL).
 
 **Requisição:**
 ```json
-{ "areaId": "uuid", "token": "MESA12" }
+{ "areaId": "uuid", "token": "MESA12", "desativarAnteriores": true }
 ```
 - `token` é **opcional** (ex.: `"MESA12"`); se omitido, o servidor gera um token aleatório.
+- `desativarAnteriores` é **opcional** (padrão `false`). Com `true`, é o **substituir**: o código novo
+  nasce e os ativos da mesma área deixam de valer, na mesma transação. Cada um registra
+  `QRCODE_DESATIVADO` com `motivo: "substituido"` no log. Sem ele, o código novo passa a valer **junto**
+  com os anteriores, e um QR perdido continua aceitando feedback.
 
 **Resposta `201`:**
 ```json
@@ -247,7 +251,7 @@ formulário e a imagem (PNG em data URL).
   "imagem": "data:image/png;base64,iVBORw0KGgo..."
 }
 ```
-**Erros:** `400` `VALIDACAO` (areaId ausente) · `400` `AREA_INATIVA` (o código nasceria sem
+**Erros:** `400` `VALIDACAO` (areaId ausente, `desativarAnteriores` não booleano) · `400` `AREA_INATIVA` (o código nasceria sem
 funcionar: os endpoints públicos recusam área desativada) · `401` · `403` `SEM_PERMISSAO` ·
 `404` (área não encontrada) · `409` (token já em uso).
 
@@ -261,10 +265,13 @@ funcionar: os endpoints públicos recusam área desativada) · `401` · `403` `S
 {
   "itens": [
     { "id": "uuid", "token": "MESA12", "ativo": true,
-      "criadoEm": "2026-08-18T...", "area": { "nome": "Mesa 12" } }
+      "criadoEm": "2026-08-18T...", "area": { "id": "uuid", "nome": "Mesa 12" },
+      "url": "https://echo-ten-pied.vercel.app/feedback?t=MESA12" }
   ]
 }
 ```
+
+- `url` vem pronta: só a API sabe para que endereço o QR aponta (`WEB_BASE_URL`).
 
 > Aberto a toda a gestão, não só ao administrador, mas nunca ao público: a listagem entrega todos
 > os tokens de uma vez, e com eles dá para enviar feedback em nome de qualquer área sem passar por
@@ -274,12 +281,45 @@ funcionar: os endpoints públicos recusam área desativada) · `401` · `403` `S
 
 ---
 
+## 7.2. `PATCH /api/qrcodes/:id` — desativar ou reativar um QR Code
+**Protegido** (`ADMINISTRADOR`). Para o QR perdido, roubado ou estragado: tira só aquele código de
+circulação, sem desativar a área inteira. Desativado, o código para de abrir o formulário.
+
+**Requisição:**
+```json
+{ "ativo": false }
+```
+
+**Resposta `200`:** o código no mesmo formato de um item do `GET /api/qrcodes` (com `area` e `url`).
+
+> Registra `QRCODE_DESATIVADO` ou `QRCODE_REATIVADO` no log, só quando a situação muda de fato.
+
+**Erros:** `400` `VALIDACAO` (`ativo` não booleano) · `400` `AREA_INATIVA` (reativar código de área
+desativada: constaria como valendo, mas o formulário recusaria) · `401` · `403` `SEM_PERMISSAO` ·
+`404` `QR_NAO_ENCONTRADO`.
+
+---
+
 ## 8. `GET /api/qrcodes/:token/imagem` — imagem do QR Code
-Devolve a imagem **PNG** do QR (para impressão). Escaneada, abre o formulário do cliente.
+Devolve a imagem do QR. Escaneada, abre o formulário do cliente.
 
-**Resposta `200`:** `Content-Type: image/png` (binário da imagem).
+**Parâmetros (query, opcionais):**
 
-**Erros:** `404` (token não encontrado ou inativo).
+| Parâmetro | Valores | Padrão |
+|---|---|---|
+| `formato` | `png` · `svg` | `png` |
+| `tamanho` | inteiro de `200` a `2048` (largura do PNG em pixels; ignorado no SVG) | `400` |
+
+- **SVG** é vetorial: nítido em qualquer tamanho. É o que a tela de apresentação e o cartão de mesa
+  impresso usam. **PNG** serve para quem precisa de um arquivo de imagem (o botão "Baixar PNG" pede 1024).
+- Correção de erro nível **M** (até 15% do código pode estar danificado) e margem de 2 módulos.
+
+**Resposta `200`:** `Content-Type: image/png` ou `image/svg+xml`.
+
+> **Aberta**: só serve token ativo, e o token já está impresso na mesa.
+
+**Erros:** `400` `VALIDACAO` (`formato` ou `tamanho` inválido) · `404` `QR_NAO_ENCONTRADO` (token
+não encontrado ou inativo).
 
 ---
 
@@ -570,6 +610,7 @@ ao mais antigo. Somente leitura: nenhuma rota edita ou apaga registro do log.
 | `AREA_RENOMEADA` | | `de`, `para` |
 | `AREA_DESATIVADA` / `AREA_REATIVADA` | | `nome` |
 | `QRCODE_GERADO` | | `area`, `token` |
+| `QRCODE_DESATIVADO` / `QRCODE_REATIVADO` | pelo `PATCH`, ou ao substituir (só desativado) | `area`, `token`; `motivo: "substituido"` quando veio da substituição |
 | `OCORRENCIA_STATUS` | o status mudou | `de`, `para`, `area` |
 | `CONFIGURACAO_ALTERADA` | uma configuração do sistema mudou | `campo`, `de`, `para` |
 
