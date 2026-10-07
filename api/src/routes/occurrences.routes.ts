@@ -114,13 +114,16 @@ occurrencesRoutes.get(
 );
 
 // GET /:id — detalhe de uma ocorrência. Ver docs/CONTRATO-API.md
+//
+// O único lugar em que o contato do cliente sai: quem abre a ocorrência é quem vai
+// responder. Listagens, notificações e métricas nunca o trazem (LGPD).
 occurrencesRoutes.get(
   "/:id",
   requireAuth(PAPEIS_DA_GESTAO),
   asyncHandler(async (req, res) => {
     const ocorrencia = await prisma.feedback.findUnique({
       where: { id: req.params.id },
-      select: camposDaOcorrencia,
+      select: { ...camposDaOcorrencia, contatoNome: true, contatoEmail: true },
     });
 
     if (!ocorrencia) {
@@ -129,7 +132,13 @@ occurrencesRoutes.get(
         .json({ erro: "Ocorrência não encontrada", codigo: "OCORRENCIA_NAO_ENCONTRADA" });
     }
 
-    return res.json(formatar(ocorrencia));
+    const { contatoNome, contatoEmail, ...resto } = ocorrencia;
+    return res.json({
+      ...formatar(resto),
+      // null para anônimo: o front não precisa saber por que não há contato.
+      contato:
+        !resto.anonimo && contatoEmail ? { nome: contatoNome, email: contatoEmail } : null,
+    });
   })
 );
 

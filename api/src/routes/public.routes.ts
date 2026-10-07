@@ -6,7 +6,13 @@ import { asyncHandler } from "../middlewares/asyncHandler.js";
 export const publicRoutes = Router();
 
 const MAX_COMENTARIO = 1000;
-const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const MAX_NOME = 100;
+// Só os caracteres de um endereço real. O e-mail vai para um link `mailto:` na tela da
+// equipe: com `?`, `&` ou `%` liberados, "x@y.com?cc=ataque%40fora.com" passava e
+// fazia a resposta da equipe sair com cópia para quem o cliente quisesse.
+const EMAIL_REGEX = /^[A-Za-z0-9._+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+// Limite do padrão (RFC 5321) para um endereço inteiro.
+const MAX_EMAIL = 254;
 
 // GET /venue/:qrToken — contexto do formulário a partir do QR. Ver docs/CONTRATO-API.md
 publicRoutes.get(
@@ -44,7 +50,7 @@ publicRoutes.get(
 publicRoutes.post(
   "/feedback",
   asyncHandler(async (req, res) => {
-    const { qrToken, tipo, comentario, anonimo, contatoEmail, avaliacoes } =
+    const { qrToken, tipo, comentario, anonimo, contatoNome, contatoEmail, avaliacoes } =
       req.body ?? {};
 
     if (typeof qrToken !== "string" || qrToken.length === 0) {
@@ -78,15 +84,32 @@ publicRoutes.post(
       }
     }
 
-    const ehAnonimo = typeof anonimo === "boolean" ? anonimo : true;
+    const emailInformado =
+      typeof contatoEmail === "string" && contatoEmail.trim().length > 0
+        ? contatoEmail.trim()
+        : null;
+
+    // Identificar-se serve para receber retorno, e sem e-mail não há como responder:
+    // quem pede retorno mas não deixa e-mail é gravado como anônimo. A versão antiga do
+    // formulário mandava exatamente isso (a opção de identificar vinha marcada).
+    const ehAnonimo = (typeof anonimo === "boolean" ? anonimo : true) || emailInformado === null;
 
     // E-mail válido é exigido apenas quando o cliente se identifica.
-    if (!ehAnonimo && contatoEmail != null) {
-      if (typeof contatoEmail !== "string" || !EMAIL_REGEX.test(contatoEmail)) {
-        return res
-          .status(400)
-          .json({ erro: "contatoEmail inválido", codigo: "VALIDACAO" });
-      }
+    if (!ehAnonimo && (emailInformado!.length > MAX_EMAIL || !EMAIL_REGEX.test(emailInformado!))) {
+      return res
+        .status(400)
+        .json({ erro: "contatoEmail inválido", codigo: "VALIDACAO" });
+    }
+
+    const nomeInformado =
+      typeof contatoNome === "string" && contatoNome.trim().length > 0
+        ? contatoNome.trim()
+        : null;
+    if (nomeInformado !== null && nomeInformado.length > MAX_NOME) {
+      return res.status(400).json({
+        erro: `contatoNome com no máximo ${MAX_NOME} caracteres`,
+        codigo: "VALIDACAO",
+      });
     }
 
     const qr = await prisma.qRCode.findUnique({
@@ -132,8 +155,9 @@ publicRoutes.post(
         tipo,
         comentario: typeof comentario === "string" ? comentario : null,
         anonimo: ehAnonimo,
-        contatoEmail:
-          !ehAnonimo && typeof contatoEmail === "string" ? contatoEmail : null,
+        // Contato só de quem pediu retorno; de anônimo nada é guardado, nem o que veio.
+        contatoNome: ehAnonimo ? null : nomeInformado,
+        contatoEmail: ehAnonimo ? null : emailInformado,
         avaliacoes: {
           create: avaliacoes.map((a) => ({
             categoryId: a.categoriaId,

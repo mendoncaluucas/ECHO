@@ -69,6 +69,109 @@ describe("POST /api/public/feedback", () => {
     expect(gravado.contatoEmail).toBe("cliente@exemplo.com");
   });
 
+  it("guarda o nome junto com o e-mail de quem pede retorno, sem espaços sobrando", async () => {
+    const res = await request(app)
+      .post("/api/public/feedback")
+      .send({
+        ...corpoValido(cenario),
+        anonimo: false,
+        contatoNome: "  Ana Souza  ",
+        contatoEmail: " ana@exemplo.com ",
+      });
+
+    expect(res.status).toBe(201);
+    const gravado = await prisma.feedback.findUniqueOrThrow({ where: { id: res.body.id } });
+    expect(gravado).toMatchObject({
+      anonimo: false,
+      contatoNome: "Ana Souza",
+      contatoEmail: "ana@exemplo.com",
+    });
+  });
+
+  // De anônimo nada é guardado, nem o que veio no corpo por engano.
+  it("não guarda nome de feedback anônimo", async () => {
+    const res = await request(app)
+      .post("/api/public/feedback")
+      .send({ ...corpoValido(cenario), anonimo: true, contatoNome: "Ana" });
+
+    const gravado = await prisma.feedback.findUniqueOrThrow({ where: { id: res.body.id } });
+    expect(gravado.contatoNome).toBeNull();
+  });
+
+  // Identificar-se é para receber retorno; sem e-mail não há como responder. A versão
+  // antiga do formulário mandava isso (a opção de identificar vinha marcada).
+  it.each([undefined, "", "   "])(
+    "quem pede retorno sem e-mail (%j) é gravado como anônimo",
+    async (contatoEmail) => {
+      const res = await request(app)
+        .post("/api/public/feedback")
+        .send({ ...corpoValido(cenario), anonimo: false, contatoNome: "Ana", contatoEmail });
+
+      expect(res.status).toBe(201);
+      const gravado = await prisma.feedback.findUniqueOrThrow({ where: { id: res.body.id } });
+      expect(gravado).toMatchObject({ anonimo: true, contatoNome: null, contatoEmail: null });
+    }
+  );
+
+  it("recusa e-mail malformado de quem pede retorno", async () => {
+    const res = await request(app)
+      .post("/api/public/feedback")
+      .send({ ...corpoValido(cenario), anonimo: false, contatoEmail: "ana-sem-arroba" });
+
+    expect(res.status).toBe(400);
+    expect(await prisma.feedback.count()).toBe(0);
+  });
+
+  // O e-mail vira link `mailto:` na tela da equipe. Com `?`, `&` ou `%`, o cliente
+  // conseguiria pôr cópia ou trocar o assunto da resposta que a equipe envia.
+  it.each([
+    "x@y.com?cc=ataque%40fora.com",
+    "x@y.com&subject=Golpe",
+    "ataque%40fora.com@y.com",
+    "a b@y.com",
+    "x@y",
+  ])("recusa e-mail que não é um endereço comum (%s)", async (contatoEmail) => {
+    const res = await request(app)
+      .post("/api/public/feedback")
+      .send({ ...corpoValido(cenario), anonimo: false, contatoEmail });
+
+    expect(res.status).toBe(400);
+    expect(await prisma.feedback.count()).toBe(0);
+  });
+
+  it.each(["ana.souza+restaurante@mail.exemplo.com.br", "a_b-c@exemplo.io"])(
+    "aceita endereço comum (%s)",
+    async (contatoEmail) => {
+      const res = await request(app)
+        .post("/api/public/feedback")
+        .send({ ...corpoValido(cenario), anonimo: false, contatoEmail });
+
+      expect(res.status).toBe(201);
+    }
+  );
+
+  it("recusa e-mail maior que o limite do padrão (254)", async () => {
+    const res = await request(app)
+      .post("/api/public/feedback")
+      .send({ ...corpoValido(cenario), anonimo: false, contatoEmail: `${"a".repeat(250)}@exemplo.com` });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("recusa nome com mais de 100 caracteres", async () => {
+    const res = await request(app)
+      .post("/api/public/feedback")
+      .send({
+        ...corpoValido(cenario),
+        anonimo: false,
+        contatoNome: "a".repeat(101),
+        contatoEmail: "ana@exemplo.com",
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.codigo).toBe("VALIDACAO");
+  });
+
   it("recusa tipo fora do enum", async () => {
     const res = await request(app)
       .post("/api/public/feedback")

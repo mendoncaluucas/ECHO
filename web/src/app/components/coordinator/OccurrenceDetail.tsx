@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Star, Loader2, UserCheck } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Loader2, Mail, Save, Send, Star, UserCheck } from 'lucide-react';
 import {
   atualizarStatusOcorrencia,
   buscarOcorrencia,
@@ -20,6 +20,73 @@ const statusLabel: Record<StatusOcorrencia, string> = {
   EM_ANDAMENTO: 'Em andamento',
   RESOLVIDO: 'Resolvido',
 };
+
+// Quem pediu resposta deixou nome e e-mail. Só o detalhe recebe o contato da API
+// (nunca as listas), porque é daqui que alguém vai responder.
+function ContatoDoCliente({
+  contato,
+  area,
+  criadoEm,
+}: {
+  contato: { nome: string | null; email: string };
+  area: string | null;
+  criadoEm: string;
+}) {
+  const [copiado, setCopiado] = useState(false);
+
+  const assunto = 'Sobre a sua avaliação no Restaurante Sinuelo';
+  const corpo =
+    `Olá${contato.nome ? `, ${contato.nome}` : ''}!\n\n` +
+    `Recebemos a avaliação que você deixou em ${new Date(criadoEm).toLocaleDateString('pt-BR')}` +
+    `${area ? ` (${area})` : ''}.\n\n`;
+  // O endereço vai codificado (menos o @): um e-mail antigo com "?cc=..." viraria cópia
+  // para outra pessoa na resposta. A API já recusa esses endereços; isto cobre o que
+  // tiver sido gravado antes.
+  const destinatario = contato.email.split('@').map(encodeURIComponent).join('@');
+  const link = `mailto:${destinatario}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+
+  // Para quem usa e-mail no navegador (Gmail, Outlook web): o mailto: costuma não
+  // abrir nada nesses casos, e copiar resolve.
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(contato.email);
+      setCopiado(true);
+      window.setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      // Sem permissão de área de transferência: o e-mail continua visível na tela.
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-[#cfe5dc] bg-accent p-4">
+      <p className="flex items-center gap-2 text-sm font-bold text-accent-foreground">
+        <Mail className="size-4" aria-hidden="true" />
+        O cliente pediu resposta
+      </p>
+      <p className="mt-2 text-gray-900">
+        {contato.nome && <span className="font-semibold">{contato.nome} · </span>}
+        <span className="break-all">{contato.email}</span>
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <a
+          href={link}
+          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-[#0a5242]"
+        >
+          <Send className="size-4" aria-hidden="true" />
+          Responder por e-mail
+        </a>
+        <button
+          type="button"
+          onClick={copiar}
+          className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#cfe5dc] bg-card px-4 text-sm font-semibold text-accent-foreground transition-colors hover:bg-white"
+        >
+          {copiado ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
+          <span aria-live="polite">{copiado ? 'Copiado' : 'Copiar e-mail'}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function OccurrenceDetail() {
   const navigate = useNavigate();
@@ -192,6 +259,14 @@ export function OccurrenceDetail() {
               </p>
             </div>
           </div>
+
+          {ocorrencia.contato && (
+            <ContatoDoCliente
+              contato={ocorrencia.contato}
+              area={ocorrencia.area?.nome ?? null}
+              criadoEm={ocorrencia.criadoEm}
+            />
+          )}
 
           {ocorrencia.tratadoPor && (
             <div className="bg-purple-50 rounded-xl p-4 flex items-center gap-2 text-sm text-purple-900">

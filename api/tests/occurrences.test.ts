@@ -110,6 +110,45 @@ describe("GET /api/occurrences", () => {
     expect(res.status).toBe(200);
     expect(JSON.stringify(res.body)).not.toContain("cliente@exemplo.com");
     expect(res.body.itens[0].contatoEmail).toBeUndefined();
+    expect(res.body.itens[0].contato).toBeUndefined();
+  });
+
+  // O detalhe é o único lugar com o contato: quem abre a ocorrência é quem responde.
+  it("o detalhe traz nome e e-mail de quem pediu retorno", async () => {
+    const cenario = await criarCenarioCliente();
+    const feedback = await prisma.feedback.create({
+      data: {
+        venueId: cenario.venue.id,
+        areaId: cenario.area.id,
+        tipo: "RECLAMACAO",
+        anonimo: false,
+        contatoNome: "Ana Souza",
+        contatoEmail: "ana@exemplo.com",
+      },
+    });
+    const { token } = await autenticar(Papel.COORDENADOR);
+
+    const res = await request(app)
+      .get(`/api/occurrences/${feedback.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.contato).toEqual({ nome: "Ana Souza", email: "ana@exemplo.com" });
+    // O formato cru do banco não vaza junto.
+    expect(res.body.contatoEmail).toBeUndefined();
+    expect(res.body.contatoNome).toBeUndefined();
+  });
+
+  it("o detalhe de feedback anônimo vem sem contato", async () => {
+    const cenario = await criarCenarioCliente();
+    const feedback = await gravarFeedback(cenario, { comentario: "Anônimo" });
+    const { token } = await autenticar(Papel.GERENTE);
+
+    const res = await request(app)
+      .get(`/api/occurrences/${feedback.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(res.body.contato).toBeNull();
   });
 
   it.each([Papel.COORDENADOR, Papel.GERENTE, Papel.ADMINISTRADOR])(

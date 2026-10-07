@@ -66,6 +66,7 @@ erDiagram
         enum     tipo
         string   comentario
         boolean  anonimo
+        string   contatoNome
         string   contatoEmail
         datetime criadoEm
     }
@@ -86,7 +87,7 @@ erDiagram
 | **Area** | Mesa / área / setor do restaurante | `nome`, `ativo`, `venueId` — único por `(venueId, nome)` |
 | **QRCode** | QR físico que aponta para uma área | `token` (único), `ativo`, `areaId` |
 | **Category** | Categoria avaliável | `nome` (ex.: Higiene, Atendimento, Alimento) |
-| **Feedback** | Manifestação enviada pelo cliente | `tipo`, `comentario`, `anonimo`, `contatoEmail`, `venueId`, `areaId?`, `criadoEm` |
+| **Feedback** | Manifestação enviada pelo cliente | `tipo`, `comentario`, `anonimo`, `contatoNome`, `contatoEmail`, `venueId`, `areaId?`, `criadoEm` |
 | **FeedbackRating** | Nota por categoria de um feedback | `estrelas` (1–5), `feedbackId`, `categoryId` |
 | **Notification** | Alerta de feedback novo para uma pessoa da gestão | `usuarioId`, `feedbackId`, `lida`, `criadoEm` — único por `(usuarioId, feedbackId)` |
 | **AuditLog** | Quem fez o quê, sobre qual registro e quando | `acao`, `usuarioId`, `entidade`, `entidadeId`, `detalhes` (JSON), `criadoEm` |
@@ -100,7 +101,7 @@ erDiagram
   `AREA_REATIVADA` · `QRCODE_GERADO` · `OCORRENCIA_STATUS` · `CONFIGURACAO_ALTERADA`
 
 ## Decisões e observações
-- **Anonimato por padrão:** `Feedback.anonimo = true`; `contatoEmail` só é usado quando o cliente opta por se identificar (LGPD).
+- **Anonimato por padrão:** `Feedback.anonimo = true`. `contatoNome` e `contatoEmail` só são gravados quando o cliente pede resposta da equipe (sem e-mail, o feedback é gravado como anônimo). O contato só sai da API no detalhe da ocorrência, para quem vai responder; nunca em listas (LGPD).
 - **Um feedback tem várias notas:** a relação `Feedback → FeedbackRating` permite avaliar **múltiplas categorias** de uma vez.
 - **`Feedback.areaId` é opcional:** cobre o caso de um QR genérico (do restaurante, não de uma mesa específica).
 - **Índice** em `Feedback(venueId, criadoEm)** para acelerar a listagem da gestão por data.

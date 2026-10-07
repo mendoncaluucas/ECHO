@@ -118,8 +118,12 @@ inicial levava a um formulário que nunca funciona sem QR. O diagnóstico de 06/
    - **layout da gestão** com menu lateral por papel (gaveta no celular): só as telas daquele papel,
      nome e papel embaixo, sino e sair. "Início" leva ao painel de quem está logado
 2. **Cliente e demonstração**
-   - fluxo do cliente mobile-first: mesa e restaurante no topo, etapas com progresso, estrelas
-     grandes, sucesso com animação. Os QR já impressos continuam funcionando
+   - ~~fluxo do cliente mobile-first~~ — **feito (07/10):** três etapas na mesma tela (notas →
+     conte mais → resposta), etapa no endereço para o "voltar" do celular, rascunho que sobrevive a
+     recarregar, estrelas acessíveis por teclado e leitor de tela, categorias vindas da API.
+     **Retorno ao cliente:** quem pede resposta deixa nome e e-mail, que aparecem só no detalhe
+     da ocorrência, com "Responder por e-mail". O nome passou a ser gravado (antes era pedido e
+     descartado). Os QR já impressos continuam funcionando
    - gerador de QR pronto para a demonstração: código grande e nítido para escanear da tela
 3. **Telas da gestão no visual novo**, na ordem do que mais aparece na apresentação: dashboards →
    painel e detalhe de ocorrências → notificações → registro e relatórios → telas do administrador.
