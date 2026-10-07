@@ -14,9 +14,7 @@ import { ExigePapel, RotaProtegida } from './components/layout/RotaProtegida';
 import { ADMINISTRACAO, GERENCIA, GESTAO, rotuloDaRota } from './navegacao';
 import { EVENTO_SESSAO_ENCERRADA, ROTA_DE_LOGIN } from './services/api';
 
-import { Welcome } from './components/customer/Welcome';
 import { FeedbackForm } from './components/customer/FeedbackForm';
-import { OptionalId } from './components/customer/OptionalId';
 import { Success } from './components/customer/Success';
 
 import { OccurrencesPanel } from './components/coordinator/OccurrencesPanel';
@@ -56,6 +54,22 @@ function OuvinteDaSessao() {
   return null;
 }
 
+// Boas-vindas e identificação eram telas próprias e viraram etapas do formulário.
+// Quem tiver uma aba antiga aberta cai no formulário com o QR que já tinha: o do
+// endereço (boas-vindas) ou o que o formulário antigo guardava (identificação).
+function ParaOFormulario() {
+  const location = useLocation();
+  let qrToken = new URLSearchParams(location.search).get('t');
+  if (!qrToken) {
+    try {
+      qrToken = JSON.parse(localStorage.getItem('pendingFeedback') ?? '{}').qrToken ?? null;
+    } catch {
+      qrToken = null;
+    }
+  }
+  return <Navigate to={qrToken ? `/feedback?t=${encodeURIComponent(qrToken)}` : '/feedback'} replace />;
+}
+
 function Rotas() {
   const location = useLocation();
   // Nas telas da gestão quem reinicia o boundary a cada navegação é o do layout; uma
@@ -78,11 +92,12 @@ function Rotas() {
         <Route path="/gerente/login" element={<Navigate to={ROTA_DE_LOGIN} replace />} />
         <Route path="/coordenador/login" element={<Navigate to={ROTA_DE_LOGIN} replace />} />
 
-        {/* Cliente: só pelo QR Code da mesa. */}
-        <Route path="/boas-vindas" element={<Welcome />} />
+        {/* Cliente: só pelo QR Code da mesa. As três etapas vivem em /feedback. */}
         <Route path="/feedback" element={<FeedbackForm />} />
-        <Route path="/identificacao" element={<OptionalId />} />
         <Route path="/sucesso" element={<Success />} />
+        {/* Telas antigas do fluxo, que viraram etapas do formulário. */}
+        <Route path="/boas-vindas" element={<ParaOFormulario />} />
+        <Route path="/identificacao" element={<ParaOFormulario />} />
 
         {/* Gestão: sessão obrigatória, menu lateral, e cada tela com os seus papéis
             (mesma tabela do menu, em navegacao.ts). */}

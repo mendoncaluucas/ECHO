@@ -18,6 +18,8 @@ export interface FeedbackPayload {
   tipo: TipoFeedback;
   comentario?: string;
   anonimo: boolean;
+  // Só de quem pede retorno; a API ignora os dois em feedback anônimo.
+  contatoNome?: string | null;
   contatoEmail?: string | null;
   avaliacoes: { categoriaId: string; estrelas: number }[];
 }
@@ -121,6 +123,9 @@ export interface Ocorrencia {
   tratadoPor: { nome: string } | null;
   area: { nome: string } | null;
   avaliacoes: AvaliacaoOcorrencia[];
+  // Só no detalhe (GET /occurrences/:id), e só de quem pediu retorno. Listas nunca
+  // trazem o contato (LGPD).
+  contato?: { nome: string | null; email: string } | null;
 }
 
 export interface FiltrosDeOcorrencia {
