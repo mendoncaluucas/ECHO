@@ -108,6 +108,9 @@ model Feedback {
   tipo         TipoFeedback
   comentario   String?
   anonimo      Boolean          @default(true)
+  // Contato de quem pediu retorno. Só aparece no detalhe da ocorrência, nunca em
+  // listas — é dado pessoal (LGPD) e só faz sentido para quem vai responder.
+  contatoNome  String?
   contatoEmail String?
   avaliacoes   FeedbackRating[]
   criadoEm     DateTime         @default(now())
