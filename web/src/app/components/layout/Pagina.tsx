@@ -54,8 +54,10 @@ export function Cartao({
       className={`min-w-0 rounded-2xl border border-border bg-card p-5 sm:p-6 ${className}`}
     >
       {titulo && (
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
+        // Sem espaço para os dois, a ação desce para baixo do título: ao lado, num
+        // celular, espremia o título em uma palavra por linha.
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+          <div className="min-w-0 flex-[1_1_10rem]">
             <h2 id={idDoTitulo} className="text-lg leading-snug font-extrabold">
               {titulo}
             </h2>
