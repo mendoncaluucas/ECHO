@@ -4,6 +4,7 @@ import { Bell, LogOut, Menu } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { ErrorBoundary } from '../shared/ErrorBoundary';
 import { Marca } from './Marca';
+import { AvisoRapido } from './AvisoRapido';
 import { useContadores, type Contadores } from '../../hooks/useContadores';
 import { menuDo, rotuloDaRota, ROTULO_DO_PAPEL, type ItemDoMenu } from '../../navegacao';
 import { encerrarSessao, ROTA_DE_LOGIN, type Usuario } from '../../services/api';
@@ -190,6 +191,7 @@ export function LayoutGestao({ usuario }: { usuario: Usuario }) {
               <Outlet />
             </ErrorBoundary>
           </main>
+          <AvisoRapido />
         </div>
 
         <SheetContent side="left" aria-describedby={undefined} className="w-72 gap-0 bg-sidebar p-0">

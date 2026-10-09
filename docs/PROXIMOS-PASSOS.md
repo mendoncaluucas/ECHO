@@ -145,10 +145,19 @@ inicial levava a um formulário que nunca funciona sem QR. O diagnóstico de 06/
      de 3, "Chegaram agora", por tipo e por área. **Visão geral do administrador:** números que
      levam à tela do assunto, "Precisa de atenção" (área sem QR valendo, área com vários, nenhum
      coordenador) e atividade recente do log, sem os logins
-   - as telas seguintes passam a usar `Pagina.tsx` e `rotulos.ts`; a de Ocorrências deve aceitar
-     `?status=PENDENTE` para o "Aguardando tratativa" do painel abrir já filtrado. A de QR Codes
-     usa largura `max-w-5xl` e as novas `max-w-6xl`: alinhar quando as telas do administrador
-     forem redesenhadas
+   - ~~ocorrências~~ — **feito (09/10):** a lista virou **fila de trabalho**: abre nas pendentes,
+     abas por situação com a contagem de cada uma, filtros de tipo e categoria no endereço
+     (`?status=todas&tipo=RECLAMACAO&categoria=Higiene`, sobrevivem ao voltar do detalhe), filtro
+     e paginação no servidor (antes filtrava no navegador o que já tinha carregado), selo "Pediu
+     resposta" e cada item como link de verdade. Categorias vêm do novo `GET /api/categorias`.
+     **Detalhe:** comentário, notas em estrelas, contato e a tratativa em três opções com
+     descrição; salvar volta para a tela de origem com um **aviso rápido** ("Ocorrência marcada
+     como resolvida", `avisoRapido.ts`, mostrado pelo layout). No celular a tratativa vem antes
+     do contato. O item de lista (`ItemDaOcorrencia`) é o mesmo do "Chegaram agora" do painel
+   - as telas seguintes passam a usar `Pagina.tsx`, `rotulos.ts` e o aviso rápido. O Registro tem
+     as categorias escritas no código: trocar por `listarCategorias`. A de QR Codes usa largura
+     `max-w-5xl` e as novas `max-w-6xl`: alinhar quando as telas do administrador forem
+     redesenhadas
 4. **Acabamento:** título e ícone da aba, contraste e foco visível, revisão de todas as telas no
    celular
 
