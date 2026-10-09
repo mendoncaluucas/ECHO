@@ -137,6 +137,18 @@ inicial levava a um formulário que nunca funciona sem QR. O diagnóstico de 06/
    painel e detalhe de ocorrências → notificações → registro e relatórios → telas do administrador.
    Usando os componentes que já estão no projeto; avisos curtos ("Salvo") no lugar de parágrafos
    soltos, esqueleto no carregamento no lugar do spinner, estados vazios desenhados
+   - ~~painéis~~ — **feito (09/10):** peças comuns em `components/layout/Pagina.tsx` (cabeçalho,
+     cartão, indicador, seletor de período, barra, esqueleto, estado vazio, aviso de erro); nome
+     e cor de tipo e status em `rotulos.ts`; cores com significado como tokens no `theme.css`.
+     **Painel do gerente** no desenho do protótipo: saudação, período no endereço (`?dias=7`,
+     sobrevive ao voltar de uma ocorrência), quatro números, nota por categoria com alerta abaixo
+     de 3, "Chegaram agora", por tipo e por área. **Visão geral do administrador:** números que
+     levam à tela do assunto, "Precisa de atenção" (área sem QR valendo, área com vários, nenhum
+     coordenador) e atividade recente do log, sem os logins
+   - as telas seguintes passam a usar `Pagina.tsx` e `rotulos.ts`; a de Ocorrências deve aceitar
+     `?status=PENDENTE` para o "Aguardando tratativa" do painel abrir já filtrado. A de QR Codes
+     usa largura `max-w-5xl` e as novas `max-w-6xl`: alinhar quando as telas do administrador
+     forem redesenhadas
 4. **Acabamento:** título e ícone da aba, contraste e foco visível, revisão de todas as telas no
    celular
 
