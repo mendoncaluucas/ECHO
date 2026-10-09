@@ -18,6 +18,7 @@ import { usersRoutes } from "./routes/users.routes.js";
 import { auditRoutes } from "./routes/audit.routes.js";
 import { notificationsRoutes } from "./routes/notifications.routes.js";
 import { configuracoesRoutes } from "./routes/configuracoes.routes.js";
+import { categoriasRoutes } from "./routes/categorias.routes.js";
 import { notFoundHandler, errorHandler } from "./middlewares/errorHandler.js";
 
 // A aplicação é montada aqui e exportada sem escutar porta, para que os testes
@@ -43,6 +44,7 @@ app.use("/api/users", usersRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/configuracoes", configuracoesRoutes);
+app.use("/api/categorias", categoriasRoutes);
 
 // 404 e error handler — sempre por último.
 app.use(notFoundHandler);
