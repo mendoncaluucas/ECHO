@@ -1,73 +1,50 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  MessageSquare,
-  CheckCircle,
-  Clock,
-  TrendingUp,
-  TrendingDown,
-  Loader2,
-  Inbox,
-} from 'lucide-react';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { Link, useSearchParams } from 'react-router-dom';
+import { CheckCircle2, ChevronRight, Inbox, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   buscarMetricas,
-  encerrarSessao,
+  listarOcorrencias,
   tokenDaSessao,
+  usuarioLogado,
   type Metricas,
-  type StatusOcorrencia,
-  type TipoFeedback,
+  type Ocorrencia,
 } from '../../services/api';
+import {
+  corDoTipo,
+  haQuanto,
+  numeroBr,
+  primeiroNome,
+  rotuloDoStatus,
+  rotuloDoTipo,
+  saudacao,
+  seloDoStatus,
+} from '../../rotulos';
+import {
+  AvisoDeErro,
+  Barra,
+  CabecalhoDaPagina,
+  Cartao,
+  Esqueleto,
+  EstadoVazio,
+  Indicador,
+  LinkDoCartao,
+  Pagina,
+  Segmentado,
+} from '../layout/Pagina';
 
-const PERIODOS = [7, 30, 90];
+const PERIODOS = [7, 30, 90].map((dias) => ({ valor: dias, rotulo: `${dias} dias` }));
+const PERIODO_PADRAO = 30;
 
-// Classes inteiras: o Tailwind varre o código por strings completas e não gera
-// nada montado em tempo de execução.
-const CONFIG_STATUS: Record<StatusOcorrencia, { rotulo: string; classe: string }> = {
-  PENDENTE: { rotulo: 'Pendente', classe: 'bg-gray-100 text-gray-700' },
-  EM_ANDAMENTO: { rotulo: 'Em andamento', classe: 'bg-blue-100 text-blue-700' },
-  RESOLVIDO: { rotulo: 'Resolvido', classe: 'bg-green-100 text-green-700' },
-};
+// Abaixo disto a categoria ganha o aviso "precisa de atenção" e a barra em âmbar.
+const NOTA_DE_ATENCAO = 3;
 
-const ROTULO_TIPO: Record<TipoFeedback, string> = {
-  ELOGIO: 'Elogio',
-  SUGESTAO: 'Sugestão',
-  RECLAMACAO: 'Reclamação',
-};
+// Mais que isto vira uma lista comprida demais para um painel; o resto está nos relatórios.
+const LIMITE_DE_AREAS = 6;
 
-// Cores dos gráficos vão em hex porque o Recharts pinta via SVG, não via classe.
-const COR_TIPO: Record<TipoFeedback, string> = {
-  ELOGIO: '#16a34a',
-  SUGESTAO: '#d97706',
-  RECLAMACAO: '#dc2626',
-};
+const ROTA_DAS_OCORRENCIAS = '/coordenador/ocorrencias';
 
-// Usados se a API devolver um valor que o front ainda não conhece — o enum do
-// backend pode crescer antes de um deploy do front.
-const STATUS_DESCONHECIDO = { rotulo: 'Desconhecido', classe: 'bg-gray-100 text-gray-700' };
-const COR_DESCONHECIDA = '#9ca3af';
-
-// Quantas áreas cabem no gráfico antes de virar um paredão de barras finas sem
-// rótulo legível. A API já devolve ordenado da mais movimentada para a menos.
-const LIMITE_DE_AREAS = 10;
-
-const numero = (valor: number) =>
-  valor.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
-
-// Os tipos do front são cópia manual do contrato e o CI não roda typecheck no web,
-// então um campo renomeado no backend chegaria aqui como undefined e o `.map` abaixo
-// derrubaria a aplicação inteira — não há error boundary. Melhor barrar na entrada e
-// mostrar mensagem do que servir tela branca ou número errado.
+// Os tipos do front são cópia manual do contrato: um campo renomeado no backend
+// chegaria aqui como undefined e o `.map` derrubaria a tela. Melhor barrar na entrada.
 function respostaCompleta(m: Metricas | null): m is Metricas {
   return (
     m != null &&
@@ -80,294 +57,387 @@ function respostaCompleta(m: Metricas | null): m is Metricas {
   );
 }
 
+// O que não depende do período: as últimas que chegaram e quantas esperam tratativa
+// (o mesmo número do menu lateral, de qualquer data).
+type Recentes = { itens: Ocorrencia[]; pendentes: number };
+
 export function ManagerDashboard() {
-  const navigate = useNavigate();
-  const [dias, setDias] = useState(30);
+  const token = tokenDaSessao() ?? '';
+  // O período fica no endereço (?dias=7): quem abre uma ocorrência e volta continua
+  // no período que escolheu, e recarregar a página não o perde.
+  const [busca, setBusca] = useSearchParams();
+  const pedido = Number(busca.get('dias'));
+  const dias = PERIODOS.some((p) => p.valor === pedido) ? pedido : PERIODO_PADRAO;
+  const setDias = (novo: number) =>
+    setBusca(novo === PERIODO_PADRAO ? {} : { dias: String(novo) }, { replace: true });
   const [metricas, setMetricas] = useState<Metricas | null>(null);
-  const [carregando, setCarregando] = useState(true);
+  const [buscando, setBuscando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [recentes, setRecentes] = useState<Recentes | null>(null);
+  const [erroNasRecentes, setErroNasRecentes] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
 
+  // Sessão vencida (401) é tratada no serviço da API, que leva ao login. Aqui só o
+  // que é desta tela.
   useEffect(() => {
-    const token = tokenDaSessao();
-    if (!token) {
-      navigate('/gerente/login');
-      return;
-    }
-
     let ativo = true;
-    setCarregando(true);
+    setBuscando(true);
     setErro(null);
 
     buscarMetricas(dias, token)
       .then((res) => {
         if (!ativo) return;
-        if (!respostaCompleta(res)) {
-          setErro('A API respondeu em um formato que esta versão da tela não reconhece.');
-          return;
-        }
-        setMetricas(res);
+        if (respostaCompleta(res)) setMetricas(res);
+        else setErro('A API respondeu em um formato que esta versão da tela não reconhece.');
       })
-      .catch((e: Error & { status?: number }) => {
-        if (!ativo) return;
-        if (e.status === 401) {
-          encerrarSessao();
-          navigate('/gerente/login');
-          return;
-        }
-        setErro(e.message || 'Não foi possível carregar os indicadores.');
+      .catch((e: Error) => {
+        if (ativo) setErro(e.message || 'Não foi possível carregar os indicadores.');
       })
       .finally(() => {
-        if (ativo) setCarregando(false);
+        if (ativo) setBuscando(false);
       });
 
     return () => {
       ativo = false;
     };
-  }, [dias, navigate]);
+  }, [dias, token, tentativa]);
 
-  const seletorDePeriodo = (
-    <div className="flex gap-2">
-      {PERIODOS.map((opcao) => (
-        <button
-          key={opcao}
-          onClick={() => setDias(opcao)}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            dias === opcao
-              ? 'bg-orange-600 text-white shadow-md'
-              : 'bg-white text-gray-600 hover:bg-gray-50'
-          }`}
+  useEffect(() => {
+    let ativo = true;
+    setErroNasRecentes(false);
+
+    Promise.all([
+      listarOcorrencias(token, { porPagina: 5 }),
+      listarOcorrencias(token, { status: 'PENDENTE', porPagina: 1 }),
+    ])
+      .then(([ultimas, pendentes]) => {
+        if (ativo) setRecentes({ itens: ultimas.itens, pendentes: pendentes.total });
+      })
+      .catch(() => {
+        if (ativo) setErroNasRecentes(true);
+      });
+
+    return () => {
+      ativo = false;
+    };
+  }, [token, tentativa]);
+
+  return (
+    <Pagina>
+      <CabecalhoDaPagina
+        sobretitulo={`Últimos ${dias} dias`}
+        titulo={`${saudacao()}, ${primeiroNome(usuarioLogado()?.nome)}`}
+        acoes={<Segmentado rotulo="Período" opcoes={PERIODOS} valor={dias} aoMudar={setDias} />}
+      />
+
+      {erro ? (
+        <AvisoDeErro mensagem={erro} aoTentarDeNovo={() => setTentativa((t) => t + 1)} />
+      ) : !metricas ? (
+        <EsqueletoDoPainel />
+      ) : (
+        // Ao trocar o período, os números antigos ficam (esmaecidos) até os novos
+        // chegarem: a tela não pisca nem pula.
+        <div
+          aria-busy={buscando}
+          className={`flex flex-col gap-4 transition-opacity ${buscando ? 'opacity-60' : ''}`}
         >
-          {opcao} dias
-        </button>
-      ))}
-    </div>
-  );
-
-  const acoes = (
-    <div className="flex gap-4">
-      <button
-        onClick={() => navigate('/gerente/registro')}
-        className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-4 px-6 rounded-xl font-semibold transition-colors shadow-md hover:shadow-lg"
-      >
-        Ver Registro Completo
-      </button>
-      <button
-        onClick={() => navigate('/gerente/relatorios')}
-        className="flex-1 bg-white hover:bg-gray-50 text-orange-600 border-2 border-orange-600 py-4 px-6 rounded-xl font-semibold transition-colors"
-      >
-        Relatórios Históricos
-      </button>
-    </div>
-  );
-
-  const moldura = (conteudo: React.ReactNode) => (
-    <div>
-      <div className="max-w-6xl mx-auto p-4 pb-8">
-        <div className="pt-6 pb-4 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard Gerencial</h1>
-            <p className="text-gray-600 mt-1">Feedbacks dos últimos {dias} dias</p>
-          </div>
-          {seletorDePeriodo}
+          <Conteudo
+            metricas={metricas}
+            dias={dias}
+            recentes={recentes}
+            erroNasRecentes={erroNasRecentes}
+            aoVerNoventaDias={() => setDias(90)}
+          />
         </div>
-        {conteudo}
-      </div>
-    </div>
+      )}
+    </Pagina>
   );
+}
 
-  if (carregando) {
-    return moldura(
-      <div className="flex justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
-      </div>
-    );
-  }
-
-  if (erro || !metricas) {
-    return moldura(
-      <p className="bg-white rounded-2xl shadow-lg p-6 text-gray-700">
-        {erro ?? 'Não foi possível carregar os indicadores.'}
-      </p>
-    );
-  }
-
-  const { resumo, porStatus, porTipo, porArea, porCategoria } = metricas;
-
-  if (resumo.total === 0) {
-    return moldura(
-      <div className="space-y-6">
-        <div className="bg-white rounded-2xl shadow-lg p-10 text-center space-y-3">
-          <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto">
-            <Inbox className="w-8 h-8 text-orange-600" />
-          </div>
-          <h2 className="text-lg font-bold text-gray-900">
-            Nenhum feedback nos últimos {dias} dias
-          </h2>
-          <p className="text-gray-600">Escolha um período maior para ver os indicadores.</p>
-        </div>
-        {acoes}
-      </div>
-    );
-  }
-
+function Conteudo({
+  metricas,
+  dias,
+  recentes,
+  erroNasRecentes,
+  aoVerNoventaDias,
+}: {
+  metricas: Metricas;
+  dias: number;
+  recentes: Recentes | null;
+  erroNasRecentes: boolean;
+  aoVerNoventaDias: () => void;
+}) {
+  const { resumo, porTipo, porArea, porCategoria } = metricas;
+  const vazio = resumo.total === 0;
   const variacao = resumo.variacaoPercentual;
-  const caiu = variacao !== null && variacao < 0;
-  const IconeVariacao = caiu ? TrendingDown : TrendingUp;
+  const IconeDaVariacao = variacao !== null && variacao < 0 ? TrendingDown : TrendingUp;
 
-  const areasNoGrafico = porArea.slice(0, LIMITE_DE_AREAS);
-  const areasOcultas = porArea.length - areasNoGrafico.length;
-
-  const dadosTipo = porTipo.map((item) => ({
-    nome: ROTULO_TIPO[item.tipo] ?? item.tipo,
-    total: item.total,
-    cor: COR_TIPO[item.tipo] ?? COR_DESCONHECIDA,
-  }));
-
-  return moldura(
+  return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="flex items-center justify-between mb-2">
-            <MessageSquare className="w-8 h-8 text-orange-600" />
-            <span className="text-3xl font-bold text-gray-900">{resumo.total}</span>
-          </div>
-          <p className="text-sm text-gray-600 font-medium">Total de Feedbacks</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="flex items-center justify-between mb-2">
-            <CheckCircle className="w-8 h-8 text-green-600" />
-            <span className="text-3xl font-bold text-gray-900">
-              {resumo.percentualResolvido}%
-            </span>
-          </div>
-          <p className="text-sm text-gray-600 font-medium">
-            Resolvidos ({resumo.resolvidos} de {resumo.total})
-          </p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="flex items-center justify-between mb-2">
-            <Clock className="w-8 h-8 text-blue-600" />
-            <span className="text-3xl font-bold text-gray-900">
-              {/* "—" e não "0h": ninguém tratado ainda é ausência de dado, não agilidade. */}
-              {resumo.tempoMedioTratativaHoras === null
-                ? '—'
-                : `${numero(resumo.tempoMedioTratativaHoras)}h`}
-            </span>
-          </div>
-          <p className="text-sm text-gray-600 font-medium">Tempo Médio de Tratativa</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="flex items-center justify-between mb-2">
-            <IconeVariacao
-              className={`w-8 h-8 ${caiu ? 'text-red-600' : 'text-purple-600'}`}
-            />
-            <span className="text-3xl font-bold text-gray-900">
-              {variacao === null ? '—' : `${variacao > 0 ? '+' : ''}${variacao}%`}
-            </span>
-          </div>
-          <p className="text-sm text-gray-600 font-medium">
-            {variacao === null
-              ? 'Sem período anterior para comparar'
-              : `vs. ${dias} dias anteriores`}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-3 mb-6">
-        {porStatus.map((item) => {
-          const config = CONFIG_STATUS[item.status] ?? STATUS_DESCONHECIDO;
-          return (
-            <span
-              key={item.status}
-              className={`px-4 py-2 rounded-full text-sm font-semibold ${config.classe}`}
+      {vazio && (
+        <EstadoVazio
+          icone={Inbox}
+          titulo={`Nenhum feedback nos últimos ${dias} dias`}
+          descricao="Quando um cliente avaliar pelo QR Code da mesa, os números aparecem aqui."
+        >
+          {dias < 90 && (
+            <button
+              type="button"
+              onClick={aoVerNoventaDias}
+              className="h-10 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-[#0a5242]"
             >
-              {config.rotulo}: {item.total}
+              Ver os últimos 90 dias
+            </button>
+          )}
+        </EstadoVazio>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <Indicador rotulo="Feedbacks" valor={resumo.total}>
+          {variacao === null ? (
+            'Sem período anterior para comparar'
+          ) : variacao === 0 ? (
+            `Igual aos ${dias} dias antes`
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              <IconeDaVariacao className="size-3.5 flex-none" aria-hidden="true" />
+              {variacao > 0 ? '+' : ''}
+              {numeroBr(variacao)}% vs. {dias} dias antes
             </span>
-          );
-        })}
-      </div>
+          )}
+        </Indicador>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Feedbacks por Tipo</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={dadosTipo}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                // Só o percentual: com o nome junto, o rótulo estoura o SVG no
-                // celular e sai cortado. O nome está na legenda logo abaixo.
-                // Fatia zerada não ganha rótulo, senão fica um "0%" solto no gráfico.
-                label={({ percent }) => (percent ? `${(percent * 100).toFixed(0)}%` : '')}
-                outerRadius={80}
-                dataKey="total"
-                nameKey="nome"
-              >
-                {dadosTipo.map((item) => (
-                  <Cell key={item.nome} fill={item.cor} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-          {/* Legenda própria: mostra também os tipos com zero, que somem do gráfico. */}
-          <div className="flex flex-wrap justify-center gap-4 mt-2">
-            {dadosTipo.map((item) => (
-              <span key={item.nome} className="flex items-center gap-2 text-sm text-gray-600">
-                <span
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: item.cor }}
-                />
-                {item.nome}: <strong className="text-gray-900">{item.total}</strong>
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-1">Feedbacks por Setor</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            {areasOcultas > 0
-              ? `As ${LIMITE_DE_AREAS} áreas com mais feedbacks (outras ${areasOcultas} não aparecem).`
-              : 'Todas as áreas com feedback no período.'}
+        <Indicador rotulo="Resolvidos" valor={`${numeroBr(resumo.percentualResolvido, 0)}%`}>
+          <Barra percentual={resumo.percentualResolvido} />
+          <p className="mt-2">
+            {resumo.resolvidos} de {resumo.total}
           </p>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={areasNoGrafico}>
-              <XAxis dataKey="area" />
-              <YAxis allowDecimals={false} />
-              <Tooltip formatter={(valor) => [valor, 'Feedbacks']} />
-              <Bar dataKey="total" fill="#f97316" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+        </Indicador>
+
+        <Indicador
+          rotulo="Tempo médio de tratativa"
+          // "—" e não "0 h": ninguém tratado ainda é ausência de dado, não agilidade.
+          valor={
+            resumo.tempoMedioTratativaHoras === null
+              ? '—'
+              : `${numeroBr(resumo.tempoMedioTratativaHoras)} h`
+          }
+        >
+          {resumo.tempoMedioTratativaHoras === null
+            ? 'Nenhuma tratada no período'
+            : 'Da chegada até a tratativa'}
+        </Indicador>
+
+        <Indicador
+          rotulo="Aguardando tratativa"
+          valor={recentes ? recentes.pendentes : erroNasRecentes ? '—' : <Esqueleto className="h-9 w-12" />}
+          tom={recentes && recentes.pendentes > 0 ? 'perigo' : 'normal'}
+          para={ROTA_DAS_OCORRENCIAS}
+        >
+          {recentes && recentes.pendentes === 0 ? (
+            <span className="inline-flex items-center gap-1 text-sucesso">
+              <CheckCircle2 className="size-3.5" aria-hidden="true" />
+              Nada pendente
+            </span>
+          ) : (
+            // O cabeçalho fala em "últimos N dias"; este número não: é o mesmo do menu.
+            <span className="inline-flex items-center gap-0.5 text-primary">
+              De todas as datas
+              <ChevronRight className="size-3.5" aria-hidden="true" />
+            </span>
+          )}
+        </Indicador>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-5">
+        <Cartao
+          titulo="Nota média por categoria"
+          descricao="De 1 a 5 estrelas, no período"
+          className="lg:col-span-2"
+        >
+          {porCategoria.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma categoria avaliada no período.</p>
+          ) : (
+            <ul className="flex flex-col gap-4">
+              {porCategoria.map((c) => {
+                const atencao = c.mediaEstrelas < NOTA_DE_ATENCAO;
+                return (
+                  <li key={c.categoria}>
+                    <div className="flex items-baseline justify-between gap-3 text-sm font-semibold">
+                      <span className="min-w-0 truncate">{c.categoria}</span>
+                      <span className={`flex-none tabular-nums ${atencao ? 'text-atencao' : ''}`}>
+                        {numeroBr(c.mediaEstrelas)}
+                      </span>
+                    </div>
+                    <div className="mt-2">
+                      <Barra
+                        percentual={(c.mediaEstrelas / 5) * 100}
+                        cor={atencao ? 'bg-atencao-barra' : 'bg-primary'}
+                        grossa
+                      />
+                    </div>
+                    {/* O aviso fica embaixo: ao lado da nota, espremia o nome da categoria. */}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {c.total} {c.total === 1 ? 'avaliação' : 'avaliações'}
+                      {atencao && (
+                        <span className="font-bold text-atencao"> · precisa de atenção</span>
+                      )}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Cartao>
+
+        <Cartao
+          titulo="Chegaram agora"
+          descricao="As últimas, de qualquer data"
+          acao={<LinkDoCartao para={ROTA_DAS_OCORRENCIAS}>Ver todas</LinkDoCartao>}
+          className="lg:col-span-3"
+        >
+          <UltimasOcorrencias recentes={recentes} erro={erroNasRecentes} />
+        </Cartao>
+      </div>
+
+      {!vazio && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <Cartao titulo="Por tipo" descricao="Feedbacks no período">
+            <ul className="flex flex-col gap-4">
+              {porTipo.map((t) => {
+                const percentual = resumo.total ? (t.total / resumo.total) * 100 : 0;
+                return (
+                  <li key={t.tipo}>
+                    <div className="flex items-baseline justify-between gap-3 text-sm font-semibold">
+                      <span className="inline-flex items-center gap-2">
+                        <span className={`size-2.5 rounded-full ${corDoTipo(t.tipo)}`} aria-hidden="true" />
+                        {rotuloDoTipo(t.tipo)}
+                      </span>
+                      <span className="tabular-nums">
+                        {t.total}
+                        <span className="ml-1.5 font-medium text-muted-foreground">
+                          {numeroBr(percentual, 0)}%
+                        </span>
+                      </span>
+                    </div>
+                    <div className="mt-2">
+                      <Barra percentual={percentual} cor={corDoTipo(t.tipo)} grossa />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </Cartao>
+
+          <Cartao
+            titulo="Por área"
+            descricao={
+              porArea.length > LIMITE_DE_AREAS
+                ? `As ${LIMITE_DE_AREAS} com mais feedbacks (de ${porArea.length})`
+                : 'Onde os feedbacks foram dados'
+            }
+            acao={<LinkDoCartao para="/gerente/relatorios">Relatórios</LinkDoCartao>}
+          >
+            <PorArea areas={porArea} />
+          </Cartao>
         </div>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-1">Média de Estrelas por Categoria</h2>
-        <p className="text-sm text-gray-600 mb-4">
-          Categorias que ninguém avaliou no período não aparecem.
-        </p>
-        <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={porCategoria}>
-            <XAxis dataKey="categoria" />
-            <YAxis domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} />
-            <Tooltip
-              formatter={(valor, _nome, item) => [
-                `${numero(Number(valor))} ★ · ${item?.payload?.total ?? 0} avaliações`,
-                'Média',
-              ]}
-            />
-            <Bar dataKey="mediaEstrelas" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {acoes}
+      )}
     </>
+  );
+}
+
+function PorArea({ areas }: { areas: Metricas['porArea'] }) {
+  // A API já devolve da área mais movimentada para a menos.
+  const visiveis = areas.slice(0, LIMITE_DE_AREAS);
+  const maior = Math.max(1, ...visiveis.map((a) => a.total));
+  return (
+    <ul className="flex flex-col gap-3.5">
+      {visiveis.map((a) => (
+        <li key={a.area}>
+          <div className="flex items-baseline justify-between gap-3 text-sm font-semibold">
+            <span className="min-w-0 truncate">{a.area}</span>
+            <span className="flex-none tabular-nums">{a.total}</span>
+          </div>
+          <div className="mt-1.5">
+            <Barra percentual={(a.total / maior) * 100} />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function UltimasOcorrencias({ recentes, erro }: { recentes: Recentes | null; erro: boolean }) {
+  if (erro) {
+    return <p className="text-sm text-muted-foreground">Não foi possível carregar as últimas ocorrências.</p>;
+  }
+  if (!recentes) {
+    return (
+      <div className="flex flex-col gap-4">
+        {[0, 1, 2].map((i) => (
+          <Esqueleto key={i} className="h-16" />
+        ))}
+      </div>
+    );
+  }
+  if (recentes.itens.length === 0) {
+    return <p className="text-sm text-muted-foreground">Nenhuma ocorrência ainda.</p>;
+  }
+
+  return (
+    <ul className="-my-1 divide-y divide-[#efefea]">
+      {recentes.itens.map((o) => (
+        <li key={o.id}>
+          <Link
+            to={`/coordenador/ocorrencia/${o.id}`}
+            className="-mx-2 flex gap-3.5 rounded-xl px-2 py-3.5 transition-colors hover:bg-[#f6f6f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <span
+              className={`mt-1.5 size-2.5 flex-none rounded-full ${corDoTipo(o.tipo)}`}
+              aria-hidden="true"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-bold">
+                {rotuloDoTipo(o.tipo)} · {o.area?.nome ?? 'Restaurante'}
+                <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${seloDoStatus(o.status)}`}>
+                  {rotuloDoStatus(o.status)}
+                </span>
+              </p>
+              {o.comentario ? (
+                // break-words: um "kkkkkkkk" sem espaço é texto de cliente possível, e sem
+                // quebra sairia cortado sem as reticências do line-clamp.
+                <p className="mt-1 line-clamp-2 text-sm leading-relaxed break-words text-[#3a3f4a]">
+                  “{o.comentario}”
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-muted-foreground italic">Sem comentário</p>
+              )}
+              <p className="mt-1 text-xs text-muted-foreground">
+                {[
+                  ...o.avaliacoes.map((a) => `${a.categoria} ${a.estrelas}★`),
+                  haQuanto(o.criadoEm),
+                ].join(' · ')}
+              </p>
+            </div>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EsqueletoDoPainel() {
+  return (
+    <div className="flex flex-col gap-4" aria-busy="true" aria-label="Carregando o painel">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Esqueleto key={i} className="h-[124px] rounded-2xl" />
+        ))}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-5">
+        <Esqueleto className="h-80 rounded-2xl lg:col-span-2" />
+        <Esqueleto className="h-80 rounded-2xl lg:col-span-3" />
+      </div>
+    </div>
   );
 }

@@ -1,206 +1,281 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Users, UserCog, QrCode, MapPin, Settings, Activity, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { CheckCircle2, ChevronRight, TriangleAlert } from 'lucide-react';
 import {
-  encerrarSessao,
   listarAreas,
+  listarAuditoria,
   listarQRCodes,
   listarUsuarios,
   tokenDaSessao,
-  type Papel,
+  usuarioLogado,
+  type RegistroDeAuditoria,
 } from '../../services/api';
+import { descrever } from '../../descricaoDaAuditoria';
+import { haQuanto, primeiroNome, saudacao } from '../../rotulos';
+import {
+  AvisoDeErro,
+  CabecalhoDaPagina,
+  Cartao,
+  Esqueleto,
+  Indicador,
+  LinkDoCartao,
+  Pagina,
+} from '../layout/Pagina';
+
+// Quantos registros do log entram na atividade recente.
+const ATIVIDADES = 6;
+
+type Pendencia = { chave: string; texto: string; acao: string; para: string };
 
 type Resumo = {
   coordenadores: number;
   gerentes: number;
   qrCodesAtivos: number;
-  areas: number;
+  areasAtivas: number;
+  pendencias: Pendencia[];
 };
 
 export function AdminDashboard() {
-  const navigate = useNavigate();
+  const token = tokenDaSessao() ?? '';
   const [resumo, setResumo] = useState<Resumo | null>(null);
-  const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-  const [semPermissao, setSemPermissao] = useState(false);
+  const [atividades, setAtividades] = useState<RegistroDeAuditoria[] | null>(null);
+  const [erroNasAtividades, setErroNasAtividades] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
 
-  const token = tokenDaSessao();
-  const buscaAtual = useRef(0);
-
+  // Sessão vencida (401) é tratada no serviço da API, que leva ao login.
   useEffect(() => {
-    if (!token) {
-      navigate('/gerente/login');
-      return;
-    }
-
-    const minhaVez = ++buscaAtual.current;
+    let ativo = true;
+    setErro(null);
 
     Promise.all([listarUsuarios(token), listarQRCodes(token), listarAreas()])
       .then(([usuarios, qrCodes, areas]) => {
-        if (minhaVez !== buscaAtual.current) return;
+        if (!ativo) return;
         const ativos = usuarios.itens.filter((u) => u.ativo);
-        const contar = (papel: Papel) => ativos.filter((u) => u.papel === papel).length;
+        const areasAtivas = areas.itens.filter((a) => a.ativo);
+        const qrAtivos = qrCodes.itens.filter((q) => q.ativo);
+        const coordenadores = ativos.filter((u) => u.papel === 'COORDENADOR').length;
 
         setResumo({
-          coordenadores: contar('COORDENADOR'),
-          gerentes: contar('GERENTE'),
-          qrCodesAtivos: qrCodes.itens.filter((q) => q.ativo).length,
-          areas: areas.itens.filter((a) => a.ativo).length,
+          coordenadores,
+          gerentes: ativos.filter((u) => u.papel === 'GERENTE').length,
+          qrCodesAtivos: qrAtivos.length,
+          areasAtivas: areasAtivas.length,
+          pendencias: pendenciasDe(areasAtivas, qrAtivos, coordenadores),
         });
       })
       .catch((e: Error & { status?: number }) => {
-        if (minhaVez !== buscaAtual.current) return;
-        if (e.status === 401) {
-          encerrarSessao();
-          navigate('/gerente/login');
-          return;
-        }
-        if (e.status === 403) {
-          setSemPermissao(true);
-          return;
-        }
-        setErro(e.message || 'Não foi possível carregar o resumo do sistema.');
-      })
-      .finally(() => {
-        if (minhaVez === buscaAtual.current) setCarregando(false);
+        if (!ativo) return;
+        setErro(
+          e.status === 403
+            ? 'A visão geral é só para administradores.'
+            : e.message || 'Não foi possível carregar a visão geral.'
+        );
       });
 
     return () => {
-      buscaAtual.current++;
+      ativo = false;
     };
-  }, [token, navigate]);
+  }, [token, tentativa]);
 
-  const atalhos = (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <button
-        onClick={() => navigate('/admin/usuarios')}
-        className="bg-white hover:bg-slate-50 rounded-2xl shadow-lg p-8 text-left transition-all hover:shadow-xl border-2 border-transparent hover:border-slate-700"
-      >
-        <UserCog className="w-12 h-12 text-slate-700 mb-4" />
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Gerenciar Usuários</h2>
-        <p className="text-gray-600">
-          Adicionar, editar ou desativar coordenadores, gerentes e administradores
-        </p>
-      </button>
+  useEffect(() => {
+    let ativo = true;
+    setErroNasAtividades(false);
 
-      <button
-        onClick={() => navigate('/admin/configuracoes')}
-        className="bg-white hover:bg-slate-50 rounded-2xl shadow-lg p-8 text-left transition-all hover:shadow-xl border-2 border-transparent hover:border-slate-700"
-      >
-        <Settings className="w-12 h-12 text-slate-700 mb-4" />
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Configurações do Sistema</h2>
-        <p className="text-gray-600">
-          Ajustar preferências, notificações, LGPD e configurar setores
-        </p>
-      </button>
+    // Os logins são a maioria do log e não contam o que mudou: ficam de fora daqui
+    // (seguem no log completo). Pede uma folga para sobrar o bastante depois do filtro.
+    listarAuditoria(token, { porPagina: 30 })
+      .then((pagina) => {
+        if (!ativo) return;
+        setAtividades(pagina.itens.filter((r) => r.acao !== 'LOGIN').slice(0, ATIVIDADES));
+      })
+      .catch(() => {
+        if (ativo) setErroNasAtividades(true);
+      });
 
-      <button
-        onClick={() => navigate('/qr-generator')}
-        className="bg-white hover:bg-slate-50 rounded-2xl shadow-lg p-8 text-left transition-all hover:shadow-xl border-2 border-transparent hover:border-teal-600"
-      >
-        <QrCode className="w-12 h-12 text-teal-600 mb-4" />
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Gerenciar QR Codes</h2>
-        <p className="text-gray-600">Criar novos QR Codes para mesas e áreas do restaurante</p>
-      </button>
+    return () => {
+      ativo = false;
+    };
+  }, [token, tentativa]);
 
-      <button
-        onClick={() => navigate('/audit-log')}
-        className="bg-white hover:bg-slate-50 rounded-2xl shadow-lg p-8 text-left transition-all hover:shadow-xl border-2 border-transparent hover:border-slate-700"
-      >
-        <Activity className="w-12 h-12 text-slate-700 mb-4" />
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Log de Atividades</h2>
-        <p className="text-gray-600">Visualizar histórico completo de ações no sistema</p>
-      </button>
-    </div>
-  );
+  return (
+    <Pagina>
+      <CabecalhoDaPagina
+        sobretitulo="Administração"
+        titulo={`${saudacao()}, ${primeiroNome(usuarioLogado()?.nome)}`}
+        descricao="Quem usa o Echo, onde ele está nas mesas e o que mudou por último."
+      />
 
-  const moldura = (conteudo: React.ReactNode) => (
-    <div>
-      <div className="max-w-6xl mx-auto p-4 pb-8">
-        <div className="pt-6 pb-4">
-          <h1 className="text-2xl font-bold text-gray-900">Painel Administrativo</h1>
-          <p className="text-gray-600 mt-1">Gestão completa do sistema</p>
+      {erro ? (
+        <AvisoDeErro mensagem={erro} aoTentarDeNovo={() => setTentativa((t) => t + 1)} />
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            {resumo ? (
+              <>
+                <Indicador rotulo="Coordenadores ativos" valor={resumo.coordenadores} para="/admin/usuarios">
+                  <Abrir>Usuários</Abrir>
+                </Indicador>
+                <Indicador rotulo="Gerentes ativos" valor={resumo.gerentes} para="/admin/usuarios">
+                  <Abrir>Usuários</Abrir>
+                </Indicador>
+                <Indicador rotulo="QR Codes valendo" valor={resumo.qrCodesAtivos} para="/qr-generator">
+                  <Abrir>QR Codes</Abrir>
+                </Indicador>
+                <Indicador rotulo="Áreas ativas" valor={resumo.areasAtivas} para="/admin/configuracoes">
+                  <Abrir>Configurações</Abrir>
+                </Indicador>
+              </>
+            ) : (
+              [0, 1, 2, 3].map((i) => <Esqueleto key={i} className="h-[124px] rounded-2xl" />)
+            )}
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-5">
+            <Cartao
+              titulo="Precisa de atenção"
+              descricao="O que impede o cliente de avaliar ou a equipe de responder"
+              className="lg:col-span-2"
+            >
+              {!resumo ? (
+                <div className="flex flex-col gap-3">
+                  <Esqueleto className="h-12" />
+                  <Esqueleto className="h-12" />
+                </div>
+              ) : resumo.pendencias.length === 0 ? (
+                <p className="flex items-start gap-2 text-sm font-semibold text-sucesso">
+                  <CheckCircle2 className="mt-0.5 size-4 flex-none" aria-hidden="true" />
+                  Tudo em ordem: cada área ativa tem um QR Code valendo e há quem trate as
+                  ocorrências.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-2.5">
+                  {resumo.pendencias.map((p) => (
+                    // O link vai embaixo do texto: ao lado, no cartão estreito, espremia
+                    // a frase numa coluna de uma palavra por linha.
+                    <li key={p.chave} className="flex gap-2.5 rounded-xl bg-[#fdf6ea] px-3.5 py-3 text-sm">
+                      <TriangleAlert className="mt-0.5 size-4 flex-none text-atencao" aria-hidden="true" />
+                      <div className="min-w-0">
+                        <p className="font-semibold break-words text-[#5c3a07]">{p.texto}</p>
+                        <Link
+                          to={p.para}
+                          className="mt-1 inline-flex items-center gap-0.5 rounded-md font-bold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          {p.acao}
+                          <ChevronRight className="size-3.5" aria-hidden="true" />
+                        </Link>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Cartao>
+
+            <Cartao
+              titulo="Atividade recente"
+              descricao="O que mudou por último, sem os logins"
+              acao={<LinkDoCartao para="/audit-log">Log completo</LinkDoCartao>}
+              className="lg:col-span-3"
+            >
+              <AtividadeRecente registros={atividades} erro={erroNasAtividades} />
+            </Cartao>
+          </div>
         </div>
-        {conteudo}
-      </div>
-    </div>
+      )}
+    </Pagina>
   );
+}
 
-  if (semPermissao) {
-    return moldura(
-      <div className="space-y-6">
-        <div className="bg-white rounded-2xl shadow-lg p-8 text-center space-y-2">
-          <h2 className="text-lg font-bold text-gray-900">Acesso restrito</h2>
-          <p className="text-gray-600">
-            O resumo do sistema é visível apenas para administradores.
+function Abrir({ children }: { children: string }) {
+  return (
+    <span className="inline-flex items-center gap-0.5 text-primary">
+      {children}
+      <ChevronRight className="size-3.5" aria-hidden="true" />
+    </span>
+  );
+}
+
+// O que deixa o sistema sem funcionar de verdade, mesmo com tudo "cadastrado".
+function pendenciasDe(
+  areasAtivas: { id: string; nome: string }[],
+  qrAtivos: { area: { id: string } }[],
+  coordenadores: number
+): Pendencia[] {
+  const pendencias: Pendencia[] = [];
+
+  if (areasAtivas.length === 0) {
+    pendencias.push({
+      chave: 'sem-areas',
+      texto: 'Nenhuma área cadastrada: sem área, não há QR Code para as mesas.',
+      acao: 'Cadastrar áreas',
+      para: '/admin/configuracoes',
+    });
+  }
+
+  for (const area of areasAtivas) {
+    const codigos = qrAtivos.filter((q) => q.area.id === area.id).length;
+    if (codigos === 0) {
+      pendencias.push({
+        chave: `sem-qr-${area.id}`,
+        texto: `${area.nome} não tem QR Code valendo.`,
+        acao: 'Gerar código',
+        para: '/qr-generator',
+      });
+    } else if (codigos > 1) {
+      pendencias.push({
+        chave: `varios-qr-${area.id}`,
+        texto: `${area.nome} tem ${codigos} QR Codes valendo ao mesmo tempo.`,
+        acao: 'Substituir',
+        para: '/qr-generator',
+      });
+    }
+  }
+
+  if (coordenadores === 0) {
+    pendencias.push({
+      chave: 'sem-coordenador',
+      texto: 'Nenhum coordenador ativo para tratar as ocorrências.',
+      acao: 'Cadastrar',
+      para: '/admin/usuarios',
+    });
+  }
+
+  return pendencias;
+}
+
+function AtividadeRecente({
+  registros,
+  erro,
+}: {
+  registros: RegistroDeAuditoria[] | null;
+  erro: boolean;
+}) {
+  if (erro) {
+    return <p className="text-sm text-muted-foreground">Não foi possível carregar a atividade recente.</p>;
+  }
+  if (!registros) {
+    return (
+      <div className="flex flex-col gap-3">
+        {[0, 1, 2, 3].map((i) => (
+          <Esqueleto key={i} className="h-11" />
+        ))}
+      </div>
+    );
+  }
+  if (registros.length === 0) {
+    return <p className="text-sm text-muted-foreground">Nada registrado ainda.</p>;
+  }
+
+  return (
+    <ul className="-my-1 divide-y divide-[#efefea]">
+      {registros.map((r) => (
+        <li key={r.id} className="py-3">
+          <p className="text-sm leading-snug font-semibold break-words">{descrever(r)}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {r.usuario.nome} · <time dateTime={r.criadoEm}>{haQuanto(r.criadoEm)}</time>
           </p>
-        </div>
-        {atalhos}
-      </div>
-    );
-  }
-
-  if (carregando) {
-    return moldura(
-      <div className="flex justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-700" />
-      </div>
-    );
-  }
-
-  return moldura(
-    <>
-      {erro && (
-        <p className="mb-6 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-          {erro}
-        </p>
-      )}
-
-      {resumo && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-slate-700">
-            <div className="flex items-center justify-between mb-2">
-              <UserCog className="w-8 h-8 text-slate-700" />
-              <span className="text-3xl font-bold text-gray-900">
-                {resumo.coordenadores}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600 font-medium">Coordenadores Ativos</p>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-600">
-            <div className="flex items-center justify-between mb-2">
-              <Users className="w-8 h-8 text-orange-600" />
-              <span className="text-3xl font-bold text-gray-900">{resumo.gerentes}</span>
-            </div>
-            <p className="text-sm text-gray-600 font-medium">Gerentes Ativos</p>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-teal-600">
-            <div className="flex items-center justify-between mb-2">
-              <QrCode className="w-8 h-8 text-teal-600" />
-              <span className="text-3xl font-bold text-gray-900">
-                {resumo.qrCodesAtivos}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600 font-medium">QR Codes Ativos</p>
-          </div>
-
-          {/* Era "Disponibilidade Sistema: 99.8%", um número inventado. Medir
-              disponibilidade de verdade exige um monitor externo batendo no /health —
-              não dá para calcular de dentro da própria aplicação que se quer medir.
-              Trocado por uma contagem real e do mesmo assunto: o que está cadastrado. */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-600">
-            <div className="flex items-center justify-between mb-2">
-              <MapPin className="w-8 h-8 text-green-600" />
-              <span className="text-3xl font-bold text-gray-900">{resumo.areas}</span>
-            </div>
-            <p className="text-sm text-gray-600 font-medium">Áreas Cadastradas</p>
-          </div>
-        </div>
-      )}
-
-      {atalhos}
-    </>
+        </li>
+      ))}
+    </ul>
   );
 }
