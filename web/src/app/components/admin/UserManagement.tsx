@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, UserX, UserCheck, Search, KeyRound, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { KeyRound, Loader2, Pencil, Plus, Search, UserCheck, UserX, Users, X } from 'lucide-react';
 import {
   atualizarUsuario,
   criarUsuario,
-  encerrarSessao,
   listarUsuarios,
   redefinirSenha,
   tokenDaSessao,
@@ -13,497 +12,607 @@ import {
   type Papel,
   type UsuarioGestao,
 } from '../../services/api';
+import { ROTULO_DO_PAPEL } from '../../navegacao';
+import { avisarRapido } from '../../avisoRapido';
+import { AvisoDeErro, CabecalhoDaPagina, Cartao, Esqueleto, EstadoVazio, Pagina } from '../layout/Pagina';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../ui/dialog';
 
-// Classes inteiras: o Tailwind varre o código por strings completas.
-const CONFIG_PAPEL: Record<Papel, { rotulo: string; classe: string }> = {
-  COORDENADOR: { rotulo: 'Coordenador', classe: 'bg-purple-100 text-purple-700' },
-  GERENTE: { rotulo: 'Gerente', classe: 'bg-orange-100 text-orange-700' },
-  ADMINISTRADOR: { rotulo: 'Administrador', classe: 'bg-slate-700 text-white' },
+// Classes inteiras: o Tailwind só gera o que encontra escrito.
+const SELO_DO_PAPEL: Record<Papel, string> = {
+  ADMINISTRADOR: 'bg-marca-escura text-white',
+  GERENTE: 'bg-accent text-accent-foreground',
+  COORDENADOR: 'bg-andamento-fundo text-andamento',
 };
 
-// Se o backend ganhar um papel novo antes de um deploy do front, a linha aparece
-// em cinza em vez de derrubar a tela.
-const PAPEL_DESCONHECIDO = { rotulo: 'Outro', classe: 'bg-gray-100 text-gray-700' };
+// O que cada papel pode, dito no formulário: escolher "Gerente" sem saber o que ele vê
+// era chute.
+const O_QUE_O_PAPEL_FAZ: Record<Papel, string> = {
+  COORDENADOR: 'Trata as ocorrências e recebe as notificações.',
+  GERENTE: 'Além disso, vê o painel, o registro e os relatórios.',
+  ADMINISTRADOR: 'Acesso a tudo, inclusive usuários, QR Codes e configurações.',
+};
 
-const PAPEIS = Object.keys(CONFIG_PAPEL) as Papel[];
+const PAPEIS = Object.keys(ROTULO_DO_PAPEL) as Papel[];
+
+// Se o backend ganhar um papel novo antes de um deploy do front, aparece neutro.
+const rotuloDoPapel = (papel: string) => ROTULO_DO_PAPEL[papel as Papel] ?? papel;
+const seloDoPapel = (papel: string) => SELO_DO_PAPEL[papel as Papel] ?? 'bg-muted text-muted-foreground';
 
 const TAMANHO_MINIMO_DA_SENHA = 8;
 
-type Formulario = {
-  nome: string;
-  email: string;
-  senha: string;
-  papel: Papel;
-  setor: string;
-};
+type Mostrar = 'ativos' | 'inativos' | 'todos';
 
-const FORMULARIO_VAZIO: Formulario = {
-  nome: '',
-  email: '',
-  senha: '',
-  papel: 'COORDENADOR',
-  setor: '',
-};
+type Formulario = { nome: string; email: string; senha: string; papel: Papel; setor: string };
+const FORMULARIO_VAZIO: Formulario = { nome: '', email: '', senha: '', papel: 'COORDENADOR', setor: '' };
+
+type Janela =
+  | { tipo: 'criar' }
+  | { tipo: 'editar'; usuario: UsuarioGestao }
+  | { tipo: 'senha'; usuario: UsuarioGestao }
+  | { tipo: 'desativar'; usuario: UsuarioGestao };
 
 const campo =
-  'w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-700';
-const rotulo = 'block text-sm font-semibold text-gray-700 mb-2';
+  'h-11 w-full rounded-xl border border-border bg-input-background px-3.5 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const rotuloDoCampo = 'mb-1.5 block text-sm font-semibold';
+const botaoPrimario =
+  'inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 font-semibold text-primary-foreground transition-colors hover:bg-[#0a5242] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const botaoSecundario =
+  'inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const botaoDeIcone =
+  'flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+function iniciais(nome: string) {
+  const partes = nome.trim().split(/\s+/);
+  return ((partes[0]?.[0] ?? '') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+}
+
+// O 409 da API é genérico ("Registro já existe"). Aqui o único campo único é o
+// e-mail, então vale dizer qual é o problema em vez de repassar a mensagem crua.
+function mensagemDeFalha(e: unknown) {
+  const status = (e as { status?: number }).status;
+  if (status === 409) return 'Este e-mail já está cadastrado para outro usuário.';
+  if (status === 403) return 'Só administradores podem gerenciar usuários.';
+  return e instanceof Error && e.message ? e.message : 'Algo deu errado. Tente novamente.';
+}
 
 export function UserManagement() {
-  const navigate = useNavigate();
-  const [usuarios, setUsuarios] = useState<UsuarioGestao[]>([]);
-  const [busca, setBusca] = useState('');
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
-  const [semPermissao, setSemPermissao] = useState(false);
-
-  const [modalAberto, setModalAberto] = useState<'criar' | 'editar' | 'senha' | null>(null);
-  const [emFoco, setEmFoco] = useState<UsuarioGestao | null>(null);
-  const [formulario, setFormulario] = useState<Formulario>(FORMULARIO_VAZIO);
-  const [erroDoModal, setErroDoModal] = useState<string | null>(null);
-  const [salvando, setSalvando] = useState(false);
-
-  const token = tokenDaSessao();
+  const token = tokenDaSessao() ?? '';
   const euId = usuarioLogado()?.id ?? null;
 
-  const tratarFalha = (e: unknown, ondeMostrar: (mensagem: string) => void) => {
-    const status = (e as { status?: number }).status;
-    if (status === 401) {
-      encerrarSessao();
-      navigate('/gerente/login');
-      return;
-    }
-    if (status === 403) {
-      setSemPermissao(true);
-      return;
-    }
-    // O 409 da API é genérico ("Registro já existe"). Aqui o único campo único é o
-    // e-mail, então vale dizer qual é o problema em vez de repassar a mensagem crua.
-    if (status === 409) {
-      ondeMostrar('Este e-mail já está cadastrado para outro usuário.');
-      return;
-    }
-    ondeMostrar(e instanceof Error ? e.message : 'Algo deu errado. Tente novamente.');
-  };
+  const [parametros, setParametros] = useSearchParams();
+  const pedido = parametros.get('mostrar');
+  const mostrar: Mostrar = pedido === 'inativos' || pedido === 'todos' ? pedido : 'ativos';
+  const mudarMostrar = (novo: Mostrar) =>
+    setParametros(novo === 'ativos' ? {} : { mostrar: novo }, { replace: true });
 
-  // Identifica a busca mais recente. Sem isso, duas recargas seguidas (salvar e
-  // alternar situação em sequência) podem terminar fora de ordem e a resposta antiga
-  // sobrescrever a nova, mostrando dado velho.
+  const [usuarios, setUsuarios] = useState<UsuarioGestao[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [busca, setBusca] = useState('');
+  const [janela, setJanela] = useState<Janela | null>(null);
+  // Ao fechar a janela, o foco volta ao botão que a abriu. O diálogo só faz isso
+  // sozinho com um gatilho próprio; aqui ele é aberto pelo estado, e o foco caía no
+  // topo da página.
+  const quemAbriu = useRef<HTMLElement | null>(null);
+  const abrir = (nova: Janela) => {
+    quemAbriu.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setJanela(nova);
+  };
+  const [alternandoId, setAlternandoId] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
+  // Só a resposta da busca mais recente vale: salvar e desativar em sequência podiam
+  // terminar fora de ordem e a resposta antiga sobrescrever a nova.
   const buscaAtual = useRef(0);
 
+  // Sessão vencida (401) é tratada no serviço da API, que leva ao login.
   const carregar = () => {
-    if (!token) return;
     const minhaVez = ++buscaAtual.current;
-
+    setErro(null);
     listarUsuarios(token)
       .then((res) => {
-        if (minhaVez !== buscaAtual.current) return;
-        setUsuarios(res.itens);
+        if (minhaVez === buscaAtual.current) setUsuarios(res.itens);
       })
       .catch((e) => {
-        if (minhaVez !== buscaAtual.current) return;
-        tratarFalha(e, setErro);
-      })
-      .finally(() => {
-        if (minhaVez === buscaAtual.current) setCarregando(false);
+        if (minhaVez === buscaAtual.current) setErro(mensagemDeFalha(e));
       });
   };
 
   useEffect(() => {
-    if (!token) {
-      navigate('/gerente/login');
-      return;
-    }
     carregar();
     return () => {
-      // Descarta o que estiver em voo quando a tela sai: evita setState em
-      // componente desmontado.
       buscaAtual.current++;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+    // carregar só depende do token, que já está aqui.
+  }, [token, tentativa]);
 
-  const abrirCriar = () => {
-    setFormulario(FORMULARIO_VAZIO);
-    setEmFoco(null);
-    setErroDoModal(null);
-    setModalAberto('criar');
+  const reativar = async (usuario: UsuarioGestao) => {
+    setErro(null);
+    setAlternandoId(usuario.id);
+    try {
+      await atualizarUsuario(usuario.id, { ativo: true }, token);
+      avisarRapido(`Acesso de ${usuario.nome} reativado`);
+      carregar();
+    } catch (e) {
+      setErro(mensagemDeFalha(e));
+    } finally {
+      setAlternandoId(null);
+    }
   };
 
-  const abrirEditar = (usuario: UsuarioGestao) => {
-    setFormulario({
-      nome: usuario.nome,
-      email: usuario.email,
-      senha: '',
-      papel: usuario.papel,
-      setor: usuario.setor ?? '',
-    });
-    setEmFoco(usuario);
-    setErroDoModal(null);
-    setModalAberto('editar');
+  const ativos = usuarios?.filter((u) => u.ativo) ?? [];
+  const contagem: Record<Mostrar, number> = {
+    ativos: ativos.length,
+    inativos: (usuarios?.length ?? 0) - ativos.length,
+    todos: usuarios?.length ?? 0,
   };
 
-  const abrirSenha = (usuario: UsuarioGestao) => {
-    setFormulario({ ...FORMULARIO_VAZIO, papel: usuario.papel });
-    setEmFoco(usuario);
-    setErroDoModal(null);
-    setModalAberto('senha');
-  };
+  const termo = busca.trim().toLowerCase();
+  const visiveis = (usuarios ?? [])
+    .filter((u) => (mostrar === 'todos' ? true : mostrar === 'ativos' ? u.ativo : !u.ativo))
+    .filter((u) => !termo || u.nome.toLowerCase().includes(termo) || u.email.toLowerCase().includes(termo))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 
-  const fechar = () => {
-    setModalAberto(null);
-    setEmFoco(null);
-    setErroDoModal(null);
-  };
+  return (
+    <Pagina>
+      <CabecalhoDaPagina
+        titulo="Usuários"
+        descricao="Quem entra no Echo e o que cada um pode fazer."
+        acoes={
+          <button type="button" onClick={() => abrir({ tipo: 'criar' })} className={botaoPrimario}>
+            <Plus className="size-5" aria-hidden="true" />
+            Adicionar usuário
+          </button>
+        }
+      />
 
-  const salvar = async () => {
-    if (!token) return;
-    setErroDoModal(null);
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div role="group" aria-label="Mostrar" className="inline-flex gap-1 rounded-xl bg-muted p-1">
+          {(
+            [
+              ['ativos', 'Ativos'],
+              ['inativos', 'Inativos'],
+              ['todos', 'Todos'],
+            ] as const
+          ).map(([valor, rotulo]) => {
+            const escolhido = mostrar === valor;
+            return (
+              <button
+                key={valor}
+                type="button"
+                aria-pressed={escolhido}
+                onClick={() => mudarMostrar(valor)}
+                className={`inline-flex h-9 items-center gap-2 rounded-[9px] px-3.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                  escolhido ? 'bg-card font-bold text-foreground shadow-sm' : 'font-semibold text-[#3a3f4a] hover:text-foreground'
+                }`}
+              >
+                {rotulo}
+                {usuarios && (
+                  <span className="min-w-6 rounded-full bg-[#e2e2dc] px-1.5 text-center text-xs leading-5 font-bold tabular-nums text-[#3a3f4a]">
+                    {contagem[valor]}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div className="relative min-w-0 flex-[1_1_16rem]">
+          <label htmlFor="busca-usuarios" className="sr-only">
+            Buscar por nome ou e-mail
+          </label>
+          <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <input
+            id="busca-usuarios"
+            type="search"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome ou e-mail"
+            className="h-11 w-full rounded-xl border border-border bg-input-background pr-10 pl-10 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-search-cancel-button]:hidden"
+          />
+          {busca && (
+            <button
+              type="button"
+              onClick={() => setBusca('')}
+              aria-label="Limpar a busca"
+              className="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {erro && (
+        <div className="mb-4">
+          <AvisoDeErro mensagem={erro} aoTentarDeNovo={usuarios ? undefined : () => setTentativa((t) => t + 1)} />
+        </div>
+      )}
+
+      {!usuarios ? (
+        !erro && (
+          <Cartao>
+            <div className="flex flex-col gap-3" aria-busy="true" aria-label="Carregando usuários">
+              {[0, 1, 2].map((i) => (
+                <Esqueleto key={i} className="h-14" />
+              ))}
+            </div>
+          </Cartao>
+        )
+      ) : visiveis.length === 0 ? (
+        <EstadoVazio
+          icone={Users}
+          titulo={
+            termo
+              ? 'Ninguém com esse nome ou e-mail'
+              : mostrar === 'inativos'
+                ? 'Nenhum usuário desativado'
+                : 'Nenhum usuário'
+          }
+        />
+      ) : (
+        <Cartao>
+          <ul className="-my-1 divide-y divide-[#efefea]">
+            {visiveis.map((u) => {
+              const souEu = u.id === euId;
+              return (
+                <li key={u.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
+                  <span
+                    className={`flex size-10 flex-none items-center justify-center rounded-full text-sm font-extrabold ${
+                      u.ativo ? 'bg-[#d7e9e2] text-accent-foreground' : 'bg-muted text-muted-foreground'
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {iniciais(u.nome)}
+                  </span>
+                  <div className="min-w-0 flex-[1_1_12rem]">
+                    <p className={`font-semibold break-words ${u.ativo ? '' : 'text-muted-foreground'}`}>
+                      {u.nome}
+                      {souEu && <span className="font-normal text-muted-foreground"> (você)</span>}
+                    </p>
+                    <p className="text-sm break-all text-muted-foreground">{u.email}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${seloDoPapel(u.papel)}`}>
+                      {rotuloDoPapel(u.papel)}
+                    </span>
+                    {u.setor && <span className="text-sm text-muted-foreground">{u.setor}</span>}
+                    {!u.ativo && (
+                      <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
+                        Desativado
+                      </span>
+                    )}
+                  </div>
+                  <div className="ml-auto flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => abrir({ tipo: 'editar', usuario: u })}
+                      aria-label={`Editar ${u.nome}`}
+                      title="Editar"
+                      className={botaoDeIcone}
+                    >
+                      <Pencil className="size-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => abrir({ tipo: 'senha', usuario: u })}
+                      aria-label={`Redefinir a senha de ${u.nome}`}
+                      title="Redefinir senha"
+                      className={botaoDeIcone}
+                    >
+                      <KeyRound className="size-4" aria-hidden="true" />
+                    </button>
+                    {/* A própria conta não tem a ação: o backend recusa, e oferecer um
+                        botão que sempre dá erro é pior que não ter. O espaço fica, para
+                        a coluna de selos não desalinhar nessa linha. */}
+                    {souEu && <span className="size-9 flex-none" aria-hidden="true" />}
+                    {!souEu &&
+                      (u.ativo ? (
+                        <button
+                          type="button"
+                          onClick={() => abrir({ tipo: 'desativar', usuario: u })}
+                          aria-label={`Desativar ${u.nome}`}
+                          title="Desativar"
+                          className={`${botaoDeIcone} hover:bg-perigo-fundo hover:text-perigo`}
+                        >
+                          <UserX className="size-4" aria-hidden="true" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => reativar(u)}
+                          disabled={alternandoId === u.id}
+                          aria-label={`Reativar ${u.nome}`}
+                          title="Reativar"
+                          className={`${botaoDeIcone} disabled:opacity-50`}
+                        >
+                          {alternandoId === u.id ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <UserCheck className="size-4" aria-hidden="true" />
+                          )}
+                        </button>
+                      ))}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Cartao>
+      )}
+
+      <Dialog open={janela !== null} onOpenChange={(aberto) => !aberto && setJanela(null)}>
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-card p-6 sm:max-w-md"
+          onCloseAutoFocus={(e) => {
+            // Se o botão sumiu (a pessoa desativada saiu da aba "Ativos"), fica o padrão.
+            if (quemAbriu.current?.isConnected) {
+              e.preventDefault();
+              quemAbriu.current.focus();
+            }
+          }}
+        >
+          {janela && (
+            <ConteudoDaJanela
+              // Chave por janela: abrir outro usuário recomeça o formulário do zero.
+              key={janela.tipo + ('usuario' in janela ? janela.usuario.id : '')}
+              janela={janela}
+              token={token}
+              euId={euId}
+              aoConcluir={(mensagem) => {
+                setJanela(null);
+                avisarRapido(mensagem);
+                carregar();
+              }}
+              aoCancelar={() => setJanela(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </Pagina>
+  );
+}
+
+function ConteudoDaJanela({
+  janela,
+  token,
+  euId,
+  aoConcluir,
+  aoCancelar,
+}: {
+  janela: Janela;
+  token: string;
+  euId: string | null;
+  aoConcluir: (mensagem: string) => void;
+  aoCancelar: () => void;
+}) {
+  // A API recusa tirar o próprio acesso de administrador. Travar o campo evita
+  // escolher, salvar e só então tomar o erro.
+  const editandoASiMesmo = janela.tipo === 'editar' && janela.usuario.id === euId;
+  const [formulario, setFormulario] = useState<Formulario>(() =>
+    janela.tipo === 'editar'
+      ? {
+          nome: janela.usuario.nome,
+          email: janela.usuario.email,
+          senha: '',
+          papel: janela.usuario.papel,
+          setor: janela.usuario.setor ?? '',
+        }
+      : FORMULARIO_VAZIO
+  );
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const mudar = (campoAlterado: Partial<Formulario>) => setFormulario((f) => ({ ...f, ...campoAlterado }));
+
+  const pedeSenha = janela.tipo === 'criar' || janela.tipo === 'senha';
+  const senhaCurta = pedeSenha && formulario.senha.length > 0 && formulario.senha.length < TAMANHO_MINIMO_DA_SENHA;
+  const podeSalvar =
+    janela.tipo === 'desativar'
+      ? true
+      : janela.tipo === 'senha'
+        ? formulario.senha.length >= TAMANHO_MINIMO_DA_SENHA
+        : formulario.nome.trim().length > 0 &&
+          formulario.email.trim().length > 0 &&
+          (janela.tipo === 'editar' || formulario.senha.length >= TAMANHO_MINIMO_DA_SENHA);
+
+  const salvar = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!podeSalvar) return;
+    setErro(null);
     setSalvando(true);
     try {
-      if (modalAberto === 'criar') {
+      if (janela.tipo === 'criar') {
         await criarUsuario(
           {
-            nome: formulario.nome,
-            email: formulario.email,
+            nome: formulario.nome.trim(),
+            email: formulario.email.trim(),
             senha: formulario.senha,
             papel: formulario.papel,
             setor: formulario.setor.trim() || null,
           },
           token
         );
-      } else if (modalAberto === 'editar' && emFoco) {
+        aoConcluir(`Usuário adicionado: ${formulario.nome.trim()}`);
+      } else if (janela.tipo === 'editar') {
         const alteracoes: EdicaoUsuario = {
-          nome: formulario.nome,
-          email: formulario.email,
+          nome: formulario.nome.trim(),
+          email: formulario.email.trim(),
           papel: formulario.papel,
           setor: formulario.setor.trim() || null,
         };
-        await atualizarUsuario(emFoco.id, alteracoes, token);
-      } else if (modalAberto === 'senha' && emFoco) {
-        await redefinirSenha(emFoco.id, formulario.senha, token);
+        await atualizarUsuario(janela.usuario.id, alteracoes, token);
+        aoConcluir('Alterações salvas');
+      } else if (janela.tipo === 'senha') {
+        await redefinirSenha(janela.usuario.id, formulario.senha, token);
+        aoConcluir(`Senha de ${janela.usuario.nome} redefinida`);
+      } else {
+        await atualizarUsuario(janela.usuario.id, { ativo: false }, token);
+        aoConcluir(`Acesso de ${janela.usuario.nome} desativado`);
       }
-      fechar();
-      carregar();
-    } catch (e) {
-      tratarFalha(e, setErroDoModal);
-    } finally {
+    } catch (falha) {
+      setErro(mensagemDeFalha(falha));
       setSalvando(false);
     }
   };
 
-  const alternarSituacao = async (usuario: UsuarioGestao) => {
-    if (!token) return;
-    setErro(null);
-    try {
-      await atualizarUsuario(usuario.id, { ativo: !usuario.ativo }, token);
-      carregar();
-    } catch (e) {
-      tratarFalha(e, setErro);
-    }
-  };
+  const titulo = {
+    criar: 'Adicionar usuário',
+    editar: 'Editar usuário',
+    senha: 'Redefinir senha',
+    desativar: 'Desativar usuário',
+  }[janela.tipo];
 
-  const termo = busca.trim().toLowerCase();
-  const filtrados = termo
-    ? usuarios.filter(
-        (u) =>
-          u.nome.toLowerCase().includes(termo) || u.email.toLowerCase().includes(termo)
-      )
-    : usuarios;
-
-  const moldura = (conteudo: React.ReactNode) => (
-    <div>
-      <div className="max-w-6xl mx-auto p-4 pb-8">
-        <div className="pt-6 pb-4">
-          <h1 className="text-2xl font-bold text-gray-900">Gerenciamento de Usuários</h1>
-          <p className="text-gray-600 mt-1">Controle de acessos e permissões</p>
-        </div>
-        {conteudo}
+  return (
+    <form onSubmit={salvar} className="flex flex-col gap-4" noValidate>
+      <div className="pr-6">
+        <DialogTitle className="text-xl font-extrabold">{titulo}</DialogTitle>
+        {janela.tipo === 'senha' && (
+          <DialogDescription className="mt-1.5 text-sm">
+            Nova senha para <strong className="text-foreground">{janela.usuario.nome}</strong>. A anterior deixa de valer na
+            hora; avise a pessoa da senha nova.
+          </DialogDescription>
+        )}
+        {janela.tipo === 'desativar' && (
+          <DialogDescription className="mt-1.5 text-sm">
+            <strong className="text-foreground">{janela.usuario.nome}</strong> perde o acesso na hora, inclusive se estiver
+            usando o Echo agora. O histórico continua no log, e dá para reativar depois.
+          </DialogDescription>
+        )}
+        {(janela.tipo === 'criar' || janela.tipo === 'editar') && (
+          <DialogDescription className="sr-only">Dados de acesso e papel da pessoa no Echo.</DialogDescription>
+        )}
       </div>
-    </div>
-  );
 
-  if (semPermissao) {
-    return moldura(
-      <div className="bg-white rounded-2xl shadow-lg p-8 text-center space-y-2">
-        <h2 className="text-lg font-bold text-gray-900">Acesso restrito</h2>
-        <p className="text-gray-600">
-          Apenas administradores podem gerenciar usuários. Entre com uma conta de
-          administrador para continuar.
-        </p>
-      </div>
-    );
-  }
-
-  if (carregando) {
-    return moldura(
-      <div className="flex justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-700" />
-      </div>
-    );
-  }
-
-  const senhaCurta =
-    (modalAberto === 'criar' || modalAberto === 'senha') &&
-    formulario.senha.length > 0 &&
-    formulario.senha.length < TAMANHO_MINIMO_DA_SENHA;
-
-  const podeSalvar =
-    modalAberto === 'senha'
-      ? formulario.senha.length >= TAMANHO_MINIMO_DA_SENHA
-      : formulario.nome.trim().length > 0 &&
-        formulario.email.trim().length > 0 &&
-        (modalAberto === 'editar' || formulario.senha.length >= TAMANHO_MINIMO_DA_SENHA);
-
-  return moldura(
-    <>
-      <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar por nome ou e-mail..."
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                className={`${campo} pl-10`}
-              />
-            </div>
+      {(janela.tipo === 'criar' || janela.tipo === 'editar') && (
+        <>
+          <div>
+            <label htmlFor="usuario-nome" className={rotuloDoCampo}>
+              Nome completo
+            </label>
+            <input
+              id="usuario-nome"
+              autoFocus
+              value={formulario.nome}
+              onChange={(e) => mudar({ nome: e.target.value })}
+              autoComplete="off"
+              className={campo}
+            />
           </div>
-          <button
-            onClick={abrirCriar}
-            className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"
+          <div>
+            <label htmlFor="usuario-email" className={rotuloDoCampo}>
+              E-mail
+            </label>
+            <input
+              id="usuario-email"
+              type="email"
+              value={formulario.email}
+              onChange={(e) => mudar({ email: e.target.value })}
+              autoComplete="off"
+              placeholder="nome@sinuelo.com"
+              className={campo}
+            />
+          </div>
+        </>
+      )}
+
+      {pedeSenha && (
+        <div>
+          <label htmlFor="usuario-senha" className={rotuloDoCampo}>
+            {janela.tipo === 'criar' ? 'Senha inicial' : 'Nova senha'}
+          </label>
+          <input
+            id="usuario-senha"
+            type="password"
+            autoFocus={janela.tipo === 'senha'}
+            value={formulario.senha}
+            onChange={(e) => mudar({ senha: e.target.value })}
+            autoComplete="new-password"
+            aria-describedby="usuario-senha-dica"
+            className={campo}
+          />
+          <p
+            id="usuario-senha-dica"
+            className={`mt-1.5 text-sm ${senhaCurta ? 'font-semibold text-atencao' : 'text-muted-foreground'}`}
           >
-            <Plus className="w-5 h-5" />
-            Adicionar Usuário
-          </button>
+            Pelo menos {TAMANHO_MINIMO_DA_SENHA} caracteres.
+          </p>
         </div>
-      </div>
+      )}
+
+      {(janela.tipo === 'criar' || janela.tipo === 'editar') && (
+        <>
+          <div>
+            <label htmlFor="usuario-papel" className={rotuloDoCampo}>
+              Papel
+            </label>
+            <select
+              id="usuario-papel"
+              value={formulario.papel}
+              onChange={(e) => mudar({ papel: e.target.value as Papel })}
+              disabled={editandoASiMesmo}
+              aria-describedby="usuario-papel-dica"
+              className={`${campo} disabled:cursor-not-allowed disabled:bg-muted`}
+            >
+              {PAPEIS.map((papel) => (
+                <option key={papel} value={papel}>
+                  {ROTULO_DO_PAPEL[papel]}
+                </option>
+              ))}
+            </select>
+            <p id="usuario-papel-dica" className="mt-1.5 text-sm text-muted-foreground">
+              {editandoASiMesmo
+                ? 'Você não pode tirar o próprio acesso de administrador. Peça a outro administrador.'
+                : O_QUE_O_PAPEL_FAZ[formulario.papel]}
+            </p>
+          </div>
+          <div>
+            <label htmlFor="usuario-setor" className={rotuloDoCampo}>
+              Setor <span className="font-normal text-muted-foreground">(opcional)</span>
+            </label>
+            <input
+              id="usuario-setor"
+              value={formulario.setor}
+              onChange={(e) => mudar({ setor: e.target.value })}
+              placeholder="Ex.: Cozinha, Salão"
+              className={campo}
+            />
+          </div>
+        </>
+      )}
 
       {erro && (
-        <p className="mb-6 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+        <p role="alert" className="rounded-xl bg-perigo-fundo px-3.5 py-3 text-sm font-semibold text-perigo">
           {erro}
         </p>
       )}
 
-      <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-100">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Nome</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">E-mail</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Perfil</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Setor</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filtrados.map((usuario) => {
-                const papel = CONFIG_PAPEL[usuario.papel] ?? PAPEL_DESCONHECIDO;
-                const souEu = usuario.id === euId;
-
-                return (
-                  <tr key={usuario.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {usuario.nome}
-                      {souEu && <span className="text-gray-400 font-normal"> (você)</span>}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{usuario.email}</td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${papel.classe}`}
-                      >
-                        {papel.rotulo}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{usuario.setor ?? '—'}</td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          usuario.ativo
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}
-                      >
-                        {usuario.ativo ? 'Ativo' : 'Inativo'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => abrirEditar(usuario)}
-                          title="Editar"
-                          className="text-slate-700 hover:text-slate-900 p-2"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => abrirSenha(usuario)}
-                          title="Redefinir senha"
-                          className="text-slate-700 hover:text-slate-900 p-2"
-                        >
-                          <KeyRound className="w-4 h-4" />
-                        </button>
-                        {/* A própria conta não aparece com a ação: o backend recusa, e
-                            oferecer um botão que sempre dá erro é pior que não ter. */}
-                        {!souEu && (
-                          <button
-                            onClick={() => alternarSituacao(usuario)}
-                            title={usuario.ativo ? 'Desativar' : 'Reativar'}
-                            className={
-                              usuario.ativo
-                                ? 'text-red-600 hover:text-red-700 p-2'
-                                : 'text-green-600 hover:text-green-700 p-2'
-                            }
-                          >
-                            {usuario.ativo ? (
-                              <UserX className="w-4 h-4" />
-                            ) : (
-                              <UserCheck className="w-4 h-4" />
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {filtrados.length === 0 && (
-          <p className="px-6 py-10 text-center text-gray-600">
-            {usuarios.length === 0
-              ? 'Nenhum usuário cadastrado.'
-              : 'Nenhum usuário encontrado para esta busca.'}
-          </p>
-        )}
+      <div className="mt-1 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        {/* Na confirmação de desativar, o foco começa no "Cancelar": um Enter distraído
+            não pode tirar o acesso de alguém. */}
+        <button
+          type="button"
+          onClick={aoCancelar}
+          autoFocus={janela.tipo === 'desativar'}
+          className={botaoSecundario}
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          disabled={salvando || !podeSalvar}
+          className={
+            janela.tipo === 'desativar'
+              ? 'inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-perigo px-4 font-semibold text-white transition-colors hover:bg-[#8c1d15] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+              : botaoPrimario
+          }
+        >
+          {salvando && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+          {janela.tipo === 'criar'
+            ? 'Adicionar'
+            : janela.tipo === 'desativar'
+              ? 'Desativar'
+              : janela.tipo === 'senha'
+                ? 'Redefinir senha'
+                : 'Salvar'}
+        </button>
       </div>
-
-      {modalAberto && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full max-h-full overflow-y-auto">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">
-              {modalAberto === 'criar' && 'Adicionar Novo Usuário'}
-              {modalAberto === 'editar' && 'Editar Usuário'}
-              {modalAberto === 'senha' && 'Redefinir Senha'}
-            </h2>
-
-            {modalAberto === 'senha' ? (
-              <div className="space-y-4">
-                <p className="text-gray-600">
-                  Definindo uma nova senha para <strong>{emFoco?.nome}</strong>. A senha
-                  anterior deixa de valer imediatamente.
-                </p>
-                <div>
-                  <label className={rotulo}>Nova senha</label>
-                  <input
-                    type="password"
-                    value={formulario.senha}
-                    onChange={(e) => setFormulario({ ...formulario, senha: e.target.value })}
-                    placeholder="Mínimo de 8 caracteres"
-                    className={campo}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <label className={rotulo}>Nome completo</label>
-                  <input
-                    type="text"
-                    value={formulario.nome}
-                    onChange={(e) => setFormulario({ ...formulario, nome: e.target.value })}
-                    placeholder="Nome do usuário"
-                    className={campo}
-                  />
-                </div>
-                <div>
-                  <label className={rotulo}>E-mail</label>
-                  <input
-                    type="email"
-                    value={formulario.email}
-                    onChange={(e) => setFormulario({ ...formulario, email: e.target.value })}
-                    placeholder="email@restaurante.com"
-                    className={campo}
-                  />
-                </div>
-                {modalAberto === 'criar' && (
-                  <div>
-                    <label className={rotulo}>Senha inicial</label>
-                    <input
-                      type="password"
-                      value={formulario.senha}
-                      onChange={(e) => setFormulario({ ...formulario, senha: e.target.value })}
-                      placeholder="Mínimo de 8 caracteres"
-                      className={campo}
-                    />
-                  </div>
-                )}
-                <div>
-                  <label className={rotulo}>Perfil</label>
-                  <select
-                    value={formulario.papel}
-                    onChange={(e) =>
-                      setFormulario({ ...formulario, papel: e.target.value as Papel })
-                    }
-                    className={campo}
-                  >
-                    {PAPEIS.map((papel) => (
-                      <option key={papel} value={papel}>
-                        {CONFIG_PAPEL[papel].rotulo}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={rotulo}>Setor (opcional)</label>
-                  <input
-                    type="text"
-                    value={formulario.setor}
-                    onChange={(e) => setFormulario({ ...formulario, setor: e.target.value })}
-                    placeholder="Ex.: Cozinha, Salão"
-                    className={campo}
-                  />
-                </div>
-              </div>
-            )}
-
-            {senhaCurta && (
-              <p className="mt-4 text-sm text-amber-700">
-                A senha precisa ter ao menos {TAMANHO_MINIMO_DA_SENHA} caracteres.
-              </p>
-            )}
-
-            {erroDoModal && (
-              <p className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                {erroDoModal}
-              </p>
-            )}
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={fechar}
-                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-semibold transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={salvar}
-                disabled={salvando || !podeSalvar}
-                className="flex-1 bg-slate-700 hover:bg-slate-800 text-white py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {salvando && <Loader2 className="w-4 h-4 animate-spin" />}
-                {modalAberto === 'criar' ? 'Adicionar' : 'Salvar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    </form>
   );
 }

@@ -1,93 +1,293 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Bell,
-  Clock,
-  Shield,
-  Building2,
-  Plus,
-  Check,
-  X,
-  Pencil,
-  Loader2,
-} from 'lucide-react';
+import { Check, Loader2, Pencil, Plus, X } from 'lucide-react';
 import {
   atualizarArea,
   buscarConfiguracoes,
   criarArea,
+  deixarAvisoParaOLogin,
   encerrarSessao,
   idadeDaSessaoEmHoras,
   listarAreas,
+  ROTA_DE_LOGIN,
   salvarConfiguracoes,
   tokenDaSessao,
-  usuarioLogado,
   type Area,
 } from '../../services/api';
+import { avisarRapido } from '../../avisoRapido';
+import { CabecalhoDaPagina, Cartao, Esqueleto, Pagina } from '../layout/Pagina';
 
 const campo =
-  'w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-700';
+  'h-11 w-full min-w-0 rounded-xl border border-border bg-input-background px-3.5 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const botaoPrimario =
+  'inline-flex h-11 flex-none items-center justify-center gap-2 rounded-xl bg-primary px-4 font-semibold text-primary-foreground transition-colors hover:bg-[#0a5242] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const botaoDeIcone =
+  'flex size-9 flex-none items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-// Seções cuja funcionalidade ainda não existe no sistema. Mostrar o controle
-// desligado e dizer de que ele depende é mais honesto do que um botão que finge
-// salvar — e deixa claro para a equipe o que falta.
-function SecaoPendente({
-  icone,
-  titulo,
-  descricao,
-  dependeDe,
-}: {
-  icone: React.ReactNode;
-  titulo: string;
-  descricao: string;
-  dependeDe: string;
-}) {
+function mensagemDeFalha(e: unknown) {
+  const status = (e as { status?: number }).status;
+  if (status === 409) return 'Já existe uma área com esse nome.';
+  if (status === 403) return 'Só administradores podem alterar as configurações.';
+  return e instanceof Error && e.message ? e.message : 'Algo deu errado. Tente novamente.';
+}
+
+export function AdminSettings() {
+  const token = tokenDaSessao() ?? '';
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 opacity-75">
-      <div className="flex items-center gap-3 mb-3">
-        {icone}
-        <h2 className="text-xl font-bold text-gray-900">{titulo}</h2>
-        <span className="ml-auto text-xs font-semibold bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
-          Em desenvolvimento
-        </span>
+    <Pagina>
+      <CabecalhoDaPagina titulo="Configurações" descricao="As áreas do restaurante e as regras de acesso ao Echo." />
+      {/* Duas colunas só em tela larga: as áreas são a lista que cresce, e ficam à
+          esquerda; o resto é curto. */}
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+        <SecaoDeAreas token={token} />
+        <div className="flex min-w-0 flex-col gap-4">
+          <SecaoTempoDeSessao token={token} />
+          <SecaoAindaNaoDisponivel />
+        </div>
       </div>
-      <p className="text-gray-600">{descricao}</p>
-      <p className="text-sm text-gray-500 mt-2">Depende de: {dependeDe}</p>
-    </div>
+    </Pagina>
   );
 }
 
+// ---------- Áreas ----------
+
+function SecaoDeAreas({ token }: { token: string }) {
+  const [areas, setAreas] = useState<Area[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [novoNome, setNovoNome] = useState('');
+  const [criando, setCriando] = useState(false);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [nomeEditado, setNomeEditado] = useState('');
+  const [ocupadoId, setOcupadoId] = useState<string | null>(null);
+  const buscaAtual = useRef(0);
+
+  // Sessão vencida (401) é tratada no serviço da API, que leva ao login.
+  const carregar = () => {
+    const minhaVez = ++buscaAtual.current;
+    listarAreas()
+      .then((res) => {
+        if (minhaVez === buscaAtual.current) setAreas(res.itens);
+      })
+      .catch((e) => {
+        if (minhaVez === buscaAtual.current) setErro(mensagemDeFalha(e));
+      });
+  };
+
+  useEffect(() => {
+    carregar();
+    return () => {
+      buscaAtual.current++;
+    };
+  }, []);
+
+  const adicionar = async (e: FormEvent) => {
+    e.preventDefault();
+    const nome = novoNome.trim();
+    if (!nome) return;
+    setErro(null);
+    setCriando(true);
+    try {
+      await criarArea(nome, token);
+      setNovoNome('');
+      avisarRapido(`Área "${nome}" cadastrada. Gere o QR Code dela na tela de QR Codes.`);
+      carregar();
+    } catch (falha) {
+      setErro(mensagemDeFalha(falha));
+    } finally {
+      setCriando(false);
+    }
+  };
+
+  const salvarNome = async (area: Area) => {
+    const nome = nomeEditado.trim();
+    if (!nome) return;
+    if (nome === area.nome) {
+      setEditandoId(null);
+      return;
+    }
+    setErro(null);
+    setOcupadoId(area.id);
+    try {
+      await atualizarArea(area.id, { nome }, token);
+      setEditandoId(null);
+      avisarRapido(`Área renomeada para "${nome}"`);
+      carregar();
+    } catch (falha) {
+      setErro(mensagemDeFalha(falha));
+    } finally {
+      setOcupadoId(null);
+    }
+  };
+
+  const alternar = async (area: Area) => {
+    setErro(null);
+    setOcupadoId(area.id);
+    try {
+      await atualizarArea(area.id, { ativo: !area.ativo }, token);
+      avisarRapido(area.ativo ? `"${area.nome}" desativada` : `"${area.nome}" reativada`);
+      carregar();
+    } catch (falha) {
+      setErro(mensagemDeFalha(falha));
+    } finally {
+      setOcupadoId(null);
+    }
+  };
+
+  // Ativas primeiro, em ordem alfabética com número natural ("Mesa 2" antes de "Mesa 10").
+  const ordenadas = [...(areas ?? [])].sort(
+    (a, b) => Number(b.ativo) - Number(a.ativo) || a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true })
+  );
+
+  return (
+    <Cartao
+      titulo="Áreas do restaurante"
+      descricao="Cada mesa ou espaço que recebe um QR Code. Desativada, a área sai da tela de QR Codes e o código dela para de abrir o formulário; o histórico continua."
+    >
+      {erro && (
+        <p role="alert" className="mb-4 rounded-xl bg-perigo-fundo px-3.5 py-3 text-sm font-semibold text-perigo">
+          {erro}
+        </p>
+      )}
+
+      {!areas ? (
+        !erro && (
+          <div className="flex flex-col gap-2" aria-busy="true" aria-label="Carregando áreas">
+            {[0, 1, 2].map((i) => (
+              <Esqueleto key={i} className="h-12" />
+            ))}
+          </div>
+        )
+      ) : (
+        <>
+          {ordenadas.length === 0 ? (
+            <p className="mb-4 text-sm text-muted-foreground">
+              Nenhuma área ainda. Cadastre as mesas e espaços para gerar os QR Codes.
+            </p>
+          ) : (
+            <ul className="mb-4 -my-1 divide-y divide-[#efefea]">
+              {ordenadas.map((area) => {
+                const emEdicao = editandoId === area.id;
+                const ocupado = ocupadoId === area.id;
+                return (
+                  <li key={area.id} className="flex items-center gap-2 py-2">
+                    {emEdicao ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          salvarNome(area);
+                        }}
+                        className="flex min-w-0 flex-1 items-center gap-2"
+                      >
+                        <label htmlFor={`area-${area.id}`} className="sr-only">
+                          Novo nome de {area.nome}
+                        </label>
+                        <input
+                          id={`area-${area.id}`}
+                          value={nomeEditado}
+                          onChange={(e) => setNomeEditado(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Escape' && setEditandoId(null)}
+                          autoFocus
+                          className={campo}
+                        />
+                        <button
+                          type="submit"
+                          disabled={ocupado || !nomeEditado.trim()}
+                          aria-label="Salvar o nome"
+                          title="Salvar"
+                          className={`${botaoDeIcone} text-primary`}
+                        >
+                          {ocupado ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Check className="size-5" aria-hidden="true" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditandoId(null)}
+                          aria-label="Cancelar"
+                          title="Cancelar"
+                          className={botaoDeIcone}
+                        >
+                          <X className="size-5" aria-hidden="true" />
+                        </button>
+                      </form>
+                    ) : (
+                      <>
+                        <span className={`min-w-0 flex-1 font-semibold break-words ${area.ativo ? '' : 'text-muted-foreground'}`}>
+                          {area.nome}
+                          {!area.ativo && (
+                            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground">
+                              Desativada
+                            </span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditandoId(area.id);
+                            setNomeEditado(area.nome);
+                            setErro(null);
+                          }}
+                          aria-label={`Renomear ${area.nome}`}
+                          title="Renomear"
+                          className={botaoDeIcone}
+                        >
+                          <Pencil className="size-4" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => alternar(area)}
+                          disabled={ocupado}
+                          className={`h-9 flex-none rounded-lg px-2.5 text-sm font-bold transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                            area.ativo ? 'text-perigo hover:bg-perigo-fundo' : 'text-primary hover:bg-accent'
+                          }`}
+                        >
+                          {ocupado ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : area.ativo ? 'Desativar' : 'Reativar'}
+                        </button>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <form onSubmit={adicionar} className="flex flex-wrap gap-2 border-t border-border pt-4">
+            <label htmlFor="nova-area" className="sr-only">
+              Nome da nova área
+            </label>
+            <input
+              id="nova-area"
+              value={novoNome}
+              onChange={(e) => setNovoNome(e.target.value)}
+              placeholder="Nova área. Ex.: Mesa 15, Varanda"
+              className={`${campo} flex-[1_1_12rem]`}
+            />
+            <button type="submit" disabled={criando || !novoNome.trim()} className={botaoPrimario}>
+              {criando ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Plus className="size-4" aria-hidden="true" />}
+              Adicionar
+            </button>
+          </form>
+        </>
+      )}
+    </Cartao>
+  );
+}
+
+// ---------- Tempo de sessão ----------
+
 const OPCOES_DE_DURACAO = [1, 2, 4, 8, 12, 24];
+const DURACAO_PADRAO = 8;
 
 function rotuloDeHoras(horas: number) {
   return horas === 1 ? '1 hora' : `${horas} horas`;
 }
 
-// Tempo de sessão: por quanto tempo um login vale. O backend confere a idade da
-// sessão a cada requisição, então salvar vale na hora para todas as sessões abertas.
-function SecaoTempoDeSessao({
-  token,
-  aoFalhar,
-}: {
-  token: string;
-  aoFalhar: (e: unknown) => void;
-}) {
+// Por quanto tempo um login vale. O backend confere a idade da sessão a cada
+// requisição, então salvar vale na hora para todas as sessões abertas.
+function SecaoTempoDeSessao({ token }: { token: string }) {
   const navigate = useNavigate();
   const [salvo, setSalvo] = useState<number | null>(null);
   const [escolhido, setEscolhido] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [confirmacao, setConfirmacao] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-
-  // Sessão vencida e falta de permissão são da página (login, "acesso restrito").
-  // O resto fica aqui: a página mostra erro dentro do cartão de áreas.
-  const tratarFalha = (e: unknown) => {
-    const status = (e as { status?: number }).status;
-    if (status === 401 || status === 403) {
-      aoFalhar(e);
-      return;
-    }
-    setErro(e instanceof Error ? e.message : 'Não foi possível salvar.');
-  };
 
   useEffect(() => {
     let ativo = true;
@@ -98,12 +298,11 @@ function SecaoTempoDeSessao({
         setEscolhido(res.duracaoSessaoHoras);
       })
       .catch((e) => {
-        if (ativo) tratarFalha(e);
+        if (ativo) setErro(mensagemDeFalha(e));
       });
     return () => {
       ativo = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   // Valor salvo fora da lista (gravado pela API, por exemplo) continua selecionável.
@@ -117,378 +316,106 @@ function SecaoTempoDeSessao({
   const idade = idadeDaSessaoEmHoras();
   const vaiEncerrarAPropria = escolhido !== null && idade !== null && idade > escolhido;
 
-  const salvar = async () => {
+  const salvar = async (e: FormEvent) => {
+    e.preventDefault();
     if (escolhido === null) return;
     setSalvando(true);
-    setConfirmacao(null);
     setErro(null);
     try {
       const res = await salvarConfiguracoes({ duracaoSessaoHoras: escolhido }, token);
       if (vaiEncerrarAPropria) {
         encerrarSessao();
-        navigate('/gerente/login');
+        deixarAvisoParaOLogin(`Tempo de sessão salvo em ${rotuloDeHoras(escolhido)}. Entre de novo para continuar.`);
+        navigate(ROTA_DE_LOGIN, { replace: true });
         return;
       }
       setSalvo(res.duracaoSessaoHoras);
-      setConfirmacao('Salvo. Já vale para todas as sessões abertas.');
-    } catch (e) {
-      tratarFalha(e);
+      avisarRapido(`Tempo de sessão: ${rotuloDeHoras(res.duracaoSessaoHoras)}. Já vale para todos.`);
+    } catch (falha) {
+      setErro(mensagemDeFalha(falha));
     } finally {
       setSalvando(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6">
-      <div className="flex items-center gap-3 mb-2">
-        <Clock className="w-6 h-6 text-slate-700" />
-        <h2 className="text-xl font-bold text-gray-900">Tempo de Sessão</h2>
-      </div>
-      <p className="text-gray-600 mb-4">
-        Por quanto tempo um login continua válido. Depois disso, é preciso entrar de novo.
-        Quem não marca "Manter conectado" ao entrar sai antes, ao fechar o navegador.
-      </p>
-
+    <Cartao
+      titulo="Tempo de sessão"
+      descricao={'Por quanto tempo um login continua valendo. Quem não marca "Manter conectado" ao entrar sai antes, ao fechar o navegador.'}
+    >
       {erro && (
-        <p className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+        <p role="alert" className="mb-3 rounded-xl bg-perigo-fundo px-3.5 py-3 text-sm font-semibold text-perigo">
           {erro}
         </p>
       )}
 
       {salvo === null ? (
-        !erro && <Loader2 className="w-6 h-6 animate-spin text-slate-700" />
+        !erro && <Esqueleto className="h-11" />
       ) : (
-        <>
-          <div className="flex flex-col sm:flex-row gap-3">
+        <form onSubmit={salvar}>
+          <div className="flex flex-wrap gap-2">
+            <label htmlFor="duracao-sessao" className="sr-only">
+              Tempo de sessão
+            </label>
             <select
+              id="duracao-sessao"
               value={escolhido ?? ''}
-              onChange={(e) => {
-                setEscolhido(Number(e.target.value));
-                setConfirmacao(null);
-              }}
-              className={campo}
+              onChange={(e) => setEscolhido(Number(e.target.value))}
+              className={`${campo} flex-[1_1_10rem]`}
             >
               {opcoes.map((horas) => (
                 <option key={horas} value={horas}>
                   {rotuloDeHoras(horas)}
-                  {horas === 8 ? ' (padrão)' : ''}
+                  {horas === DURACAO_PADRAO ? ' (padrão)' : ''}
                 </option>
               ))}
             </select>
-            <button
-              onClick={salvar}
-              disabled={salvando || escolhido === salvo}
-              className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {salvando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+            <button type="submit" disabled={salvando || escolhido === salvo} className={botaoPrimario}>
+              {salvando && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
               Salvar
             </button>
           </div>
-
-          <p className="text-sm text-gray-500 mt-3">
-            Vale na hora para todas as sessões abertas: encurtar encerra as que já passaram do
-            novo limite, e alongar estende as que ainda estão valendo.
+          <p className="mt-3 text-sm text-muted-foreground">
+            Vale na hora: encurtar encerra as sessões que já passaram do novo limite, e alongar estende as
+            que ainda valem.
           </p>
-
           {vaiEncerrarAPropria && escolhido !== salvo && (
-            <p className="mt-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-              A sua sessão está aberta há mais de {rotuloDeHoras(escolhido!)}. Ao salvar, você vai
-              precisar entrar de novo.
+            <p role="status" className="mt-3 rounded-xl bg-[#fdf6ea] px-3.5 py-3 text-sm font-semibold text-[#5c3a07]">
+              A sua sessão está aberta há mais de {rotuloDeHoras(escolhido!)}. Ao salvar, você vai precisar
+              entrar de novo.
             </p>
           )}
-          {confirmacao && (
-            <p className="mt-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-              {confirmacao}
-            </p>
-          )}
-        </>
+        </form>
       )}
-    </div>
+    </Cartao>
   );
 }
 
-export function AdminSettings() {
-  const navigate = useNavigate();
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
-  const [semPermissao, setSemPermissao] = useState(false);
+// ---------- O que ainda não existe ----------
 
-  const [novoNome, setNovoNome] = useState('');
-  const [criando, setCriando] = useState(false);
-  const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [nomeEditado, setNomeEditado] = useState('');
-  const [salvandoId, setSalvandoId] = useState<string | null>(null);
-
-  const token = tokenDaSessao();
-  const buscaAtual = useRef(0);
-
-  // A listagem de áreas é aberta, então sem esta checagem um gerente veria os botões
-  // de editar e só descobriria que não pode ao clicar e tomar 403. O backend continua
-  // sendo a autoridade — isto é só para não oferecer o que vai ser recusado.
-  const naoEAdministrador = usuarioLogado()?.papel !== 'ADMINISTRADOR';
-
-  const tratarFalha = (e: unknown) => {
-    const status = (e as { status?: number }).status;
-    if (status === 401) {
-      encerrarSessao();
-      navigate('/gerente/login');
-      return;
-    }
-    if (status === 403) {
-      setSemPermissao(true);
-      return;
-    }
-    if (status === 409) {
-      setErro('Já existe uma área com esse nome neste restaurante.');
-      return;
-    }
-    setErro(e instanceof Error ? e.message : 'Algo deu errado. Tente novamente.');
-  };
-
-  const carregar = () => {
-    const minhaVez = ++buscaAtual.current;
-    listarAreas()
-      .then((res) => {
-        if (minhaVez === buscaAtual.current) setAreas(res.itens);
-      })
-      .catch((e) => {
-        if (minhaVez === buscaAtual.current) tratarFalha(e);
-      })
-      .finally(() => {
-        if (minhaVez === buscaAtual.current) setCarregando(false);
-      });
-  };
-
-  useEffect(() => {
-    if (!token) {
-      navigate('/gerente/login');
-      return;
-    }
-    carregar();
-    return () => {
-      buscaAtual.current++;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  const adicionar = async () => {
-    if (!token || novoNome.trim().length === 0) return;
-    setErro(null);
-    setCriando(true);
-    try {
-      await criarArea(novoNome, token);
-      setNovoNome('');
-      carregar();
-    } catch (e) {
-      tratarFalha(e);
-    } finally {
-      setCriando(false);
-    }
-  };
-
-  const salvarNome = async (area: Area) => {
-    if (!token || nomeEditado.trim().length === 0) return;
-    setErro(null);
-    setSalvandoId(area.id);
-    try {
-      await atualizarArea(area.id, { nome: nomeEditado }, token);
-      setEditandoId(null);
-      carregar();
-    } catch (e) {
-      tratarFalha(e);
-    } finally {
-      setSalvandoId(null);
-    }
-  };
-
-  const alternarSituacao = async (area: Area) => {
-    if (!token) return;
-    setErro(null);
-    setSalvandoId(area.id);
-    try {
-      await atualizarArea(area.id, { ativo: !area.ativo }, token);
-      carregar();
-    } catch (e) {
-      tratarFalha(e);
-    } finally {
-      setSalvandoId(null);
-    }
-  };
-
-  const moldura = (conteudo: React.ReactNode) => (
-    <div>
-      <div className="max-w-4xl mx-auto p-4 pb-8">
-        <div className="pt-6 pb-4">
-          <h1 className="text-2xl font-bold text-gray-900">Configurações do Sistema</h1>
-          <p className="text-gray-600 mt-1">Personalize preferências e segurança</p>
-        </div>
-        {conteudo}
-      </div>
-    </div>
-  );
-
-  if (semPermissao || naoEAdministrador) {
-    return moldura(
-      <div className="bg-white rounded-2xl shadow-lg p-8 text-center space-y-2">
-        <h2 className="text-lg font-bold text-gray-900">Acesso restrito</h2>
-        <p className="text-gray-600">
-          Apenas administradores podem alterar as configurações do sistema.
-        </p>
-      </div>
-    );
-  }
-
-  return moldura(
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Building2 className="w-6 h-6 text-slate-700" />
-          <h2 className="text-xl font-bold text-gray-900">Setores e Áreas</h2>
-        </div>
-        <p className="text-gray-600 mb-6">
-          Cada área pode receber um QR Code próprio. Áreas desativadas deixam de ser
-          oferecidas na geração de códigos, mas continuam no histórico dos feedbacks.
-        </p>
-
-        {erro && (
-          <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-            {erro}
-          </p>
-        )}
-
-        {carregando ? (
-          <div className="flex justify-center py-10">
-            <Loader2 className="w-7 h-7 animate-spin text-slate-700" />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {areas.map((area) => {
-              const emEdicao = editandoId === area.id;
-              const ocupado = salvandoId === area.id;
-
-              return (
-                <div key={area.id} className="flex items-center gap-3">
-                  {emEdicao ? (
-                    <>
-                      <input
-                        type="text"
-                        value={nomeEditado}
-                        onChange={(e) => setNomeEditado(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') salvarNome(area);
-                          if (e.key === 'Escape') setEditandoId(null);
-                        }}
-                        autoFocus
-                        className="flex-1 px-4 py-3 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-700"
-                      />
-                      <button
-                        onClick={() => salvarNome(area)}
-                        disabled={ocupado}
-                        title="Salvar"
-                        className="text-green-600 hover:text-green-700 p-3 disabled:opacity-50"
-                      >
-                        <Check className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => setEditandoId(null)}
-                        title="Cancelar"
-                        className="text-gray-500 hover:text-gray-700 p-3"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div
-                        className={`flex-1 px-4 py-3 border border-gray-200 rounded-xl flex items-center gap-3 ${
-                          area.ativo ? 'bg-white' : 'bg-gray-50'
-                        }`}
-                      >
-                        <span className={area.ativo ? 'text-gray-900' : 'text-gray-500'}>
-                          {area.nome}
-                        </span>
-                        {!area.ativo && (
-                          <span className="text-xs font-semibold bg-gray-200 text-gray-600 px-2 py-1 rounded-full">
-                            Inativa
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => {
-                          setEditandoId(area.id);
-                          setNomeEditado(area.nome);
-                          setErro(null);
-                        }}
-                        title="Renomear"
-                        className="text-slate-700 hover:text-slate-900 p-3"
-                      >
-                        <Pencil className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => alternarSituacao(area)}
-                        disabled={ocupado}
-                        className={`px-4 py-3 font-semibold disabled:opacity-50 ${
-                          area.ativo
-                            ? 'text-red-600 hover:text-red-700'
-                            : 'text-green-600 hover:text-green-700'
-                        }`}
-                      >
-                        {area.ativo ? 'Desativar' : 'Reativar'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-
-            {areas.length === 0 && (
-              <p className="text-center text-gray-600 py-6">Nenhuma área cadastrada ainda.</p>
-            )}
-
-            <div className="flex items-center gap-3 pt-2">
-              <input
-                type="text"
-                value={novoNome}
-                onChange={(e) => setNovoNome(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') adicionar();
-                }}
-                placeholder="Nome da nova área. Ex.: Mesa 15, Varanda"
-                className={campo}
-              />
-              <button
-                onClick={adicionar}
-                disabled={criando || novoNome.trim().length === 0}
-                className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-xl font-semibold transition-colors flex items-center gap-2 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {criando ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Plus className="w-5 h-5" />
-                )}
-                Adicionar
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <SecaoPendente
-        icone={<Bell className="w-6 h-6 text-slate-700" />}
-        titulo="Preferências de Notificação"
-        descricao="Os alertas de feedback novo já chegam dentro do sistema, no sino do cabeçalho, para toda a gestão ativa. Falta poder recebê-los também por e-mail ou como notificação do navegador."
-        dependeDe="um provedor de envio de e-mail e o push do navegador, que exigem infraestrutura fora do sistema"
-      />
-
-      {token && <SecaoTempoDeSessao token={token} aoFalhar={tratarFalha} />}
-
-      <SecaoPendente
-        icone={<Shield className="w-6 h-6 text-slate-700" />}
-        titulo="Retenção de Dados (LGPD)"
-        descricao="Definir por quanto tempo os feedbacks são guardados antes de serem excluídos."
-        dependeDe="rotina de expurgo periódico — guardar o prazo sem aplicá-lo não protege ninguém"
-      />
-    </div>
+// Dizer o que falta e de que depende é mais honesto do que um controle que finge
+// salvar, e deixa claro para a equipe o que vem depois.
+function SecaoAindaNaoDisponivel() {
+  const itens = [
+    {
+      titulo: 'Avisos por e-mail',
+      texto: 'Os alertas de feedback novo chegam no sino do Echo. Por e-mail depende de um serviço de envio.',
+    },
+    {
+      titulo: 'Retenção de dados (LGPD)',
+      texto: 'Por quanto tempo os feedbacks ficam guardados. Depende da rotina que apaga o que passou do prazo.',
+    },
+  ];
+  return (
+    <Cartao titulo="Ainda não disponível" descricao="Previsto, mas depende de algo fora desta tela.">
+      <ul className="flex flex-col gap-3">
+        {itens.map((item) => (
+          <li key={item.titulo} className="rounded-xl bg-[#f6f6f2] px-3.5 py-3">
+            <p className="text-sm font-bold">{item.titulo}</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">{item.texto}</p>
+          </li>
+        ))}
+      </ul>
+    </Cartao>
   );
 }

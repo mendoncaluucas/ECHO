@@ -358,7 +358,8 @@ Ativas primeiro, depois por nome. Devolve `{ "itens": [] }` quando não há áre
 
 **Resposta `201`:** a área criada, no formato da listagem.
 
-**Erros:** `400` `VALIDACAO` · `401` · `403` · `409` `CONFLITO` (nome já usado no restaurante).
+**Erros:** `400` `VALIDACAO` · `401` · `403` · `409` `CONFLITO` (nome já usado no restaurante, sem
+diferenciar maiúsculas: com "Mesa 12" cadastrada, "mesa 12" é recusada).
 
 ---
 
@@ -370,7 +371,8 @@ Ativas primeiro, depois por nome. Devolve `{ "itens": [] }` quando não há áre
 > **Área é desativada, nunca apagada.** Feedbacks e QR Codes já emitidos apontam para ela, e o
 > histórico precisa continuar fazendo sentido. Desativar só a retira das opções de novos QR Codes.
 
-**Erros:** `400` `VALIDACAO` · `401` · `403` · `404` `AREA_NAO_ENCONTRADA` · `409` `CONFLITO`.
+**Erros:** `400` `VALIDACAO` · `401` · `403` · `404` `AREA_NAO_ENCONTRADA` · `409` `CONFLITO` (nome de
+outra área do restaurante, sem diferenciar maiúsculas; mudar só a grafia da própria área é permitido).
 
 ---
 

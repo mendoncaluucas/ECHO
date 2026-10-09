@@ -26,6 +26,24 @@ function normalizar(nome: string) {
   return nome.trim();
 }
 
+// O índice único do banco compara o texto exato: "Mesa 12" e "mesa 12" entravam como
+// duas áreas, e o dashboard mostrava duas barras com o mesmo nome. A checagem aqui não
+// diferencia maiúsculas; a corrida rara entre dois cadastros iguais ao mesmo tempo
+// continua barrada pelo índice (P2002 → 409).
+async function nomeJaUsado(venueId: string, nome: string, excetoId?: string) {
+  const outra = await prisma.area.findFirst({
+    where: {
+      venueId,
+      nome: { equals: nome, mode: "insensitive" },
+      ...(excetoId && { id: { not: excetoId } }),
+    },
+    select: { id: true },
+  });
+  return outra !== null;
+}
+
+const NOME_REPETIDO = { erro: "Já existe uma área com esse nome", codigo: "CONFLITO" };
+
 // Com um único restaurante cadastrado — o caso do Sinuelo — não faz sentido exigir
 // venueId de quem está na tela. Com mais de um, a escolha passa a ser obrigatória.
 //
@@ -88,7 +106,10 @@ areasRoutes.post(
           });
     }
 
-    // Nome repetido no mesmo restaurante cai no P2002 e vira 409 no error handler.
+    if (await nomeJaUsado(venue.id, normalizar(nome))) {
+      return res.status(409).json(NOME_REPETIDO);
+    }
+
     const area = await prisma.$transaction(async (tx) => {
       const criada = await tx.area.create({
         data: { nome: normalizar(nome), venueId: venue.id },
@@ -126,7 +147,7 @@ areasRoutes.patch(
 
     const antes = await prisma.area.findUnique({
       where: { id: req.params.id },
-      select: { id: true, nome: true, ativo: true },
+      select: { id: true, nome: true, ativo: true, venueId: true },
     });
     if (!antes) {
       return res
@@ -136,6 +157,10 @@ areasRoutes.patch(
 
     const nomeNovo = nome !== undefined ? normalizar(nome) : undefined;
     const renomeou = nomeNovo !== undefined && nomeNovo !== antes.nome;
+    // A própria área fica de fora: "Mesa 12" → "MESA 12" é só mudar a grafia.
+    if (nomeNovo !== undefined && renomeou && (await nomeJaUsado(antes.venueId, nomeNovo, antes.id))) {
+      return res.status(409).json(NOME_REPETIDO);
+    }
     const mudouSituacao = ativo !== undefined && ativo !== antes.ativo;
     const usuarioId = req.usuario!.sub;
 
