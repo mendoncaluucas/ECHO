@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, QrCode } from 'lucide-react';
 import { Marca } from './layout/Marca';
 import { papelPodeAbrir } from '../navegacao';
+import { precarregarTelasDaGestao } from '../telasDaGestao';
 import {
   lerAvisoDoLogin,
   login,
@@ -38,6 +39,13 @@ export function Entrar() {
   const relogio = useRef<number>();
 
   useEffect(() => () => window.clearTimeout(relogio.current), []);
+
+  // Quem está no login é da equipe: enquanto digita a senha, o menu e as telas iniciais
+  // baixam em segundo plano, e entrar não espera a rede. O resto vem depois, conforme
+  // o papel de quem entrou.
+  useEffect(() => {
+    precarregarTelasDaGestao();
+  }, []);
 
   // Quem já está logado e abre a raiz vai direto ao próprio painel.
   const sessao = sessaoAtual();

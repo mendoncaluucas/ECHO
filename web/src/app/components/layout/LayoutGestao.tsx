@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Bell, LogOut, Menu } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '../ui/sheet';
@@ -8,6 +8,22 @@ import { AvisoRapido } from './AvisoRapido';
 import { useContadores, type Contadores } from '../../hooks/useContadores';
 import { menuDo, rotuloDaRota, ROTULO_DO_PAPEL, type ItemDoMenu } from '../../navegacao';
 import { encerrarSessao, ROTA_DE_LOGIN, type Usuario } from '../../services/api';
+import { precarregarTelasDaGestao } from '../../telasDaGestao';
+import { Esqueleto, Pagina } from './Pagina';
+
+// Enquanto a tela baixa: a mesma moldura das telas, com formas no lugar do conteúdo.
+// Na prática aparece pouco, porque as telas já vêm baixadas em segundo plano.
+function CarregandoTela() {
+  return (
+    <Pagina>
+      <div aria-busy="true" aria-label="Carregando a tela">
+        <Esqueleto className="mb-2 h-4 w-32" />
+        <Esqueleto className="mb-6 h-9 w-64 max-w-full" />
+        <Esqueleto className="h-64 rounded-2xl" />
+      </div>
+    </Pagina>
+  );
+}
 
 function iniciais(nome: string) {
   const partes = nome.trim().split(/\s+/);
@@ -122,6 +138,12 @@ export function LayoutGestao({ usuario }: { usuario: Usuario }) {
     setMenuAberto(false);
   }, [location.pathname]);
 
+  // As outras telas que este papel pode abrir baixam em segundo plano: o clique no
+  // menu não espera a rede.
+  useEffect(() => {
+    precarregarTelasDaGestao(usuario.papel);
+  }, [usuario.papel]);
+
   // A aba diz em que tela se está: com várias abertas, "Echo" em todas não ajuda.
   useEffect(() => {
     const rotulo = rotuloDaRota(location.pathname);
@@ -188,7 +210,10 @@ export function LayoutGestao({ usuario }: { usuario: Usuario }) {
           <main id="conteudo" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
             {/* Chave por tela: um erro numa tela não prende as próximas. */}
             <ErrorBoundary key={location.pathname}>
-              <Outlet />
+              {/* A tela chega sob demanda; o menu fica parado e só o conteúdo espera. */}
+              <Suspense fallback={<CarregandoTela />}>
+                <Outlet />
+              </Suspense>
             </ErrorBoundary>
           </main>
           <AvisoRapido />

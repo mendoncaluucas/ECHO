@@ -17,6 +17,17 @@ interface State {
   erro: Error | null;
 }
 
+// A tela não chegou: sem internet, ou um arquivo de outra versão (ver telasDaGestao.ts).
+// As mensagens mudam de navegador para navegador.
+function ehFalhaAoBaixarATela(erro: Error) {
+  return (
+    !navigator.onLine ||
+    /dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(
+      erro.message
+    )
+  );
+}
+
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { erro: null };
 
@@ -46,10 +57,22 @@ export class ErrorBoundary extends Component<Props, State> {
             <AlertTriangle className="w-8 h-8 text-red-600" />
           </div>
 
-          <h1 className="text-xl font-bold text-gray-900">Algo deu errado nesta tela</h1>
-          <p className="text-gray-600">
-            O problema foi registrado. Você pode tentar de novo ou voltar ao início.
-          </p>
+          {/* Falha ao baixar pede ação de quem está usando (conferir a internet); erro
+              do código, não. Antes as duas diziam "o problema foi registrado", que não
+              ajudava quem estava sem conexão (e não havia registro nenhum além do console). */}
+          {ehFalhaAoBaixarATela(erro) ? (
+            <>
+              <h1 className="text-xl font-bold text-gray-900">Não foi possível abrir esta tela</h1>
+              <p className="text-gray-600">
+                Confira a conexão com a internet e toque em Recarregar.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-xl font-bold text-gray-900">Algo deu errado nesta tela</h1>
+              <p className="text-gray-600">Você pode tentar de novo ou voltar ao início.</p>
+            </>
+          )}
 
           {/* A mensagem ajuda a equipe a identificar o problema sem abrir o DevTools. */}
           <details className="text-left">

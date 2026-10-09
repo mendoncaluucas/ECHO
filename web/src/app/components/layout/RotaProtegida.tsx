@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { Lock } from 'lucide-react';
-import { LayoutGestao } from './LayoutGestao';
+import { LayoutGestaoSobDemanda } from '../../telasDaGestao';
+import { Marca } from './Marca';
 import {
   ROTA_DE_LOGIN,
   sessaoAtual,
@@ -29,7 +30,23 @@ export function RotaProtegida() {
     );
   }
 
-  return <LayoutGestao usuario={sessao.usuario} />;
+  // O menu vem sob demanda (o cliente nunca o usa). Vindo do login, já foi baixado em
+  // segundo plano; aberto direto de um favorito, leva um instante, e a marca no meio
+  // diz que algo está chegando, em vez de uma tela vazia.
+  return (
+    <Suspense
+      fallback={
+        <div role="status" className="flex min-h-full items-center justify-center bg-background">
+          <span className="animate-pulse">
+            <Marca />
+          </span>
+          <span className="sr-only">Carregando o Echo</span>
+        </div>
+      }
+    >
+      <LayoutGestaoSobDemanda usuario={sessao.usuario} />
+    </Suspense>
+  );
 }
 
 // Tela que só alguns papéis abrem. O menu já não oferece a tela a quem não pode; isto
