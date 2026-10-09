@@ -374,6 +374,22 @@ Ativas primeiro, depois por nome. Devolve `{ "itens": [] }` quando não há áre
 
 ---
 
+## 9.3. `GET /api/categorias` — listar categorias de avaliação
+**Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Em ordem alfabética, para os filtros
+da gestão. O cliente recebe as categorias pelo `GET /api/public/venue/:qrToken`.
+
+**Resposta `200`:**
+```json
+{ "itens": [ { "id": "uuid", "nome": "Alimento" }, { "id": "uuid", "nome": "Atendimento" } ] }
+```
+
+> Os filtros montavam a lista a partir das ocorrências já carregadas, ou a tinham escrita no
+> código. Vindo daqui, uma categoria nova no banco aparece sem mexer no front.
+
+**Erros:** `401` · `403` `SEM_PERMISSAO`.
+
+---
+
 ## 10. `GET /api/metrics` — números do dashboard
 **Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Devolve os agregados do período, já calculados no servidor — o front não faz conta.
 
