@@ -14,24 +14,24 @@ import { ExigePapel, RotaProtegida } from './components/layout/RotaProtegida';
 import { ADMINISTRACAO, GERENCIA, GESTAO, rotuloDaRota } from './navegacao';
 import { EVENTO_SESSAO_ENCERRADA, ROTA_DE_LOGIN } from './services/api';
 
+// O que o cliente usa vem no arquivo principal; as telas da gestão, sob demanda
+// (ver telasDaGestao.ts).
 import { FeedbackForm } from './components/customer/FeedbackForm';
 import { Success } from './components/customer/Success';
-
-import { OccurrencesPanel } from './components/coordinator/OccurrencesPanel';
-import { OccurrenceDetail } from './components/coordinator/OccurrenceDetail';
-
-import { ManagerDashboard } from './components/manager/Dashboard';
-import { IssueRegistry } from './components/manager/IssueRegistry';
-import { Reports } from './components/manager/Reports';
-
-import { AdminDashboard } from './components/admin/Dashboard';
-import { UserManagement } from './components/admin/UserManagement';
-import { AdminSettings } from './components/admin/Settings';
-
-import { QRGenerator } from './components/shared/QRGenerator';
-import { Notifications } from './components/shared/Notifications';
-import { AuditLog } from './components/shared/AuditLog';
 import { NotFound } from './components/shared/NotFound';
+import {
+  AdminDashboard,
+  AdminSettings,
+  AuditLog,
+  IssueRegistry,
+  ManagerDashboard,
+  Notifications,
+  OccurrenceDetail,
+  OccurrencesPanel,
+  QRGenerator,
+  Reports,
+  UserManagement,
+} from './telasDaGestao';
 
 // Sessão encerrada no meio do uso (vencida, desativada pelo administrador, cortada
 // pelo tempo de sessão): o serviço da API avisa, e daqui se vai ao login lembrando a
