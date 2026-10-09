@@ -166,11 +166,17 @@ inicial levava a um formulário que nunca funciona sem QR. O diagnóstico de 06/
      com a variação contra o período anterior e "por área" em barras de resolução. Impressão/PDF e
      CSV mantidos. O cartão comum agora desce a ação do canto para baixo do título quando falta
      espaço (no celular espremia o título)
-   - as telas seguintes passam a usar `Pagina.tsx`, `rotulos.ts` e o aviso rápido. A de QR Codes
-     usa largura `max-w-5xl` e as novas `max-w-6xl`: alinhar quando as telas do administrador
-     forem redesenhadas. **Cuidado com `sr-only` dentro de caixa com rolagem:** sem um ancestral
-     `relative`, o texto escondido escapa da caixa e estica a página (aconteceu na tabela do
-     Registro)
+   - ~~telas do administrador~~ — **feito (09/10):** **Usuários** em lista (iniciais, papel, setor),
+     abas Ativos/Inativos/Todos, formulários num diálogo de verdade (foco preso, Esc, foco volta
+     ao botão que abriu), o que cada papel pode dito no formulário, e confirmação antes de
+     desativar com o foco no "Cancelar". **Configurações** com áreas (ordem natural: "Mesa 2"
+     antes de "Mesa 10"), tempo de sessão e o que ainda não existe dito com honestidade. **Log**
+     com filtros e página no endereço, tabela em tela média e larga e lista no celular. **QR
+     Codes** na mesma moldura das outras telas. Na API, área com o mesmo nome em outra grafia
+     ("mesa 12" ao lado de "Mesa 12") passou a ser recusada
+   - **Etapa 3 concluída.** **Cuidado com `sr-only` dentro de caixa com rolagem:** sem um
+     ancestral `relative`, o texto escondido escapa da caixa e estica a página (aconteceu na
+     tabela do Registro)
 4. **Acabamento:** título e ícone da aba, contraste e foco visível, revisão de todas as telas no
    celular
 

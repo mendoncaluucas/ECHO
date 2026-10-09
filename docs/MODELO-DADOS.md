@@ -109,7 +109,9 @@ erDiagram
 - **Nome da área é único dentro do restaurante** (`@@unique([venueId, nome])`): duas "Mesa 12" no mesmo
   lugar viravam duas barras indistinguíveis no dashboard. Entre restaurantes o nome pode repetir, porque
   toda casa tem a sua "Mesa 1". A constraint é por **texto exato** — quem for criar o `POST /areas` precisa
-  aplicar `trim()` no nome, senão `"Mesa 1"` e `"Mesa 1 "` passam como áreas diferentes.
+  aplicar `trim()` no nome, senão `"Mesa 1"` e `"Mesa 1 "` passam como áreas diferentes. Por isso a API
+  também confere o nome **sem diferenciar maiúsculas** antes de criar ou renomear: `"mesa 1"` ao lado de
+  `"Mesa 1"` passava pela constraint.
 - **"Ocorrência" no MVP 1** = um `Feedback`. Status, tratativa e respostas prontas viram entidades próprias no **MVP 2**.
 
 - **`AuditLog` só cresce.** Nenhuma rota edita ou apaga linha. `entidadeId` é texto sem chave
