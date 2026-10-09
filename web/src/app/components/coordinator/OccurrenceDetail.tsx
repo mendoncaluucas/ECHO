@@ -1,26 +1,55 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, Copy, Loader2, Mail, Save, Send, Star, UserCheck } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Loader2, Mail, SearchX, Send, Star, UserCheck } from 'lucide-react';
 import {
   atualizarStatusOcorrencia,
   buscarOcorrencia,
-  encerrarSessao,
   tokenDaSessao,
   type Ocorrencia,
   type StatusOcorrencia,
 } from '../../services/api';
+import { corDoTipo, haQuanto, ROTULO_STATUS, rotuloDoStatus, rotuloDoTipo, seloDoStatus } from '../../rotulos';
+import { avisarRapido } from '../../avisoRapido';
+import { AvisoDeErro, CabecalhoDaPagina, Cartao, Esqueleto, EstadoVazio, Pagina } from '../layout/Pagina';
 
-const tipoLabel: Record<string, { texto: string; classe: string }> = {
-  RECLAMACAO: { texto: 'Reclamação', classe: 'bg-red-100 text-red-700' },
-  SUGESTAO: { texto: 'Sugestão', classe: 'bg-amber-100 text-amber-700' },
-  ELOGIO: { texto: 'Elogio', classe: 'bg-green-100 text-green-700' },
+const OPCOES_DE_STATUS: { valor: StatusOcorrencia; descricao: string }[] = [
+  { valor: 'PENDENTE', descricao: 'Ninguém começou a tratar ainda' },
+  { valor: 'EM_ANDAMENTO', descricao: 'Alguém já está cuidando disso' },
+  { valor: 'RESOLVIDO', descricao: 'Tratada, não precisa de mais nada' },
+];
+
+// Para o aviso depois de salvar: "Ocorrência marcada como resolvida".
+const NO_FEMININO: Record<StatusOcorrencia, string> = {
+  PENDENTE: 'pendente',
+  EM_ANDAMENTO: 'em andamento',
+  RESOLVIDO: 'resolvida',
 };
 
-const statusLabel: Record<StatusOcorrencia, string> = {
-  PENDENTE: 'Pendente',
-  EM_ANDAMENTO: 'Em andamento',
-  RESOLVIDO: 'Resolvido',
-};
+const ROTA_DA_LISTA = '/coordenador/ocorrencias';
+
+function dataEHora(iso: string) {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function Estrelas({ quantidade }: { quantidade: number }) {
+  return (
+    <span role="img" aria-label={`${quantidade} de 5 estrelas`} className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star
+          key={i}
+          aria-hidden="true"
+          className={`size-5 ${i <= quantidade ? 'fill-estrela text-estrela' : 'text-[#d6d6cf]'}`}
+        />
+      ))}
+    </span>
+  );
+}
 
 // Quem pediu resposta deixou nome e e-mail. Só o detalhe recebe o contato da API
 // (nunca as listas), porque é daqui que alguém vai responder.
@@ -59,19 +88,18 @@ function ContatoDoCliente({
   };
 
   return (
-    <div className="rounded-xl border border-[#cfe5dc] bg-accent p-4">
+    <section aria-label="Contato do cliente" className="min-w-0 rounded-2xl border border-[#cfe5dc] bg-accent p-5 sm:p-6">
       <p className="flex items-center gap-2 text-sm font-bold text-accent-foreground">
         <Mail className="size-4" aria-hidden="true" />
         O cliente pediu resposta
       </p>
-      <p className="mt-2 text-gray-900">
-        {contato.nome && <span className="font-semibold">{contato.nome} · </span>}
-        <span className="break-all">{contato.email}</span>
-      </p>
+      {/* E-mail na própria linha: ao lado do nome, no celular, quebrava no meio ("example.c / om"). */}
+      {contato.nome && <p className="mt-2 font-semibold">{contato.nome}</p>}
+      <p className={`${contato.nome ? '' : 'mt-2 '}[overflow-wrap:anywhere]`}>{contato.email}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <a
           href={link}
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-[#0a5242]"
+          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-[#0a5242] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <Send className="size-4" aria-hidden="true" />
           Responder por e-mail
@@ -79,58 +107,54 @@ function ContatoDoCliente({
         <button
           type="button"
           onClick={copiar}
-          className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#cfe5dc] bg-card px-4 text-sm font-semibold text-accent-foreground transition-colors hover:bg-white"
+          className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#cfe5dc] bg-card px-4 text-sm font-semibold text-accent-foreground transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {copiado ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
           <span aria-live="polite">{copiado ? 'Copiado' : 'Copiar e-mail'}</span>
         </button>
       </div>
-    </div>
+    </section>
   );
 }
 
 export function OccurrenceDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const token = tokenDaSessao() ?? '';
   const [ocorrencia, setOcorrencia] = useState<Ocorrencia | null>(null);
-  const [status, setStatus] = useState<StatusOcorrencia>('PENDENTE');
+  const [escolhido, setEscolhido] = useState<StatusOcorrencia>('PENDENTE');
   const [carregando, setCarregando] = useState(true);
+  const [naoEncontrada, setNaoEncontrada] = useState(false);
+  const [erroAoCarregar, setErroAoCarregar] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
+  const [erroAoSalvar, setErroAoSalvar] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
 
-  const token = tokenDaSessao();
-
-  // A ocorrência abre do painel, do registro, do log e das notificações. Mandar
-  // sempre para o painel do coordenador deixava o gerente que veio do sino numa tela
-  // que não é a dele. Volta de onde veio; link aberto direto, sem histórico, cai no painel.
+  // A ocorrência abre do painel, do registro, do log e das notificações. Volta de onde
+  // veio; link aberto direto, sem histórico, cai na lista.
   const voltarParaOrigem = () => {
     const temDeOndeVoltar = (window.history.state?.idx ?? 0) > 0;
     if (temDeOndeVoltar) navigate(-1);
-    else navigate('/coordenador/ocorrencias');
+    else navigate(ROTA_DA_LISTA);
   };
 
+  // Sessão vencida (401) é tratada no serviço da API, que leva ao login.
   useEffect(() => {
-    if (!token || !id) {
-      navigate('/coordenador/login');
-      return;
-    }
-
+    if (!id) return;
     let ativo = true;
+    setCarregando(true);
+    setErroAoCarregar(null);
 
     buscarOcorrencia(id, token)
       .then((res) => {
         if (!ativo) return;
         setOcorrencia(res);
-        setStatus(res.status);
+        setEscolhido(res.status);
       })
       .catch((e: Error & { status?: number }) => {
         if (!ativo) return;
-        if (e.status === 401) {
-          encerrarSessao();
-          navigate('/coordenador/login');
-          return;
-        }
-        setErro(e.message || 'Não foi possível carregar a ocorrência.');
+        if (e.status === 404) setNaoEncontrada(true);
+        else setErroAoCarregar(e.message || 'Não foi possível carregar a ocorrência.');
       })
       .finally(() => {
         if (ativo) setCarregando(false);
@@ -139,187 +163,224 @@ export function OccurrenceDetail() {
     return () => {
       ativo = false;
     };
-  }, [id, token, navigate]);
+  }, [id, token, tentativa]);
 
-  const handleSalvar = async () => {
-    if (!id || !token) return;
-    setErro(null);
+  const salvar = async () => {
+    if (!id || !ocorrencia) return;
+    setErroAoSalvar(null);
     setSalvando(true);
     try {
-      await atualizarStatusOcorrencia(id, status, token);
+      await atualizarStatusOcorrencia(id, escolhido, token);
+      // Volta para a tela de onde veio (em geral a fila de pendentes), e o aviso
+      // confirma lá: quem trata uma atrás da outra não precisa de um clique a mais.
+      avisarRapido(`Ocorrência marcada como ${NO_FEMININO[escolhido]}`);
       voltarParaOrigem();
     } catch (e) {
-      const status401 = (e as { status?: number }).status === 401;
-      if (status401) {
-        encerrarSessao();
-        navigate('/coordenador/login');
-        return;
-      }
-      setErro(e instanceof Error ? e.message : 'Não foi possível salvar.');
-    } finally {
+      setErroAoSalvar(e instanceof Error && e.message ? e.message : 'Não foi possível salvar.');
       setSalvando(false);
     }
   };
 
   const voltar = (
     <button
+      type="button"
       onClick={voltarParaOrigem}
-      className="flex items-center gap-2 text-purple-600 hover:text-purple-700 mb-6 mt-4 font-semibold"
+      className="-ml-1 mb-4 inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-sm font-bold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
-      <ArrowLeft className="w-5 h-5" />
+      <ArrowLeft className="size-4" aria-hidden="true" />
       Voltar
     </button>
   );
 
-  if (carregando) {
+  if (naoEncontrada) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-      </div>
+      <Pagina>
+        {voltar}
+        <EstadoVazio
+          icone={SearchX}
+          titulo="Ocorrência não encontrada"
+          descricao="O endereço pode estar errado, ou a ocorrência foi apagada."
+        >
+          <button
+            type="button"
+            onClick={() => navigate(ROTA_DA_LISTA)}
+            className="h-10 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-[#0a5242]"
+          >
+            Ver as ocorrências
+          </button>
+        </EstadoVazio>
+      </Pagina>
     );
   }
 
-  if (!ocorrencia) {
+  if (erroAoCarregar) {
     return (
-      <div className="p-4">
-        <div className="max-w-3xl mx-auto">
-          {voltar}
-          <p className="bg-white rounded-2xl shadow-lg p-6 text-gray-700">
-            {erro ?? 'Ocorrência não encontrada.'}
-          </p>
+      <Pagina>
+        {voltar}
+        <AvisoDeErro mensagem={erroAoCarregar} aoTentarDeNovo={() => setTentativa((t) => t + 1)} />
+      </Pagina>
+    );
+  }
+
+  if (carregando || !ocorrencia) {
+    return (
+      <Pagina>
+        {voltar}
+        <div aria-busy="true" aria-label="Carregando a ocorrência">
+          <Esqueleto className="mb-6 h-16 w-72 max-w-full" />
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <Esqueleto className="h-64 rounded-2xl" />
+            <Esqueleto className="h-64 rounded-2xl" />
+          </div>
         </div>
-      </div>
+      </Pagina>
     );
   }
 
-  const tipo = tipoLabel[ocorrencia.tipo] ?? {
-    texto: ocorrencia.tipo,
-    classe: 'bg-gray-100 text-gray-700',
-  };
+  const o = ocorrencia;
+  const mudou = escolhido !== o.status;
 
   return (
-    <div className="p-4 pb-8">
-      <div className="max-w-3xl mx-auto">
-        {voltar}
+    <Pagina>
+      {voltar}
 
-        <div className="bg-white rounded-2xl shadow-lg p-6 space-y-6">
-          <div className="border-b border-gray-200 pb-4">
-            <div className="flex items-center justify-between mb-2">
-              <h1 className="text-2xl font-bold text-gray-900">Ocorrência</h1>
-              <span
-                className={`px-3 py-1 rounded-full text-sm font-semibold ${tipo.classe}`}
-              >
-                {tipo.texto}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-gray-500">
-              <span>{ocorrencia.anonimo ? 'Anônimo' : 'Identificado'}</span>
-              {ocorrencia.area && (
-                <>
-                  <span>•</span>
-                  <span>{ocorrencia.area.nome}</span>
-                </>
-              )}
-              <span>•</span>
-              <span>{new Date(ocorrencia.criadoEm).toLocaleString('pt-BR')}</span>
-            </div>
-          </div>
+      <CabecalhoDaPagina
+        sobretitulo={
+          <>
+            {o.area?.nome ?? 'Restaurante'} · <time dateTime={o.criadoEm}>{dataEHora(o.criadoEm)}</time>
+          </>
+        }
+        titulo={
+          <span className="inline-flex items-center gap-3">
+            <span className={`size-3 flex-none rounded-full ${corDoTipo(o.tipo)}`} aria-hidden="true" />
+            {rotuloDoTipo(o.tipo)}
+          </span>
+        }
+        acoes={
+          <span className={`rounded-full px-3 py-1 text-sm font-bold ${seloDoStatus(o.status)}`}>
+            {rotuloDoStatus(o.status)}
+          </span>
+        }
+      />
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Avaliação por categoria
-            </label>
-            <div className="space-y-2">
-              {ocorrencia.avaliacoes.map((avaliacao) => (
-                <div key={avaliacao.categoria} className="flex items-center gap-3">
-                  <span className="w-32 text-gray-700">{avaliacao.categoria}</span>
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4, 5].map((estrela) => (
-                      <Star
-                        key={estrela}
-                        className={`w-5 h-5 ${
-                          estrela <= avaliacao.estrelas
-                            ? 'fill-amber-400 text-amber-400'
-                            : 'text-gray-300'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Comentário do Cliente
-            </label>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-gray-700 leading-relaxed">
-                {ocorrencia.comentario || 'Sem comentário.'}
-              </p>
-            </div>
-          </div>
-
-          {ocorrencia.contato && (
-            <ContatoDoCliente
-              contato={ocorrencia.contato}
-              area={ocorrencia.area?.nome ?? null}
-              criadoEm={ocorrencia.criadoEm}
-            />
+      {/* Duas colunas só em tela larga: com o menu lateral aberto num notebook, um terço
+          da largura espremia a tratativa em colunas de duas palavras. Numa coluna só, a
+          tratativa vem logo depois das notas (antes do contato): é o que o coordenador
+          veio fazer, e no celular ficava no fim da página. A última linha (1fr) absorve
+          a sobra quando a tratativa é mais alta que os cartões ao lado. */}
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:grid-rows-[auto_auto_1fr]">
+        <Cartao titulo="O que o cliente escreveu" className="xl:col-start-1">
+          {o.comentario ? (
+            <p className="text-lg leading-relaxed break-words whitespace-pre-line">“{o.comentario}”</p>
+          ) : (
+            <p className="text-muted-foreground italic">O cliente não escreveu comentário, só deu as notas.</p>
           )}
+        </Cartao>
 
-          {ocorrencia.tratadoPor && (
-            <div className="bg-purple-50 rounded-xl p-4 flex items-center gap-2 text-sm text-purple-900">
-              <UserCheck className="w-4 h-4 text-purple-600" />
-              <span>
-                Tratado por <strong>{ocorrencia.tratadoPor.nome}</strong>
-                {ocorrencia.tratadoEm &&
-                  ` em ${new Date(ocorrencia.tratadoEm).toLocaleString('pt-BR')}`}
-              </span>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as StatusOcorrencia)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              {(Object.keys(statusLabel) as StatusOcorrencia[]).map((valor) => (
-                <option key={valor} value={valor}>
-                  {statusLabel[valor]}
-                </option>
+        <Cartao titulo="Notas por categoria" className="xl:col-start-1">
+          {o.avaliacoes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sem notas.</p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {o.avaliacoes.map((a) => (
+                <li key={a.categoria} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                  <span className="font-semibold">{a.categoria}</span>
+                  <span className="flex items-center gap-2">
+                    <Estrelas quantidade={a.estrelas} />
+                    <span className="w-4 text-right text-sm font-bold tabular-nums">{a.estrelas}</span>
+                  </span>
+                </li>
               ))}
-            </select>
-          </div>
+            </ul>
+          )}
+        </Cartao>
 
-          {erro && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-              {erro}
+        <div className="order-last min-w-0 xl:order-none xl:col-start-1">
+          {o.contato ? (
+            <ContatoDoCliente contato={o.contato} area={o.area?.nome ?? null} criadoEm={o.criadoEm} />
+          ) : (
+            <p className="px-1 text-sm text-muted-foreground">
+              Avaliação anônima: o cliente não deixou contato para resposta.
             </p>
           )}
+        </div>
 
-          <button
-            onClick={handleSalvar}
-            disabled={salvando || status === ocorrencia.status}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 px-6 rounded-xl font-semibold transition-colors shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {salvando ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Salvando...
-              </>
-            ) : (
-              <>
-                <Save className="w-5 h-5" />
-                Salvar Alterações
-              </>
+        <div className="min-w-0 xl:sticky xl:top-6 xl:col-start-2 xl:row-span-3 xl:row-start-1">
+          <Cartao titulo="Tratativa" descricao="Em que pé está esta ocorrência">
+            <fieldset>
+              <legend className="sr-only">Situação da ocorrência</legend>
+              <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                {OPCOES_DE_STATUS.map((opcao) => {
+                  const marcada = escolhido === opcao.valor;
+                  return (
+                    <label
+                      key={opcao.valor}
+                      className={`flex cursor-pointer gap-3 rounded-xl border p-3.5 transition-[background-color,border-color] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring ${
+                        marcada ? 'border-primary bg-accent' : 'border-border hover:bg-[#f6f6f2]'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="situacao"
+                        value={opcao.valor}
+                        checked={marcada}
+                        onChange={() => setEscolhido(opcao.valor)}
+                        className="mt-0.5 size-4 flex-none accent-primary"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold">
+                          {ROTULO_STATUS[opcao.valor]}
+                          {opcao.valor === o.status && (
+                            <span className="font-semibold text-muted-foreground"> · atual</span>
+                          )}
+                        </span>
+                        <span className="block text-sm text-muted-foreground">{opcao.descricao}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            {erroAoSalvar && (
+              <p role="alert" className="mt-4 rounded-xl bg-perigo-fundo px-3.5 py-3 text-sm font-semibold text-perigo">
+                {erroAoSalvar}
+              </p>
             )}
-          </button>
+
+            <button
+              type="button"
+              onClick={salvar}
+              disabled={!mudou || salvando}
+              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 font-bold text-primary-foreground transition-colors hover:bg-[#0a5242] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {salvando && <Loader2 className="size-5 animate-spin" aria-hidden="true" />}
+              {salvando
+                ? 'Salvando…'
+                : mudou
+                  ? `Marcar como ${NO_FEMININO[escolhido]}`
+                  : 'Escolha uma nova situação'}
+            </button>
+
+            {o.tratadoPor && (
+              <p className="mt-4 flex items-start gap-2 border-t border-border pt-4 text-sm text-muted-foreground">
+                <UserCheck className="mt-0.5 size-4 flex-none" aria-hidden="true" />
+                <span>
+                  Última mudança: <strong className="text-foreground">{o.tratadoPor.nome}</strong>
+                  {o.tratadoEm && (
+                    <>
+                      {' · '}
+                      <time dateTime={o.tratadoEm} title={dataEHora(o.tratadoEm)}>
+                        {haQuanto(o.tratadoEm)}
+                      </time>
+                    </>
+                  )}
+                </span>
+              </p>
+            )}
+          </Cartao>
         </div>
       </div>
-    </div>
+    </Pagina>
   );
 }

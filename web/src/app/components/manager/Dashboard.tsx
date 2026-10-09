@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2, ChevronRight, Inbox, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   buscarMetricas,
@@ -9,16 +9,7 @@ import {
   type Metricas,
   type Ocorrencia,
 } from '../../services/api';
-import {
-  corDoTipo,
-  haQuanto,
-  numeroBr,
-  primeiroNome,
-  rotuloDoStatus,
-  rotuloDoTipo,
-  saudacao,
-  seloDoStatus,
-} from '../../rotulos';
+import { corDoTipo, numeroBr, primeiroNome, rotuloDoTipo, saudacao } from '../../rotulos';
 import {
   AvisoDeErro,
   Barra,
@@ -31,6 +22,7 @@ import {
   Pagina,
   Segmentado,
 } from '../layout/Pagina';
+import { ItemDaOcorrencia } from '../coordinator/ItemDaOcorrencia';
 
 const PERIODOS = [7, 30, 90].map((dias) => ({ valor: dias, rotulo: `${dias} dias` }));
 const PERIODO_PADRAO = 30;
@@ -293,7 +285,8 @@ function Conteudo({
         <Cartao
           titulo="Chegaram agora"
           descricao="As últimas, de qualquer data"
-          acao={<LinkDoCartao para={ROTA_DAS_OCORRENCIAS}>Ver todas</LinkDoCartao>}
+          // A tela de ocorrências abre nas pendentes; "Ver todas" pede todas mesmo.
+          acao={<LinkDoCartao para={`${ROTA_DAS_OCORRENCIAS}?status=todas`}>Ver todas</LinkDoCartao>}
           className="lg:col-span-3"
         >
           <UltimasOcorrencias recentes={recentes} erro={erroNasRecentes} />
@@ -388,38 +381,7 @@ function UltimasOcorrencias({ recentes, erro }: { recentes: Recentes | null; err
     <ul className="-my-1 divide-y divide-[#efefea]">
       {recentes.itens.map((o) => (
         <li key={o.id}>
-          <Link
-            to={`/coordenador/ocorrencia/${o.id}`}
-            className="-mx-2 flex gap-3.5 rounded-xl px-2 py-3.5 transition-colors hover:bg-[#f6f6f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            <span
-              className={`mt-1.5 size-2.5 flex-none rounded-full ${corDoTipo(o.tipo)}`}
-              aria-hidden="true"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-bold">
-                {rotuloDoTipo(o.tipo)} · {o.area?.nome ?? 'Restaurante'}
-                <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${seloDoStatus(o.status)}`}>
-                  {rotuloDoStatus(o.status)}
-                </span>
-              </p>
-              {o.comentario ? (
-                // break-words: um "kkkkkkkk" sem espaço é texto de cliente possível, e sem
-                // quebra sairia cortado sem as reticências do line-clamp.
-                <p className="mt-1 line-clamp-2 text-sm leading-relaxed break-words text-[#3a3f4a]">
-                  “{o.comentario}”
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-muted-foreground italic">Sem comentário</p>
-              )}
-              <p className="mt-1 text-xs text-muted-foreground">
-                {[
-                  ...o.avaliacoes.map((a) => `${a.categoria} ${a.estrelas}★`),
-                  haQuanto(o.criadoEm),
-                ].join(' · ')}
-              </p>
-            </div>
-          </Link>
+          <ItemDaOcorrencia ocorrencia={o} />
         </li>
       ))}
     </ul>

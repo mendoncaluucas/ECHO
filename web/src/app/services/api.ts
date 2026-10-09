@@ -166,6 +166,11 @@ export function listarOcorrencias(
   });
 }
 
+// Para os filtros da gestão. Vem do banco: uma categoria nova aparece sem mexer no front.
+export function listarCategorias(token: string): Promise<{ itens: Categoria[] }> {
+  return request(`/categorias`, { headers: { Authorization: `Bearer ${token}` } });
+}
+
 export interface Area {
   id: string;
   nome: string;

@@ -1,285 +1,338 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Filter, Droplet, Users, UtensilsCrossed, Lightbulb, ThumbsUp, AlertCircle, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { CheckCircle2, Loader2, SearchX } from 'lucide-react';
 import {
-  encerrarSessao,
+  listarCategorias,
   listarOcorrencias,
-  MAXIMO_POR_PAGINA,
   tokenDaSessao,
+  type Categoria,
+  type FiltrosDeOcorrencia,
   type Ocorrencia,
   type StatusOcorrencia,
   type TipoFeedback,
 } from '../../services/api';
+import { ROTULO_TIPO } from '../../rotulos';
+import { AvisoDeErro, CabecalhoDaPagina, Cartao, Esqueleto, EstadoVazio, Pagina } from '../layout/Pagina';
+import { ItemDaOcorrencia } from './ItemDaOcorrencia';
 
-// remove acentos e caixa para casar o nome da categoria (vem do banco) com o ícone certo
-const normalizar = (texto: string) =>
-  texto.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+const POR_PAGINA = 20;
 
-const categoryIcons: Record<string, typeof Droplet> = {
-  higiene: Droplet,
-  atendimento: Users,
-  alimento: UtensilsCrossed,
-};
+// A tela é a fila de trabalho: abre nas pendentes. "todas" é pedido explícito.
+type Aba = StatusOcorrencia | 'todas';
+const ABAS: { valor: Aba; rotulo: string }[] = [
+  { valor: 'PENDENTE', rotulo: 'Pendentes' },
+  { valor: 'EM_ANDAMENTO', rotulo: 'Em andamento' },
+  { valor: 'RESOLVIDO', rotulo: 'Resolvidas' },
+  { valor: 'todas', rotulo: 'Todas' },
+];
+const ABA_PADRAO: Aba = 'PENDENTE';
 
-// As classes precisam aparecer inteiras no código: o Tailwind varre os arquivos
-// por strings completas e não gera nada montado em tempo de execução.
-const tipoConfig: Record<TipoFeedback, { label: string; classe: string; icon: typeof AlertCircle }> = {
-  RECLAMACAO: { label: 'Reclamação', classe: 'bg-red-100 text-red-700', icon: AlertCircle },
-  SUGESTAO: { label: 'Sugestão', classe: 'bg-amber-100 text-amber-700', icon: Lightbulb },
-  ELOGIO: { label: 'Elogio', classe: 'bg-green-100 text-green-700', icon: ThumbsUp },
-};
+const TIPOS = Object.keys(ROTULO_TIPO) as TipoFeedback[];
 
-// Usados quando a API devolver um valor que o front ainda não conhece — evita
-// quebrar a tela inteira se o enum do backend crescer antes de um deploy do front.
-const TIPO_DESCONHECIDO = { label: 'Outro', classe: 'bg-gray-100 text-gray-700', icon: AlertCircle };
-const STATUS_DESCONHECIDO = { label: 'Desconhecido', classe: 'bg-gray-100 text-gray-700' };
+const campoDeSelecao =
+  'h-10 w-full rounded-lg border border-border bg-input-background px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto';
 
-const statusConfig: Record<StatusOcorrencia, { label: string; classe: string }> = {
-  PENDENTE: { label: 'Pendente', classe: 'bg-gray-100 text-gray-700' },
-  EM_ANDAMENTO: { label: 'Em andamento', classe: 'bg-blue-100 text-blue-700' },
-  RESOLVIDO: { label: 'Resolvido', classe: 'bg-green-100 text-green-700' },
-};
+type Lista = { itens: Ocorrencia[]; total: number; pagina: number };
 
 export function OccurrencesPanel() {
-  const navigate = useNavigate();
-  const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
-  const [filterTipo, setFilterTipo] = useState<TipoFeedback | 'all'>('all');
-  const [filterStatus, setFilterStatus] = useState<StatusOcorrencia | 'all'>('all');
-  const [filterCategory, setFilterCategory] = useState<string | 'all'>('all');
-  // A API passou a paginar. Os filtros desta tela são locais, então ela carrega em
-  // blocos e acumula — sem isso, filtrar esconderia o que ainda não veio do servidor.
-  const [total, setTotal] = useState(0);
-  const [paginaCarregada, setPaginaCarregada] = useState(0);
+  const token = tokenDaSessao() ?? '';
+
+  // Filtros no endereço: voltar de uma ocorrência devolve a mesma lista, e o painel do
+  // gerente pode mandar para cá já filtrado.
+  const [busca, setBusca] = useSearchParams();
+  const abaPedida = busca.get('status');
+  const aba: Aba = ABAS.some((a) => a.valor === abaPedida) ? (abaPedida as Aba) : ABA_PADRAO;
+  const tipoPedido = busca.get('tipo');
+  const tipo = TIPOS.includes(tipoPedido as TipoFeedback) ? (tipoPedido as TipoFeedback) : '';
+  const categoria = busca.get('categoria') ?? '';
+
+  const mudarFiltro = (chave: 'status' | 'tipo' | 'categoria', valor: string) => {
+    const nova = new URLSearchParams(busca);
+    const padrao = chave === 'status' ? ABA_PADRAO : '';
+    if (valor && valor !== padrao) nova.set(chave, valor);
+    else nova.delete(chave);
+    setBusca(nova, { replace: true });
+  };
+  const limparFiltros = () => {
+    const nova = new URLSearchParams(busca);
+    nova.delete('tipo');
+    nova.delete('categoria');
+    setBusca(nova, { replace: true });
+  };
+
+  const [lista, setLista] = useState<Lista | null>(null);
+  const [buscando, setBuscando] = useState(true);
   const [carregandoMais, setCarregandoMais] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [contagens, setContagens] = useState<Record<Aba, number> | null>(null);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [tentativa, setTentativa] = useState(0);
+  // Só a resposta do pedido mais recente vale: trocar de aba rápido não pode deixar a
+  // lista de uma aba aparecendo sob o título de outra.
+  const pedidoAtual = useRef(0);
 
-  const carregarPagina = useCallback(
-    (pagina: number) => {
-      const token = tokenDaSessao();
-      if (!token) {
-        navigate('/coordenador/login');
-        return;
-      }
-
-      if (pagina === 1) setCarregando(true);
-      else setCarregandoMais(true);
-      setErro(null);
-
-      listarOcorrencias(token, { pagina, porPagina: MAXIMO_POR_PAGINA })
-        .then((res) => {
-          setOcorrencias((anteriores) =>
-            pagina === 1 ? res.itens : [...anteriores, ...res.itens]
-          );
-          setTotal(res.total);
-          setPaginaCarregada(res.pagina);
-        })
-        .catch((e: Error & { status?: number }) => {
-          if (e.status === 401) {
-            // sem token ou token expirado (validade de 8h) — volta pro login
-            encerrarSessao();
-            navigate('/coordenador/login');
-            return;
-          }
-          setErro(e.message || 'Não foi possível carregar as ocorrências.');
-        })
-        .finally(() => {
-          setCarregando(false);
-          setCarregandoMais(false);
-        });
-    },
-    [navigate]
-  );
-
-  useEffect(() => {
-    carregarPagina(1);
-  }, [carregarPagina]);
-
-  // categorias disponíveis para o filtro, derivadas do que veio da API
-  const categoriasDisponiveis = Array.from(
-    new Set(
-      ocorrencias.flatMap((occ) => occ.avaliacoes.map((a) => a.categoria))
-    )
-  );
-
-  const filteredOccurrences = ocorrencias.filter((occ) => {
-    const passaTipo = filterTipo === 'all' || occ.tipo === filterTipo;
-    const passaStatus = filterStatus === 'all' || occ.status === filterStatus;
-    const passaCategoria =
-      filterCategory === 'all' ||
-      occ.avaliacoes.some((a) => a.categoria === filterCategory);
-    return passaTipo && passaStatus && passaCategoria;
+  const filtrosDaLista = (pagina: number): FiltrosDeOcorrencia => ({
+    pagina,
+    porPagina: POR_PAGINA,
+    ...(aba !== 'todas' && { status: aba }),
+    ...(tipo && { tipo }),
+    ...(categoria && { categoria }),
   });
 
+  // Sessão vencida (401) é tratada no serviço da API, que leva ao login.
+  useEffect(() => {
+    const meu = ++pedidoAtual.current;
+    setBuscando(true);
+    setErro(null);
+
+    listarOcorrencias(token, filtrosDaLista(1))
+      .then((res) => {
+        if (meu === pedidoAtual.current) setLista({ itens: res.itens, total: res.total, pagina: 1 });
+      })
+      .catch((e: Error) => {
+        if (meu === pedidoAtual.current) setErro(e.message || 'Não foi possível carregar as ocorrências.');
+      })
+      .finally(() => {
+        if (meu === pedidoAtual.current) setBuscando(false);
+      });
+    // filtrosDaLista deriva de aba, tipo e categoria, que já estão aqui.
+  }, [token, aba, tipo, categoria, tentativa]);
+
+  // Quantas em cada aba, com o tipo e a categoria escolhidos: o número ao lado da aba
+  // diz o que se vai ver ao clicar nela.
+  useEffect(() => {
+    let ativo = true;
+    const filtros = { porPagina: 1, ...(tipo && { tipo }), ...(categoria && { categoria }) };
+    Promise.all(
+      ABAS.map((a) =>
+        listarOcorrencias(token, { ...filtros, ...(a.valor !== 'todas' && { status: a.valor }) })
+      )
+    )
+      .then((respostas) => {
+        if (!ativo) return;
+        setContagens(
+          Object.fromEntries(ABAS.map((a, i) => [a.valor, respostas[i].total])) as Record<Aba, number>
+        );
+      })
+      .catch(() => {
+        // Contagem é acessória: sem ela as abas só não mostram o número.
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [token, tipo, categoria, tentativa]);
+
+  useEffect(() => {
+    listarCategorias(token)
+      .then((res) => setCategorias(res.itens))
+      .catch(() => {
+        // Sem a lista, o filtro de categoria some; o resto da tela funciona.
+      });
+  }, [token]);
+
+  const carregarMais = () => {
+    if (!lista) return;
+    const meu = pedidoAtual.current;
+    const proxima = lista.pagina + 1;
+    setCarregandoMais(true);
+    listarOcorrencias(token, filtrosDaLista(proxima))
+      .then((res) => {
+        if (meu !== pedidoAtual.current) return;
+        setLista((atual) =>
+          atual ? { itens: [...atual.itens, ...res.itens], total: res.total, pagina: proxima } : atual
+        );
+      })
+      .catch((e: Error) => {
+        if (meu === pedidoAtual.current) setErro(e.message || 'Não foi possível carregar mais.');
+      })
+      .finally(() => setCarregandoMais(false));
+  };
+
+  const temFiltro = Boolean(tipo || categoria);
+
   return (
-    <div>
-      <div className="max-w-4xl mx-auto p-4 pb-8">
-        <div className="pt-6 pb-4">
-          <h1 className="text-2xl font-bold text-gray-900">Painel de Ocorrências</h1>
-          <p className="text-gray-600 mt-1">Gerencie feedbacks recebidos</p>
-        </div>
+    <Pagina>
+      <CabecalhoDaPagina
+        titulo="Ocorrências"
+        descricao="Os feedbacks que chegaram pelas mesas. Abra uma para tratar."
+      />
 
-        <div className="bg-white rounded-2xl shadow-lg p-4 mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Filter className="w-5 h-5 text-purple-600" />
-            <span className="font-semibold text-gray-900">Filtros</span>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Status
-              </label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as StatusOcorrencia | 'all')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="all">Todos</option>
-                <option value="PENDENTE">Pendente</option>
-                <option value="EM_ANDAMENTO">Em andamento</option>
-                <option value="RESOLVIDO">Resolvido</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Tipo
-              </label>
-              <select
-                value={filterTipo}
-                onChange={(e) => setFilterTipo(e.target.value as TipoFeedback | 'all')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="all">Todos</option>
-                <option value="RECLAMACAO">Reclamação</option>
-                <option value="SUGESTAO">Sugestão</option>
-                <option value="ELOGIO">Elogio</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Categoria
-              </label>
-              <select
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="all">Todas</option>
-                {categoriasDisponiveis.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {carregando && (
-          <div className="flex items-center justify-center gap-2 text-gray-500 py-12">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            Carregando ocorrências...
-          </div>
-        )}
-
-        {!carregando && erro && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-center">
-            {erro}
-          </div>
-        )}
-
-        {!carregando && !erro && filteredOccurrences.length === 0 && (
-          <div className="bg-white rounded-xl shadow-md p-8 text-center text-gray-500">
-            Nenhuma ocorrência encontrada.
-          </div>
-        )}
-
-        {!carregando && !erro && filteredOccurrences.length > 0 && (
-          <div className="space-y-4">
-            {filteredOccurrences.map((occ) => {
-              const primeiraCategoria = occ.avaliacoes[0]?.categoria;
-              const CategoryIcon = primeiraCategoria
-                ? categoryIcons[normalizar(primeiraCategoria)] ?? Filter
-                : Filter;
-              const tipoInfo = tipoConfig[occ.tipo] ?? TIPO_DESCONHECIDO;
-              const statusInfo = statusConfig[occ.status] ?? STATUS_DESCONHECIDO;
-              const TipoIcon = tipoInfo.icon;
-
+      <div className="mb-4 flex flex-col gap-3">
+        {/* Rola de lado no celular em vez de quebrar em duas linhas. A barra de rolagem
+            fica escondida: a aba cortada na borda já mostra que há mais. */}
+        <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+          <div role="group" aria-label="Situação" className="inline-flex gap-1 rounded-xl bg-muted p-1">
+            {ABAS.map((a) => {
+              const escolhida = a.valor === aba;
+              const quantidade = contagens?.[a.valor];
               return (
                 <button
-                  key={occ.id}
-                  onClick={() => navigate(`/coordenador/ocorrencia/${occ.id}`)}
-                  className="w-full text-left bg-white rounded-xl shadow-md p-4 border-l-4 border-purple-600 transition-shadow hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  key={a.valor}
+                  type="button"
+                  aria-pressed={escolhida}
+                  onClick={() => mudarFiltro('status', a.valor)}
+                  className={`inline-flex h-9 flex-none items-center gap-2 rounded-[9px] px-3.5 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                    escolhida
+                      ? 'bg-card font-bold text-foreground shadow-sm'
+                      : 'font-semibold text-[#3a3f4a] hover:text-foreground'
+                  }`}
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <CategoryIcon className="w-6 h-6 text-purple-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-2 gap-2">
-                        <span className="font-semibold text-gray-900">
-                          {occ.anonimo ? 'Anônimo' : 'Identificado'}
-                        </span>
-                        <span className="flex items-center gap-2 flex-shrink-0">
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-semibold ${statusInfo.classe}`}
-                          >
-                            {statusInfo.label}
-                          </span>
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-semibold ${tipoInfo.classe} flex items-center gap-1`}
-                          >
-                            <TipoIcon className="w-3 h-3" />
-                            {tipoInfo.label}
-                          </span>
-                        </span>
-                      </div>
-                      <p className="text-gray-600 text-sm mb-2">
-                        {occ.comentario || 'Sem comentário.'}
-                      </p>
-                      {occ.avaliacoes.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          {occ.avaliacoes.map((a, i) => (
-                            <span
-                              key={i}
-                              className="text-xs bg-purple-50 text-purple-700 rounded-full px-2 py-1"
-                            >
-                              {a.categoria}: {a.estrelas}★
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
-                        <span>{occ.area?.nome ?? 'Área não informada'}</span>
-                        <span>•</span>
-                        <span>{new Date(occ.criadoEm).toLocaleString('pt-BR')}</span>
-                      </div>
-                    </div>
-                  </div>
+                  {a.rotulo}
+                  {quantidade !== undefined && (
+                    <span
+                      className={`min-w-6 rounded-full px-1.5 text-center text-xs leading-5 font-bold tabular-nums ${
+                        a.valor === 'PENDENTE' && quantidade > 0
+                          ? 'bg-perigo-fundo text-perigo'
+                          : 'bg-[#e2e2dc] text-[#3a3f4a]'
+                      }`}
+                    >
+                      {quantidade}
+                    </span>
+                  )}
                 </button>
               );
             })}
+          </div>
+        </div>
 
-            {/* Os filtros acima são locais. Enquanto houver ocorrência não carregada,
-                avisar — senão o coordenador filtra e acha que não existe mais nada. */}
-            {ocorrencias.length < total && (
-              <div className="text-center space-y-2 pt-2">
-                <p className="text-sm text-gray-600">
-                  Mostrando {ocorrencias.length} de {total} ocorrências.
-                </p>
-                <button
-                  onClick={() => carregarPagina(paginaCarregada + 1)}
-                  disabled={carregandoMais}
-                  className="bg-white hover:bg-gray-50 text-purple-700 border-2 border-purple-600 px-6 py-3 rounded-xl font-semibold transition-colors inline-flex items-center gap-2 disabled:opacity-60"
-                >
-                  {carregandoMais && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Carregar mais
-                </button>
-              </div>
+        {/* Lado a lado também no celular: empilhados, empurravam a lista para baixo da dobra. */}
+        <div className="grid grid-cols-2 items-end gap-3 sm:flex sm:flex-wrap">
+          <label className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-bold text-muted-foreground">Tipo</span>
+            <select value={tipo} onChange={(e) => mudarFiltro('tipo', e.target.value)} className={campoDeSelecao}>
+              <option value="">Todos os tipos</option>
+              {TIPOS.map((t) => (
+                <option key={t} value={t}>
+                  {ROTULO_TIPO[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {categorias.length > 0 && (
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="text-xs font-bold text-muted-foreground">Categoria avaliada</span>
+              <select
+                value={categoria}
+                onChange={(e) => mudarFiltro('categoria', e.target.value)}
+                className={campoDeSelecao}
+              >
+                <option value="">Todas as categorias</option>
+                {categorias.map((c) => (
+                  <option key={c.id} value={c.nome}>
+                    {c.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {temFiltro && (
+            <button
+              type="button"
+              onClick={limparFiltros}
+              className="col-span-2 h-10 justify-self-start rounded-lg px-2 text-sm font-bold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
+      </div>
+
+      {erro ? (
+        <AvisoDeErro mensagem={erro} aoTentarDeNovo={() => setTentativa((t) => t + 1)} />
+      ) : !lista ? (
+        <Cartao>
+          <div className="flex flex-col gap-4" aria-busy="true" aria-label="Carregando ocorrências">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Esqueleto key={i} className="h-16" />
+            ))}
+          </div>
+        </Cartao>
+      ) : lista.itens.length === 0 ? (
+        <ListaVazia
+          aba={aba}
+          temFiltro={temFiltro}
+          aoLimpar={limparFiltros}
+          aoVerTodas={() => mudarFiltro('status', 'todas')}
+        />
+      ) : (
+        <div aria-busy={buscando} className={`transition-opacity ${buscando ? 'opacity-60' : ''}`}>
+          <Cartao>
+            <ul className="-my-1 divide-y divide-[#efefea]">
+              {lista.itens.map((o) => (
+                <li key={o.id}>
+                  <ItemDaOcorrencia ocorrencia={o} />
+                </li>
+              ))}
+            </ul>
+          </Cartao>
+
+          <div className="mt-4 flex flex-col items-center gap-3 text-sm text-muted-foreground">
+            <p>
+              {lista.itens.length < lista.total
+                ? `Mostrando ${lista.itens.length} de ${lista.total}`
+                : `${lista.total} ${lista.total === 1 ? 'ocorrência' : 'ocorrências'}`}
+            </p>
+            {lista.itens.length < lista.total && (
+              <button
+                type="button"
+                onClick={carregarMais}
+                disabled={carregandoMais}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-4 font-semibold text-foreground hover:bg-muted disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {carregandoMais && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                Carregar mais
+              </button>
             )}
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </Pagina>
+  );
+}
+
+function ListaVazia({
+  aba,
+  temFiltro,
+  aoLimpar,
+  aoVerTodas,
+}: {
+  aba: Aba;
+  temFiltro: boolean;
+  aoLimpar: () => void;
+  aoVerTodas: () => void;
+}) {
+  const botao =
+    'h-10 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-[#0a5242]';
+
+  if (temFiltro) {
+    return (
+      <EstadoVazio icone={SearchX} titulo="Nenhuma ocorrência com esses filtros">
+        <button type="button" onClick={aoLimpar} className={botao}>
+          Limpar filtros
+        </button>
+      </EstadoVazio>
+    );
+  }
+  if (aba === 'PENDENTE') {
+    return (
+      <EstadoVazio
+        icone={CheckCircle2}
+        titulo="Nada pendente"
+        descricao="Todas as ocorrências que chegaram já estão sendo tratadas ou foram resolvidas."
+      >
+        <button type="button" onClick={aoVerTodas} className={botao}>
+          Ver todas
+        </button>
+      </EstadoVazio>
+    );
+  }
+  return (
+    <EstadoVazio
+      icone={SearchX}
+      titulo={aba === 'todas' ? 'Nenhuma ocorrência ainda' : 'Nenhuma ocorrência nesta situação'}
+      descricao={
+        aba === 'todas' ? 'Quando um cliente avaliar pelo QR Code da mesa, ela aparece aqui.' : undefined
+      }
+    />
   );
 }
