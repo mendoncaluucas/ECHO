@@ -31,6 +31,19 @@
   /* Do Echo, além dos tokens do shadcn: o painel escuro da marca e a cor das estrelas. */
   --marca-escura: #10201c;
   --estrela: #e8a317;
+  /* Cores com significado, as mesmas em todas as telas. Cada texto passa de 4,5:1 sobre
+     o próprio fundo e sobre o branco. As três cores de tipo têm a mesma claridade:
+     nunca aparecem sozinhas, o nome do tipo vem sempre ao lado. */
+  --sucesso: #067647;
+  --perigo: #a8231a;
+  --perigo-fundo: #fdecea;
+  --andamento: #1f4f99;
+  --andamento-fundo: #e8effa;
+  --atencao: #a8590a;
+  --atencao-barra: #d98a1c;
+  --tipo-elogio: #067647;
+  --tipo-sugestao: #2e63b8;
+  --tipo-reclamacao: #c2342a;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -88,6 +101,16 @@
   --font-sans: 'Manrope Variable', ui-sans-serif, system-ui, sans-serif;
   --color-marca-escura: var(--marca-escura);
   --color-estrela: var(--estrela);
+  --color-sucesso: var(--sucesso);
+  --color-perigo: var(--perigo);
+  --color-perigo-fundo: var(--perigo-fundo);
+  --color-andamento: var(--andamento);
+  --color-andamento-fundo: var(--andamento-fundo);
+  --color-atencao: var(--atencao);
+  --color-atencao-barra: var(--atencao-barra);
+  --color-tipo-elogio: var(--tipo-elogio);
+  --color-tipo-sugestao: var(--tipo-sugestao);
+  --color-tipo-reclamacao: var(--tipo-reclamacao);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
