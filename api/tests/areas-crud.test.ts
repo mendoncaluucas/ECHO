@@ -58,6 +58,21 @@ describe("POST /api/areas", () => {
     expect(res.status).toBe(409);
   });
 
+  // O índice do banco compara texto exato; "mesa 1" ao lado de "Mesa 1" virava duas
+  // barras com o mesmo nome no dashboard.
+  it("recusa o mesmo nome com outras maiúsculas", async () => {
+    const { token } = await autenticar(Papel.ADMINISTRADOR);
+
+    const res = await request(app)
+      .post("/api/areas")
+      .set(comToken(token))
+      .send({ nome: cenario.area.nome.toUpperCase() });
+
+    expect(res.status).toBe(409);
+    expect(res.body.codigo).toBe("CONFLITO");
+    expect(await prisma.area.count({ where: { venueId: cenario.venue.id } })).toBe(1);
+  });
+
   it("recusa nome vazio", async () => {
     const { token } = await autenticar(Papel.ADMINISTRADOR);
 
@@ -255,6 +270,34 @@ describe("PATCH /api/areas/:id", () => {
       .send({ nome: "Salão" });
 
     expect(res.status).toBe(409);
+  });
+
+  it("recusa renomear para o nome de outra área com outras maiúsculas", async () => {
+    await prisma.area.create({ data: { nome: "Salão", venueId: cenario.venue.id } });
+    const { token } = await autenticar(Papel.ADMINISTRADOR);
+
+    const res = await request(app)
+      .patch(`/api/areas/${cenario.area.id}`)
+      .set(comToken(token))
+      .send({ nome: "SALÃO" });
+
+    expect(res.status).toBe(409);
+    expect((await prisma.area.findUniqueOrThrow({ where: { id: cenario.area.id } })).nome).toBe(
+      cenario.area.nome
+    );
+  });
+
+  // A checagem não pode barrar a própria área: corrigir a grafia é renomear.
+  it("permite mudar só as maiúsculas da própria área", async () => {
+    const { token } = await autenticar(Papel.ADMINISTRADOR);
+
+    const res = await request(app)
+      .patch(`/api/areas/${cenario.area.id}`)
+      .set(comToken(token))
+      .send({ nome: cenario.area.nome.toUpperCase() });
+
+    expect(res.status).toBe(200);
+    expect(res.body.nome).toBe(cenario.area.nome.toUpperCase());
   });
 
   it("responde 404 para id inexistente", async () => {
