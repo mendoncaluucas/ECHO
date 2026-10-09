@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { IconeDaMarca } from '../layout/Marca';
+import { AvisoDeErro, CabecalhoDaPagina, Pagina } from '../layout/Pagina';
 import {
   atualizarQRCode,
   gerarQRCode,
@@ -514,19 +515,19 @@ export function QRGenerator() {
     areas.find((a) => a.id === areaId)?.venue.nome ?? 'Restaurante Sinuelo';
 
   return (
-    <div className="mx-auto max-w-5xl p-4 pb-10 sm:p-6 lg:p-8">
+    // Mesma moldura das outras telas da gestão: largura e cabeçalho iguais, para trocar
+    // de tela não parecer trocar de sistema.
+    <Pagina>
       <div className="print:hidden">
-        <header className="mb-6">
-          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">QR Codes</h1>
-          <p className="mt-1 text-muted-foreground">
-            Cada mesa ou área tem o seu código. O cliente escaneia e avalia.
-          </p>
-        </header>
+        <CabecalhoDaPagina
+          titulo="QR Codes"
+          descricao="Cada mesa ou área tem o seu código. O cliente escaneia e avalia."
+        />
 
         {erro && (
-          <p role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {erro}
-          </p>
+          <div className="mb-5">
+            <AvisoDeErro mensagem={erro} aoTentarDeNovo={carregar} />
+          </div>
         )}
 
         {carregando ? (
@@ -596,6 +597,6 @@ export function QRGenerator() {
           aoCarregar={() => window.print()}
         />
       )}
-    </div>
+    </Pagina>
   );
 }

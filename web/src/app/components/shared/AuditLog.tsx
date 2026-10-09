@@ -1,54 +1,53 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FileText, Filter, Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, ScrollText } from 'lucide-react';
 import {
-  encerrarSessao,
   listarAuditoria,
   listarUsuarios,
   tokenDaSessao,
-  usuarioLogado,
   type AcaoAuditoria,
   type FiltrosDeAuditoria,
   type RegistroDeAuditoria,
   type UsuarioGestao,
 } from '../../services/api';
 import { descrever, ROTULO_ACAO } from '../../descricaoDaAuditoria';
+import { AvisoDeErro, CabecalhoDaPagina, Cartao, Esqueleto, EstadoVazio, Pagina } from '../layout/Pagina';
 
 const POR_PAGINA = 20;
+const PAGINA_MAXIMA = 10_000;
+const DATA = /^\d{4}-\d{2}-\d{2}$/;
+const ACOES = Object.keys(ROTULO_ACAO) as AcaoAuditoria[];
 
-const ROTULO_ENTIDADE: Record<string, string> = {
-  User: 'Usuário',
-  Area: 'Área',
-  QRCode: 'QR Code',
-  Feedback: 'Ocorrência',
-  Configuracao: 'Configuração',
-};
+const CHAVES = ['usuario', 'acao', 'de', 'ate'] as const;
+type Chave = (typeof CHAVES)[number];
 
 const campo =
-  'px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-700';
+  'h-10 w-full min-w-0 rounded-lg border border-border bg-input-background px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const botaoSecundario =
+  'inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+function dia(iso: string) {
+  return new Date(iso).toLocaleDateString('pt-BR');
+}
+function hora(iso: string) {
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+type Resultado = { itens: RegistroDeAuditoria[]; total: number; paginas: number };
 
 export function AuditLog() {
-  const navigate = useNavigate();
-  const [registros, setRegistros] = useState<RegistroDeAuditoria[]>([]);
-  const [usuarios, setUsuarios] = useState<UsuarioGestao[]>([]);
-  const [total, setTotal] = useState(0);
-  const [paginas, setPaginas] = useState(1);
-  const [pagina, setPagina] = useState(1);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
-  const [semPermissao, setSemPermissao] = useState(false);
+  const token = tokenDaSessao() ?? '';
+  const [parametros, setParametros] = useSearchParams();
 
-  const [usuarioId, setUsuarioId] = useState('');
-  const [acao, setAcao] = useState<AcaoAuditoria | ''>('');
-  const [de, setDe] = useState('');
-  const [ate, setAte] = useState('');
-
-  const token = tokenDaSessao();
-  const requisicaoAtual = useRef(0);
-
-  // O log é do administrador. Checar aqui evita mostrar a tela e só então o 403;
-  // o backend continua sendo a autoridade.
-  const naoEAdministrador = usuarioLogado()?.papel !== 'ADMINISTRADOR';
+  // Filtros e página no endereço, como no Registro. Só passa adiante o que é válido:
+  // um endereço editado à mão não pode virar erro 400.
+  const ler = (chave: Chave) => parametros.get(chave)?.trim() ?? '';
+  const usuarioId = ler('usuario');
+  const acao = ACOES.includes(ler('acao') as AcaoAuditoria) ? (ler('acao') as AcaoAuditoria) : '';
+  const de = DATA.test(ler('de')) ? ler('de') : '';
+  const ate = DATA.test(ler('ate')) ? ler('ate') : '';
+  const pagina = Math.min(PAGINA_MAXIMA, Math.max(1, Math.floor(Number(parametros.get('pagina'))) || 1));
+  const periodoInvalido = de !== '' && ate !== '' && de > ate;
 
   const filtros: FiltrosDeAuditoria = {
     ...(usuarioId && { usuarioId }),
@@ -59,262 +58,257 @@ export function AuditLog() {
   const chaveDosFiltros = JSON.stringify(filtros);
   const temFiltro = chaveDosFiltros !== '{}';
 
-  const tratarFalha = useCallback(
-    (e: Error & { status?: number }) => {
-      if (e.status === 401) {
-        encerrarSessao();
-        navigate('/gerente/login');
-        return;
-      }
-      if (e.status === 403) {
-        setSemPermissao(true);
-        return;
-      }
-      setErro(e.message || 'Não foi possível carregar o log de atividades.');
-    },
-    [navigate]
-  );
+  const mudarFiltro = (chave: Chave, valor: string) => {
+    const novos = new URLSearchParams(parametros);
+    if (valor) novos.set(chave, valor);
+    else novos.delete(chave);
+    novos.delete('pagina');
+    setParametros(novos, { replace: true });
+  };
+  const irParaPagina = (nova: number) => {
+    const novos = new URLSearchParams(parametros);
+    if (nova > 1) novos.set('pagina', String(nova));
+    else novos.delete('pagina');
+    setParametros(novos, { replace: true });
+  };
 
-  // Lista de usuários para o filtro. Falhar aqui não impede de ver o log —
-  // o filtro só fica com "Todos".
+  const [resultado, setResultado] = useState<Resultado | null>(null);
+  const [buscando, setBuscando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+  const [usuarios, setUsuarios] = useState<UsuarioGestao[]>([]);
+  const [tentativa, setTentativa] = useState(0);
+  const pedidoAtual = useRef(0);
+
+  // Lista de usuários para o filtro. Falhar aqui não impede de ver o log: o filtro
+  // só fica com "Todos".
   useEffect(() => {
-    if (!token || naoEAdministrador) return;
-    let ativo = true;
     listarUsuarios(token)
-      .then((res) => {
-        if (ativo) setUsuarios(res.itens);
-      })
+      .then((res) => setUsuarios([...res.itens].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))))
       .catch(() => {});
-    return () => {
-      ativo = false;
-    };
-  }, [token, naoEAdministrador]);
+  }, [token]);
 
+  // Sessão vencida (401) é tratada no serviço da API, que leva ao login.
   useEffect(() => {
-    if (!token) {
-      navigate('/gerente/login');
-      return;
-    }
-    if (naoEAdministrador) return;
-
-    const minhaVez = ++requisicaoAtual.current;
+    if (periodoInvalido) return;
+    const meu = ++pedidoAtual.current;
+    setBuscando(true);
     setErro(null);
 
     listarAuditoria(token, { ...JSON.parse(chaveDosFiltros), pagina, porPagina: POR_PAGINA })
       .then((res) => {
-        if (minhaVez !== requisicaoAtual.current) return;
-        setRegistros(res.itens);
-        setTotal(res.total);
-        setPaginas(res.paginas);
+        if (meu === pedidoAtual.current) setResultado({ itens: res.itens, total: res.total, paginas: res.paginas });
       })
       .catch((e: Error & { status?: number }) => {
-        if (minhaVez === requisicaoAtual.current) tratarFalha(e);
+        if (meu !== pedidoAtual.current) return;
+        setErro(e.status === 403 ? 'Só administradores podem ver o log.' : e.message || 'Não foi possível carregar o log.');
       })
       .finally(() => {
-        if (minhaVez === requisicaoAtual.current) setCarregando(false);
+        if (meu === pedidoAtual.current) setBuscando(false);
       });
+  }, [token, chaveDosFiltros, pagina, periodoInvalido, tentativa]);
 
-    return () => {
-      requisicaoAtual.current++;
-    };
-  }, [token, naoEAdministrador, chaveDosFiltros, pagina, navigate, tratarFalha]);
+  // Página além do fim (link antigo, "?pagina=1e20"): vai para a última.
+  useEffect(() => {
+    if (resultado && resultado.total > 0 && pagina > resultado.paginas) irParaPagina(resultado.paginas);
+    // irParaPagina deriva de parametros, que muda junto com pagina.
+  }, [resultado, pagina]);
 
-  // Trocar filtro volta para a primeira página, senão a página 5 de um resultado
-  // que agora tem 2 apareceria vazia sem explicação.
-  const aplicarFiltro = (aplicar: () => void) => {
-    aplicar();
-    setPagina(1);
-  };
+  const total = resultado?.total ?? 0;
+  const primeiro = total === 0 ? 0 : (pagina - 1) * POR_PAGINA + 1;
+  const ultimo = Math.min(pagina * POR_PAGINA, total);
+  const usuarioDoFiltroForaDaLista = usuarioId !== '' && usuarios.length > 0 && !usuarios.some((u) => u.id === usuarioId);
 
-  const primeiroDaPagina = total === 0 ? 0 : (pagina - 1) * POR_PAGINA + 1;
-  const ultimoDaPagina = Math.min(pagina * POR_PAGINA, total);
+  return (
+    <Pagina>
+      <CabecalhoDaPagina titulo="Log de atividades" descricao="Quem fez o quê no Echo, e quando." />
 
-  const moldura = (conteudo: React.ReactNode) => (
-    <div>
-      <div className="max-w-6xl mx-auto p-4 pb-8">
-        <div className="pt-6 pb-4">
-          <h1 className="text-2xl font-bold text-gray-900">Log de Atividades</h1>
-          <p className="text-gray-600 mt-1">Quem fez o quê no sistema, e quando</p>
+      <Cartao className="mb-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <label className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-bold text-muted-foreground">Quem</span>
+            <select value={usuarioId} onChange={(e) => mudarFiltro('usuario', e.target.value)} className={campo}>
+              <option value="">Todos</option>
+              {usuarios.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nome}
+                  {u.ativo ? '' : ' (desativado)'}
+                </option>
+              ))}
+              {/* Usuário do endereço que não está na lista: aparece, senão o filtro
+                  valeria com o campo mostrando "Todos". */}
+              {usuarioDoFiltroForaDaLista && <option value={usuarioId}>Usuário não encontrado</option>}
+            </select>
+          </label>
+          <label className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-bold text-muted-foreground">O quê</span>
+            <select value={acao} onChange={(e) => mudarFiltro('acao', e.target.value)} className={campo}>
+              <option value="">Todas as ações</option>
+              {ACOES.map((a) => (
+                <option key={a} value={a}>
+                  {ROTULO_ACAO[a]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-bold text-muted-foreground">De</span>
+            <input type="date" value={de} max={ate || undefined} onChange={(e) => mudarFiltro('de', e.target.value)} className={campo} />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-bold text-muted-foreground">Até</span>
+            <input type="date" value={ate} min={de || undefined} onChange={(e) => mudarFiltro('ate', e.target.value)} className={campo} />
+          </label>
         </div>
-        {conteudo}
-      </div>
-    </div>
-  );
 
-  if (semPermissao || naoEAdministrador) {
-    return moldura(
-      <div className="bg-white rounded-2xl shadow-lg p-8 text-center space-y-2">
-        <h2 className="text-lg font-bold text-gray-900">Acesso restrito</h2>
-        <p className="text-gray-600">Apenas administradores podem consultar o log de atividades.</p>
-      </div>
-    );
-  }
-
-  return moldura(
-    <>
-      <div className="bg-white rounded-2xl shadow-lg p-4 mb-6">
-        <div className="flex items-center gap-2 mb-3 text-gray-700">
-          <Filter className="w-5 h-5" />
-          <span className="text-sm font-semibold">Filtros</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <select
-            value={usuarioId}
-            onChange={(e) => aplicarFiltro(() => setUsuarioId(e.target.value))}
-            className={campo}
-          >
-            <option value="">Todos os usuários</option>
-            {usuarios.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.nome}
-                {u.ativo ? '' : ' (inativo)'}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={acao}
-            onChange={(e) => aplicarFiltro(() => setAcao(e.target.value as AcaoAuditoria | ''))}
-            className={campo}
-          >
-            <option value="">Todas as ações</option>
-            {(Object.keys(ROTULO_ACAO) as AcaoAuditoria[]).map((a) => (
-              <option key={a} value={a}>
-                {ROTULO_ACAO[a]}
-              </option>
-            ))}
-          </select>
-
-          <input
-            type="date"
-            value={de}
-            onChange={(e) => aplicarFiltro(() => setDe(e.target.value))}
-            title="A partir desta data"
-            className={campo}
-          />
-          <input
-            type="date"
-            value={ate}
-            onChange={(e) => aplicarFiltro(() => setAte(e.target.value))}
-            title="Até esta data (inclusive)"
-            className={campo}
-          />
-        </div>
-      </div>
-
-      {erro && (
-        <p className="mb-6 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-          {erro}
-        </p>
-      )}
-
-      {carregando ? (
-        <div className="flex justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-slate-700" />
-        </div>
-      ) : registros.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-          <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 text-lg">
-            {temFiltro
-              ? 'Nenhum registro encontrado para estes filtros.'
-              : 'Nenhuma atividade registrada ainda.'}
-          </p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                    Data/Hora
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                    Usuário
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                    Ação Realizada
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                    Registro
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {registros.map((registro) => (
-                  <tr key={registro.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900 font-mono whitespace-nowrap">
-                      {new Date(registro.criadoEm).toLocaleString('pt-BR', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                      })}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
-                      {registro.usuario.nome}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-700">
-                      <span className="block text-xs font-semibold text-gray-500 mb-0.5">
-                        {ROTULO_ACAO[registro.acao] ?? registro.acao}
-                      </span>
-                      {descrever(registro)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
-                      {registro.entidade === 'Feedback' ? (
-                        <button
-                          onClick={() => navigate(`/coordenador/ocorrencia/${registro.entidadeId}`)}
-                          className="text-slate-700 hover:text-slate-900 font-semibold flex items-center gap-1"
-                        >
-                          <Eye className="w-4 h-4" />
-                          Ver ocorrência
-                        </button>
-                      ) : (
-                        <span title={registro.entidadeId}>
-                          {ROTULO_ENTIDADE[registro.entidade] ?? registro.entidade}{' '}
-                          <span className="font-mono text-xs text-gray-400">
-                            {registro.entidadeId.slice(0, 8)}
-                          </span>
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {(temFiltro || periodoInvalido) && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            {periodoInvalido ? (
+              <p role="alert" className="text-sm font-semibold text-perigo">
+                A data inicial precisa ser anterior à final.
+              </p>
+            ) : (
+              <span />
+            )}
+            <button
+              type="button"
+              onClick={() => setParametros({}, { replace: true })}
+              className="rounded-md px-1 text-sm font-bold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              Limpar filtros
+            </button>
           </div>
+        )}
+      </Cartao>
 
-          <div className="flex items-center justify-between gap-4 px-6 py-4 border-t border-gray-200">
-            <p className="text-sm text-gray-600">
-              {primeiroDaPagina}–{ultimoDaPagina} de {total}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPagina((p) => Math.max(1, p - 1))}
-                disabled={pagina <= 1}
-                className="p-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Página anterior"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-sm text-gray-600">
-                {pagina} de {paginas}
-              </span>
-              <button
-                onClick={() => setPagina((p) => Math.min(paginas, p + 1))}
-                disabled={pagina >= paginas}
-                className="p-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Próxima página"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+      {periodoInvalido ? null : erro ? (
+        <AvisoDeErro mensagem={erro} aoTentarDeNovo={() => setTentativa((t) => t + 1)} />
+      ) : !resultado ? (
+        <Cartao>
+          <div className="flex flex-col gap-3" aria-busy="true" aria-label="Carregando o log">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Esqueleto key={i} className="h-12" />
+            ))}
+          </div>
+        </Cartao>
+      ) : resultado.itens.length === 0 ? (
+        <EstadoVazio
+          icone={ScrollText}
+          titulo={temFiltro ? 'Nenhum registro com esses filtros' : 'Nenhuma atividade registrada ainda'}
+        >
+          {temFiltro && (
+            <button type="button" onClick={() => setParametros({}, { replace: true })} className={botaoSecundario}>
+              Limpar filtros
+            </button>
+          )}
+        </EstadoVazio>
+      ) : (
+        <div aria-busy={buscando} className={`transition-opacity ${buscando ? 'opacity-60' : ''}`}>
+          {/* Celular: lista. Quatro colunas com a descrição não cabem em 375 px. */}
+          <Cartao className="md:hidden">
+            <ul className="-my-1 divide-y divide-[#efefea]">
+              {resultado.itens.map((r) => (
+                <li key={r.id} className="py-3">
+                  <p className="text-xs font-bold text-muted-foreground">{ROTULO_ACAO[r.acao] ?? r.acao}</p>
+                  <p className="mt-0.5 text-sm font-semibold break-words">{descrever(r)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {r.usuario.nome} · <time dateTime={r.criadoEm}>{dia(r.criadoEm)} {hora(r.criadoEm)}</time>
+                    {r.entidade === 'Feedback' && (
+                      <>
+                        {' · '}
+                        <LinkDaOcorrencia id={r.entidadeId} />
+                      </>
+                    )}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </Cartao>
+
+          <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
+            {/* relative: os textos só para leitor de tela (sr-only) são absolutos e, sem
+                um ancestral posicionado, escapavam desta caixa e esticavam a página. */}
+            <div className="relative overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <caption className="sr-only">Atividades registradas</caption>
+                <thead className="border-b border-border bg-[#fafaf7] text-xs font-bold tracking-wide text-muted-foreground uppercase">
+                  <tr>
+                    <th scope="col" className="px-4 py-3">Quando</th>
+                    <th scope="col" className="px-4 py-3">Quem</th>
+                    <th scope="col" className="px-4 py-3">O que fez</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#efefea]">
+                  {resultado.itens.map((r) => (
+                    <tr key={r.id} className="align-top">
+                      <td className="px-4 py-3 whitespace-nowrap tabular-nums">
+                        <time dateTime={r.criadoEm}>
+                          {dia(r.criadoEm)}
+                          <span className="block text-xs text-muted-foreground">{hora(r.criadoEm)}</span>
+                        </time>
+                      </td>
+                      <td className="px-4 py-3 font-semibold">{r.usuario.nome}</td>
+                      <td className="min-w-64 px-4 py-3">
+                        <span className="block text-xs font-bold text-muted-foreground">
+                          {ROTULO_ACAO[r.acao] ?? r.acao}
+                        </span>
+                        <span className="break-words">{descrever(r)}</span>
+                        {r.entidade === 'Feedback' && (
+                          <span className="mt-1 block">
+                            <LinkDaOcorrencia id={r.entidadeId} />
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
+
+          <nav aria-label="Páginas" className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+            <p className="text-muted-foreground tabular-nums">
+              {primeiro}–{ultimo} de {total}
+            </p>
+            {resultado.paginas > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => irParaPagina(pagina - 1)}
+                  disabled={pagina <= 1}
+                  aria-label="Página anterior"
+                  className={`${botaoSecundario} w-10 px-0`}
+                >
+                  <ChevronLeft className="size-4" aria-hidden="true" />
+                </button>
+                <span className="px-1 font-semibold tabular-nums">
+                  {pagina} de {resultado.paginas}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => irParaPagina(pagina + 1)}
+                  disabled={pagina >= resultado.paginas}
+                  aria-label="Próxima página"
+                  className={`${botaoSecundario} w-10 px-0`}
+                >
+                  <ChevronRight className="size-4" aria-hidden="true" />
+                </button>
+              </div>
+            )}
+          </nav>
         </div>
       )}
-    </>
+    </Pagina>
+  );
+}
+
+function LinkDaOcorrencia({ id }: { id: string }) {
+  return (
+    <Link
+      to={`/coordenador/ocorrencia/${id}`}
+      className="inline-flex items-center gap-0.5 rounded-md text-xs font-bold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      Ver a ocorrência
+      <ChevronRight className="size-3.5" aria-hidden="true" />
+    </Link>
   );
 }
