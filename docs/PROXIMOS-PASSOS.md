@@ -160,6 +160,12 @@ inicial levava a um formulário que nunca funciona sem QR. O diagnóstico de 06/
      tipo, situação, categoria (do banco) e período de/até, tudo no endereço junto com a página;
      tabela de cinco colunas em tela média e larga (tipo e área juntos, notas embaixo do
      comentário), a lista da fila no celular, e o CSV leva o resultado inteiro do filtro
+   - ~~relatórios~~ — **feito (09/10):** atalhos de 3, 6 e 12 meses (mesma regra do padrão da
+     API) além do período livre, período no endereço (`?de=&ate=`), quatro números, gráfico mês a
+     mês com as cores do sistema (nota por categoria ou quantidade por tipo), nota por categoria
+     com a variação contra o período anterior e "por área" em barras de resolução. Impressão/PDF e
+     CSV mantidos. O cartão comum agora desce a ação do canto para baixo do título quando falta
+     espaço (no celular espremia o título)
    - as telas seguintes passam a usar `Pagina.tsx`, `rotulos.ts` e o aviso rápido. A de QR Codes
      usa largura `max-w-5xl` e as novas `max-w-6xl`: alinhar quando as telas do administrador
      forem redesenhadas. **Cuidado com `sr-only` dentro de caixa com rolagem:** sem um ancestral

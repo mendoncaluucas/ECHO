@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Download, Calendar, TrendingUp, Printer, Loader2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Download, Inbox, Printer, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -11,27 +11,32 @@ import {
   Legend,
   CartesianGrid,
 } from 'recharts';
-import { buscarRelatorio, encerrarSessao, tokenDaSessao, type RelatorioHistorico } from '../../services/api';
+import { buscarRelatorio, tokenDaSessao, type RelatorioHistorico } from '../../services/api';
 import { baixarCsv, decimal, montarCsv, type Celula } from '../../services/csv';
+import {
+  AvisoDeErro,
+  Barra,
+  CabecalhoDaPagina,
+  Cartao,
+  Esqueleto,
+  EstadoVazio,
+  Indicador,
+  Pagina,
+  Segmentado,
+} from '../layout/Pagina';
 
-// Classes inteiras: o Tailwind só gera o que encontra escrito.
-const ESTILO_CATEGORIA: Record<string, { cor: string; fundo: string; texto: string }> = {
-  Higiene: { cor: '#06b6d4', fundo: 'bg-cyan-50', texto: 'text-cyan-700' },
-  Atendimento: { cor: '#8b5cf6', fundo: 'bg-purple-50', texto: 'text-purple-700' },
-  Alimento: { cor: '#f97316', fundo: 'bg-orange-50', texto: 'text-orange-700' },
-};
-const ESTILO_PADRAO = { cor: '#6b7280', fundo: 'bg-gray-50', texto: 'text-gray-700' };
+// Cores das linhas de nota, na ordem das categorias (a API devolve em ordem
+// alfabética). Em hex porque o Recharts pinta via SVG, não via classe. Diferem também
+// na claridade, para quem não distingue as cores.
+const CORES_DAS_CATEGORIAS = ['#0f6e5a', '#2e63b8', '#a8590a', '#7a3fa0', '#c2342a', '#16181d'];
 
-// Mesmas cores do dashboard do gerente.
+// As mesmas cores de tipo do resto do sistema (theme.css).
 const SERIES_DE_VOLUME = [
-  { chave: 'Feedbacks', cor: '#374151' },
-  { chave: 'Elogios', cor: '#16a34a' },
-  { chave: 'Sugestões', cor: '#d97706' },
-  { chave: 'Reclamações', cor: '#dc2626' },
+  { chave: 'Feedbacks', cor: '#16181d' },
+  { chave: 'Elogios', cor: '#067647' },
+  { chave: 'Sugestões', cor: '#2e63b8' },
+  { chave: 'Reclamações', cor: '#c2342a' },
 ];
-
-const campo =
-  'w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500';
 
 type Visao = 'nota' | 'volume';
 
@@ -61,6 +66,7 @@ function estrelas(valor: number | null) {
 // Mesmo teto da API. Checar aqui evita a consulta e, principalmente, evita que a tela
 // mostre os campos com um período e os números (e o CSV) de outro, o anterior.
 const MESES_MAXIMO = 24;
+const DATA = /^\d{4}-\d{2}-\d{2}$/;
 
 function validarPeriodo(de: string, ate: string): string | null {
   if (de === '' || ate === '') return null;
@@ -73,6 +79,23 @@ function validarPeriodo(de: string, ate: string): string | null {
   }
   return null;
 }
+
+// "AAAA-MM-DD" no fuso de quem está usando, que é o do restaurante.
+function diaLocal(data: Date) {
+  const doisDigitos = (n: number) => String(n).padStart(2, '0');
+  return `${data.getFullYear()}-${doisDigitos(data.getMonth() + 1)}-${doisDigitos(data.getDate())}`;
+}
+
+// Atalhos de período com a mesma regra do padrão da API: do primeiro dia do mês,
+// N-1 meses atrás, até hoje. "6 meses" é exatamente o que a tela abre mostrando.
+function periodoDeMeses(meses: number) {
+  const hoje = new Date();
+  return {
+    de: diaLocal(new Date(hoje.getFullYear(), hoje.getMonth() - (meses - 1), 1)),
+    ate: diaLocal(hoje),
+  };
+}
+const ATALHOS = [3, 6, 12];
 
 function csvDoRelatorio(r: RelatorioHistorico) {
   const categorias = r.porCategoria.map((c) => c.categoria);
@@ -122,67 +145,90 @@ function csvDoRelatorio(r: RelatorioHistorico) {
   return montarCsv(linhas);
 }
 
+const botaoSecundario =
+  'inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+const campoDeData =
+  'h-10 w-full min-w-0 rounded-lg border border-border bg-input-background px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
 export function Reports() {
-  const navigate = useNavigate();
+  const token = tokenDaSessao() ?? '';
+
+  // O período consultado fica no endereço (?de=&ate=): recarregar ou mandar o link
+  // mostra o mesmo relatório. Sem ele, a API escolhe os últimos 6 meses.
+  const [parametros, setParametros] = useSearchParams();
+  // O período do endereço vale só como par válido. Invertido, acima de 24 meses ou
+  // pela metade (link antigo, editado à mão), é ignorado e a tela mostra o padrão:
+  // antes, invertido deixava a tela carregando para sempre, e só com "de" a API
+  // recusava o intervalo num erro que "Tentar de novo" não resolvia.
+  const deNoEndereco = parametros.get('de') ?? '';
+  const ateNoEndereco = parametros.get('ate') ?? '';
+  const periodoDoEnderecoVale =
+    DATA.test(deNoEndereco) && DATA.test(ateNoEndereco) && !validarPeriodo(deNoEndereco, ateNoEndereco);
+  const deConsultado = periodoDoEnderecoVale ? deNoEndereco : '';
+  const ateConsultado = periodoDoEnderecoVale ? ateNoEndereco : '';
+  const enderecoIgnorado = (deNoEndereco !== '' || ateNoEndereco !== '') && !periodoDoEnderecoVale;
+  // Tira do endereço o período ignorado, para a barra não mostrar um que não vale.
+  useEffect(() => {
+    if (enderecoIgnorado) setParametros({}, { replace: true });
+  }, [enderecoIgnorado, setParametros]);
+
+  // Os campos e a consulta são separados: um período inválido fica nos campos, com o
+  // aviso, sem ir para a API nem para o endereço. Campo vazio é preenchido com o
+  // período que a API devolveu, para a tela mostrar o que está exibindo.
+  const [de, setDe] = useState(deConsultado);
+  const [ate, setAte] = useState(ateConsultado);
+  // O "Relatórios" do menu limpa o endereço na mesma tela; os campos acompanham.
+  useEffect(() => {
+    setDe(deConsultado);
+    setAte(ateConsultado);
+  }, [deConsultado, ateConsultado]);
+
   const [relatorio, setRelatorio] = useState<RelatorioHistorico | null>(null);
-  const [carregando, setCarregando] = useState(true);
+  const [buscando, setBuscando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [visao, setVisao] = useState<Visao>('nota');
-
-  // Os campos de data e a consulta são separados. Campo vazio deixa a API escolher
-  // (últimos 6 meses) e depois é preenchido com o período que ela devolveu, para a
-  // tela mostrar o que está exibindo. Se a consulta seguisse os campos, esse
-  // preenchimento dispararia a mesma busca de novo.
-  const [de, setDe] = useState('');
-  const [ate, setAte] = useState('');
-  const [consulta, setConsulta] = useState<{ de?: string; ate?: string }>({});
-  const requisicaoAtual = useRef(0);
+  const [tentativa, setTentativa] = useState(0);
+  const pedidoAtual = useRef(0);
 
   const problemaNoPeriodo = validarPeriodo(de, ate);
 
+  // Sessão vencida (401) é tratada no serviço da API, que leva ao login.
   useEffect(() => {
-    const token = tokenDaSessao();
-    if (!token) {
-      navigate('/gerente/login');
-      return;
-    }
-
-    const minhaVez = ++requisicaoAtual.current;
-    setCarregando(true);
+    const meu = ++pedidoAtual.current;
+    setBuscando(true);
     setErro(null);
 
-    buscarRelatorio(token, consulta)
+    buscarRelatorio(token, {
+      ...(deConsultado && { de: deConsultado }),
+      ...(ateConsultado && { ate: ateConsultado }),
+    })
       .then((res) => {
-        if (minhaVez !== requisicaoAtual.current) return;
+        if (meu !== pedidoAtual.current) return;
         setRelatorio(res);
         setDe((atual) => atual || res.periodo.de);
         setAte((atual) => atual || res.periodo.ate);
       })
-      .catch((e: Error & { status?: number }) => {
-        if (minhaVez !== requisicaoAtual.current) return;
-        if (e.status === 401) {
-          encerrarSessao();
-          navigate('/gerente/login');
-          return;
-        }
-        setErro(e.message || 'Não foi possível carregar o relatório.');
+      .catch((e: Error) => {
+        if (meu === pedidoAtual.current) setErro(e.message || 'Não foi possível carregar o relatório.');
       })
       .finally(() => {
-        if (minhaVez === requisicaoAtual.current) setCarregando(false);
+        if (meu === pedidoAtual.current) setBuscando(false);
       });
-
-    return () => {
-      requisicaoAtual.current++;
-    };
-  }, [consulta, navigate]);
+  }, [token, deConsultado, ateConsultado, tentativa]);
 
   const mudarPeriodo = (novoDe: string, novoAte: string) => {
     setDe(novoDe);
     setAte(novoAte);
-    // Período inválido não vai para a API: a tela avisa e espera a correção.
-    if (validarPeriodo(novoDe, novoAte)) return;
-    setConsulta({ de: novoDe, ate: novoAte });
+    // Período inválido ou pela metade não vai para a API: a tela avisa e espera.
+    if (!novoDe || !novoAte || validarPeriodo(novoDe, novoAte)) return;
+    setParametros({ de: novoDe, ate: novoAte }, { replace: true });
   };
+
+  const atalhoAtual = ATALHOS.find((meses) => {
+    const p = periodoDeMeses(meses);
+    return p.de === de && p.ate === ate;
+  });
 
   const exportarCsv = () => {
     if (!relatorio) return;
@@ -190,301 +236,313 @@ export function Reports() {
     baixarCsv(`relatorio-${inicio}-a-${fim}.csv`, csvDoRelatorio(relatorio));
   };
 
-  const dadosDoGrafico =
-    relatorio?.meses.map((m) =>
-      visao === 'nota'
-        ? {
-            mes: rotuloDoMes(m.mes),
-            ...Object.fromEntries(m.categorias.map((c) => [c.categoria, c.mediaEstrelas])),
-          }
-        : {
-            mes: rotuloDoMes(m.mes),
-            Feedbacks: m.total,
-            Elogios: m.porTipo.ELOGIO,
-            Sugestões: m.porTipo.SUGESTAO,
-            Reclamações: m.porTipo.RECLAMACAO,
-          }
-    ) ?? [];
-
-  // Exportar só o que a tela mostra para os campos preenchidos: com o período inválido
-  // ou o novo ainda carregando, o que está embaixo é o período anterior.
-  const exportavel = relatorio !== null && !carregando && !problemaNoPeriodo;
-
-  const series =
-    visao === 'nota'
-      ? (relatorio?.porCategoria ?? []).map((c) => ({
-          chave: c.categoria,
-          cor: (ESTILO_CATEGORIA[c.categoria] ?? ESTILO_PADRAO).cor,
-        }))
-      : SERIES_DE_VOLUME;
+  // Exportar e imprimir só o que a tela mostra para os campos preenchidos: com o
+  // período inválido ou o novo ainda carregando, o que está embaixo é o anterior.
+  const exportavel = relatorio !== null && !buscando && !problemaNoPeriodo;
 
   return (
-    <div className="print:bg-white">
-      <div className="max-w-6xl mx-auto p-4 pb-8">
-        <div className="pt-6 pb-4">
-          <h1 className="text-2xl font-bold text-gray-900">Relatórios Históricos</h1>
-          <p className="text-gray-600 mt-1">
-            <span className="print:hidden">Análise de tendências e desempenho</span>
+    <Pagina>
+      <CabecalhoDaPagina
+        titulo="Relatórios"
+        descricao={
+          <>
+            <span className="print:hidden">Como as notas e o volume de feedbacks mudaram mês a mês.</span>
             {relatorio && (
               <span className="hidden print:inline">
-                Restaurante Sinuelo · {dataBr(relatorio.periodo.de)} a{' '}
-                {dataBr(relatorio.periodo.ate)}
+                Restaurante Sinuelo · {dataBr(relatorio.periodo.de)} a {dataBr(relatorio.periodo.ate)}
               </span>
             )}
-          </p>
-        </div>
+          </>
+        }
+        acoes={
+          <div className="flex flex-wrap gap-2 print:hidden">
+            {/* O PDF sai pela impressão do navegador ("Salvar como PDF"). A página tem
+                estilo de impressão próprio: somem o menu e os controles. */}
+            <button type="button" onClick={() => window.print()} disabled={!exportavel} className={botaoSecundario}>
+              <Printer className="size-4" aria-hidden="true" />
+              Imprimir / PDF
+            </button>
+            <button type="button" onClick={exportarCsv} disabled={!exportavel} className={botaoSecundario}>
+              <Download className="size-4" aria-hidden="true" />
+              Exportar CSV
+            </button>
+          </div>
+        }
+      />
 
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 print:hidden">
-          <div className="flex flex-col md:flex-row md:items-end gap-4">
-            <div className="flex-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                <Calendar className="w-4 h-4 inline mr-1" />
-                Período Inicial
-              </label>
+      <Cartao className="mb-4 print:hidden">
+        <div className="flex flex-wrap items-end gap-3">
+          <div role="group" aria-label="Atalhos de período" className="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
+            {ATALHOS.map((meses) => {
+              const escolhido = atalhoAtual === meses;
+              return (
+                <button
+                  key={meses}
+                  type="button"
+                  aria-pressed={escolhido}
+                  onClick={() => {
+                    const p = periodoDeMeses(meses);
+                    mudarPeriodo(p.de, p.ate);
+                  }}
+                  className={`h-9 rounded-[9px] px-3.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                    escolhido
+                      ? 'bg-card font-bold text-foreground shadow-sm'
+                      : 'font-semibold text-[#3a3f4a] hover:text-foreground'
+                  }`}
+                >
+                  {meses} meses
+                </button>
+              );
+            })}
+          </div>
+          {/* Linha própria no celular: dividindo a linha com os atalhos, os campos
+              encolhiam até sumir. */}
+          <div className="grid w-full grid-cols-2 gap-3 sm:w-auto sm:max-w-md sm:min-w-80 sm:flex-1">
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="text-xs font-bold text-muted-foreground">De</span>
               <input
                 type="date"
                 value={de}
                 onChange={(e) => mudarPeriodo(e.target.value, ate)}
-                className={campo}
+                className={campoDeData}
               />
-            </div>
-
-            <div className="flex-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Período Final
-              </label>
+            </label>
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="text-xs font-bold text-muted-foreground">Até</span>
               <input
                 type="date"
                 value={ate}
                 onChange={(e) => mudarPeriodo(de, e.target.value)}
-                className={campo}
+                className={campoDeData}
               />
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              {/* O PDF sai pela impressão do navegador ("Salvar como PDF"). A página
-                  tem estilo de impressão próprio: some a navegação e os controles. */}
-              <button
-                onClick={() => window.print()}
-                disabled={!exportavel}
-                className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                <Printer className="w-5 h-5" />
-                Imprimir / PDF
-              </button>
-              <button
-                onClick={exportarCsv}
-                disabled={!exportavel}
-                className="bg-white hover:bg-gray-50 text-orange-600 border-2 border-orange-600 px-6 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                <Download className="w-5 h-5" />
-                Exportar CSV
-              </button>
-            </div>
+            </label>
           </div>
-
-          {problemaNoPeriodo && (
-            <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-              {problemaNoPeriodo} Os números abaixo ainda são do período anterior.
-            </p>
-          )}
         </div>
 
-        {erro && (
-          <p className="mb-6 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-            {erro}
+        {problemaNoPeriodo && (
+          <p role="alert" className="mt-3 text-sm font-semibold text-perigo">
+            {problemaNoPeriodo}
+            {relatorio && ' Os números abaixo ainda são do período anterior.'}
           </p>
         )}
+      </Cartao>
 
-        {carregando && !relatorio ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
+      {erro ? (
+        <AvisoDeErro mensagem={erro} aoTentarDeNovo={() => setTentativa((t) => t + 1)} />
+      ) : !relatorio ? (
+        <div className="flex flex-col gap-4" aria-busy="true" aria-label="Carregando o relatório">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Esqueleto key={i} className="h-[108px] rounded-2xl" />
+            ))}
           </div>
-        ) : relatorio ? (
-          <div className={carregando ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
-            {/* No papel a largura fica abaixo do `md`; as colunas de impressão são fixas. */}
-            <div className="grid grid-cols-2 md:grid-cols-4 print:grid-cols-4 gap-4 mb-6">
-              {[
-                { rotulo: 'Feedbacks', valor: relatorio.resumo.total, classe: 'text-gray-900' },
-                {
-                  rotulo: 'Resolvidos',
-                  valor: `${relatorio.resumo.percentualResolvido}%`,
-                  classe: 'text-green-600',
-                },
-                {
-                  rotulo: 'Em andamento',
-                  valor: relatorio.resumo.emAndamento,
-                  classe: 'text-amber-600',
-                },
-                { rotulo: 'Pendentes', valor: relatorio.resumo.pendentes, classe: 'text-red-600' },
-              ].map((item) => (
-                <div key={item.rotulo} className="bg-white rounded-xl shadow-md p-5">
-                  <p className="text-sm text-gray-600">{item.rotulo}</p>
-                  <p className={`text-2xl font-bold mt-1 ${item.classe}`}>{item.valor}</p>
-                </div>
-              ))}
-            </div>
+          <Esqueleto className="h-96 rounded-2xl" />
+        </div>
+      ) : (
+        <div
+          aria-busy={buscando}
+          className={`flex flex-col gap-4 transition-opacity ${buscando ? 'opacity-60' : ''}`}
+        >
+          <Conteudo relatorio={relatorio} visao={visao} aoMudarVisao={setVisao} />
+        </div>
+      )}
+    </Pagina>
+  );
+}
 
-            <h2 className="text-lg font-bold text-gray-900 mb-3">Por setor</h2>
-            {relatorio.porArea.length === 0 ? (
-              <p className="bg-white rounded-xl shadow-md p-6 mb-6 text-gray-600">
-                Nenhum feedback no período.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 print:grid-cols-3 gap-4 mb-6">
-                {relatorio.porArea.map((setor) => (
-                  <div key={setor.area} className="bg-white rounded-xl shadow-md p-6 break-inside-avoid">
-                    <h3 className="font-bold text-gray-900 mb-3">{setor.area}</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Total:</span>
-                        <span className="font-semibold text-gray-900">{setor.total}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Resolvidos:</span>
-                        <span className="font-semibold text-green-600">{setor.resolvidos}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Em andamento:</span>
-                        <span className="font-semibold text-amber-600">{setor.emAndamento}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Pendentes:</span>
-                        <span className="font-semibold text-red-600">{setor.pendentes}</span>
-                      </div>
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between text-xs">
-                      <span className="text-gray-500">Taxa de resolução</span>
-                      <span className="font-semibold text-orange-600">
-                        {setor.percentualResolvido}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+function Conteudo({
+  relatorio: r,
+  visao,
+  aoMudarVisao,
+}: {
+  relatorio: RelatorioHistorico;
+  visao: Visao;
+  aoMudarVisao: (v: Visao) => void;
+}) {
+  const { resumo } = r;
 
-            <div className="bg-white rounded-2xl shadow-lg p-6 break-inside-avoid">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="w-6 h-6 text-orange-600" />
-                  <h2 className="text-xl font-bold text-gray-900">
-                    {visao === 'nota' ? 'Nota média por categoria' : 'Feedbacks por mês'}
-                  </h2>
-                </div>
-                <div className="flex gap-2 print:hidden">
-                  {(
-                    [
-                      ['nota', 'Nota média'],
-                      ['volume', 'Quantidade'],
-                    ] as const
-                  ).map(([valor, rotulo]) => (
-                    <button
-                      key={valor}
-                      onClick={() => setVisao(valor)}
-                      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                        visao === valor
-                          ? 'bg-orange-600 text-white'
-                          : 'bg-orange-50 text-orange-700 hover:bg-orange-100'
-                      }`}
-                    >
-                      {rotulo}
-                    </button>
-                  ))}
-                </div>
-              </div>
+  if (resumo.total === 0) {
+    return (
+      <EstadoVazio
+        icone={Inbox}
+        titulo="Nenhum feedback no período"
+        descricao="Escolha um período maior ou outras datas."
+      />
+    );
+  }
 
-              {/* `grafico-imprimivel`: regras de impressão em styles/index.css. */}
-              <div className="grafico-imprimivel">
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={dadosDoGrafico}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                    <XAxis dataKey="mes" />
-                    <YAxis
-                      allowDecimals={visao === 'nota'}
-                      domain={visao === 'nota' ? [0, 5] : [0, 'auto']}
-                      ticks={visao === 'nota' ? [0, 1, 2, 3, 4, 5] : undefined}
-                    />
-                    <Tooltip
-                      formatter={(valor) =>
-                        visao === 'nota' && typeof valor === 'number' ? estrelas(valor) : valor
-                      }
-                    />
-                    <Legend />
-                    {series.map((serie) => (
-                      <Line
-                        key={serie.chave}
-                        type="monotone"
-                        // Função, não o nome: o Recharts lê dataKey em texto como caminho,
-                        // e uma categoria com ponto no nome sumiria do gráfico.
-                        dataKey={(linha: Record<string, unknown>) => linha[serie.chave]}
-                        name={serie.chave}
-                        stroke={serie.cor}
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                        // Mês sem avaliação fica como buraco na linha da nota: ligar os
-                        // vizinhos inventaria uma tendência que não foi medida.
-                        connectNulls={false}
-                        isAnimationActive={false}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              {visao === 'nota' && (
-                <p className="text-xs text-gray-500 mt-2">
-                  Mês sem avaliação aparece como intervalo na linha.
-                </p>
-              )}
+  const corDaCategoria = (nome: string) =>
+    CORES_DAS_CATEGORIAS[r.porCategoria.findIndex((c) => c.categoria === nome) % CORES_DAS_CATEGORIAS.length] ??
+    CORES_DAS_CATEGORIAS[0];
 
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-4">
-                {relatorio.porCategoria.map((c) => {
-                  const estilo = ESTILO_CATEGORIA[c.categoria] ?? ESTILO_PADRAO;
-                  const variacao =
-                    c.mediaEstrelas !== null && c.mediaAnterior !== null
-                      ? Math.round((c.mediaEstrelas - c.mediaAnterior) * 10) / 10
-                      : null;
+  const dadosDoGrafico = r.meses.map((m) =>
+    visao === 'nota'
+      ? {
+          mes: rotuloDoMes(m.mes),
+          ...Object.fromEntries(m.categorias.map((c) => [c.categoria, c.mediaEstrelas])),
+        }
+      : {
+          mes: rotuloDoMes(m.mes),
+          Feedbacks: m.total,
+          Elogios: m.porTipo.ELOGIO,
+          Sugestões: m.porTipo.SUGESTAO,
+          Reclamações: m.porTipo.RECLAMACAO,
+        }
+  );
 
-                  return (
-                    <div key={c.categoria} className={`${estilo.fundo} rounded-xl p-4`}>
-                      <p className="text-sm text-gray-600 mb-1">
-                        {c.categoria} · {c.avaliacoes}{' '}
-                        {c.avaliacoes === 1 ? 'avaliação' : 'avaliações'}
-                      </p>
-                      <p className={`text-2xl font-bold ${estilo.texto}`}>
-                        {estrelas(c.mediaEstrelas)}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {c.mediaEstrelas === null ? (
-                          'Sem avaliação no período'
-                        ) : variacao === null ? (
-                          'Sem base de comparação no período anterior'
-                        ) : (
-                          <>
-                            <span
-                              className={
-                                variacao > 0
-                                  ? 'font-semibold text-green-600'
-                                  : variacao < 0
-                                    ? 'font-semibold text-red-600'
-                                    : 'font-semibold text-gray-600'
-                              }
-                            >
-                              {variacao > 0 ? '+' : ''}
-                              {umaCasa(variacao)}★
-                            </span>{' '}
-                            vs. período anterior ({estrelas(c.mediaAnterior)})
-                          </>
-                        )}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        ) : null}
+  const series =
+    visao === 'nota'
+      ? r.porCategoria.map((c) => ({ chave: c.categoria, cor: corDaCategoria(c.categoria) }))
+      : SERIES_DE_VOLUME;
+
+  return (
+    <>
+      {/* No papel a largura fica abaixo do `lg`; as colunas de impressão são fixas. */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 print:grid-cols-4">
+        <Indicador rotulo="Feedbacks" valor={resumo.total} />
+        <Indicador rotulo="Resolvidos" valor={`${resumo.percentualResolvido}%`}>
+          <Barra percentual={resumo.percentualResolvido} />
+          <p className="mt-2">
+            {resumo.resolvidos} de {resumo.total}
+          </p>
+        </Indicador>
+        <Indicador rotulo="Em andamento" valor={resumo.emAndamento} />
+        <Indicador rotulo="Pendentes" valor={resumo.pendentes} tom={resumo.pendentes > 0 ? 'perigo' : 'normal'} />
       </div>
-    </div>
+
+      <Cartao
+        titulo={visao === 'nota' ? 'Nota média por categoria, mês a mês' : 'Feedbacks por mês'}
+        descricao={visao === 'nota' ? 'Mês sem avaliação aparece como intervalo na linha.' : undefined}
+        acao={
+          <div className="print:hidden">
+            <Segmentado
+              rotulo="O que mostrar no gráfico"
+              opcoes={[
+                { valor: 'nota', rotulo: 'Nota' },
+                { valor: 'volume', rotulo: 'Quantidade' },
+              ]}
+              valor={visao}
+              aoMudar={aoMudarVisao}
+            />
+          </div>
+        }
+        className="break-inside-avoid"
+      >
+        {/* `grafico-imprimivel`: regras de impressão em styles/index.css. */}
+        <div className="grafico-imprimivel -ml-3 text-xs">
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={dadosDoGrafico} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ecece7" vertical={false} />
+              <XAxis dataKey="mes" tick={{ fill: '#5b6170' }} tickLine={false} axisLine={{ stroke: '#e6e6e0' }} />
+              <YAxis
+                width={36}
+                allowDecimals={visao === 'nota'}
+                domain={visao === 'nota' ? [0, 5] : [0, 'auto']}
+                ticks={visao === 'nota' ? [0, 1, 2, 3, 4, 5] : undefined}
+                tick={{ fill: '#5b6170' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip
+                formatter={(valor) => (visao === 'nota' && typeof valor === 'number' ? estrelas(valor) : valor)}
+                contentStyle={{ borderRadius: 12, borderColor: '#e6e6e0', fontSize: 13 }}
+              />
+              <Legend iconType="circle" wrapperStyle={{ fontSize: 13, paddingTop: 8 }} />
+              {series.map((serie) => (
+                <Line
+                  key={serie.chave}
+                  type="monotone"
+                  // Função, não o nome: o Recharts lê dataKey em texto como caminho, e
+                  // uma categoria com ponto no nome sumiria do gráfico.
+                  dataKey={(linha: Record<string, unknown>) => linha[serie.chave]}
+                  name={serie.chave}
+                  stroke={serie.cor}
+                  strokeWidth={2.5}
+                  dot={{ r: 3, strokeWidth: 0, fill: serie.cor }}
+                  activeDot={{ r: 5 }}
+                  // Mês sem avaliação fica como buraco na linha da nota: ligar os
+                  // vizinhos inventaria uma tendência que não foi medida.
+                  connectNulls={false}
+                  isAnimationActive={false}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Cartao>
+
+      <div className="grid gap-4 lg:grid-cols-2 print:grid-cols-2">
+        <Cartao titulo="Nota por categoria" descricao="No período, comparada com o período anterior de mesmo tamanho" className="break-inside-avoid">
+          <ul className="flex flex-col gap-4">
+            {r.porCategoria.map((c) => {
+              const variacao =
+                c.mediaEstrelas !== null && c.mediaAnterior !== null
+                  ? Math.round((c.mediaEstrelas - c.mediaAnterior) * 10) / 10
+                  : null;
+              const Seta = variacao !== null && variacao < 0 ? TrendingDown : TrendingUp;
+              return (
+                <li key={c.categoria}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="inline-flex min-w-0 items-center gap-2 font-semibold">
+                      <span
+                        className="size-2.5 flex-none rounded-full"
+                        style={{ backgroundColor: corDaCategoria(c.categoria) }}
+                        aria-hidden="true"
+                      />
+                      <span className="truncate">{c.categoria}</span>
+                    </span>
+                    <span className="flex-none text-lg font-extrabold tabular-nums">{estrelas(c.mediaEstrelas)}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {c.avaliacoes} {c.avaliacoes === 1 ? 'avaliação' : 'avaliações'}
+                    {' · '}
+                    {c.mediaEstrelas === null ? (
+                      'sem avaliação no período'
+                    ) : variacao === null ? (
+                      'sem base no período anterior'
+                    ) : variacao === 0 ? (
+                      `igual ao período anterior (${estrelas(c.mediaAnterior)})`
+                    ) : (
+                      <span className={`inline-flex items-center gap-1 font-bold ${variacao > 0 ? 'text-sucesso' : 'text-perigo'}`}>
+                        <Seta className="size-3.5" aria-hidden="true" />
+                        {variacao > 0 ? '+' : ''}
+                        {umaCasa(variacao)}★ vs. {estrelas(c.mediaAnterior)} antes
+                      </span>
+                    )}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </Cartao>
+
+        <Cartao titulo="Por área" descricao="Quanto do que chegou em cada área já foi resolvido" className="break-inside-avoid">
+          {r.porArea.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum feedback no período.</p>
+          ) : (
+            <ul className="flex flex-col gap-4">
+              {r.porArea.map((a) => (
+                <li key={a.area} className="break-inside-avoid">
+                  <div className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate font-semibold">{a.area}</span>
+                    <span className="flex-none tabular-nums">
+                      <span className="font-bold">{a.percentualResolvido}%</span>
+                      <span className="text-muted-foreground"> resolvidos</span>
+                    </span>
+                  </div>
+                  <div className="mt-1.5">
+                    <Barra percentual={a.percentualResolvido} grossa />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                    {a.total} {a.total === 1 ? 'feedback' : 'feedbacks'} · {a.pendentes}{' '}
+                    {a.pendentes === 1 ? 'pendente' : 'pendentes'} · {a.emAndamento} em andamento
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Cartao>
+      </div>
+    </>
   );
 }
