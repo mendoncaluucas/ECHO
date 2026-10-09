@@ -179,6 +179,16 @@ inicial levava a um formulário que nunca funciona sem QR. O diagnóstico de 06/
      tabela do Registro)
 4. **Acabamento:** título e ícone da aba, contraste e foco visível, revisão de todas as telas no
    celular
+   - ~~carregamento rápido do cliente~~ — **feito (09/10):** o site era um arquivo só de 810 KB
+     (234 KB comprimidos), e quem escaneava o QR baixava o painel, os gráficos e o log junto. As
+     telas da gestão e o menu agora vêm sob demanda (`web/src/app/telasDaGestao.ts`): o cliente
+     baixa **um arquivo de 76 KB comprimidos**, e os gráficos (112 KB) só com os Relatórios. A
+     equipe não espera: a tela de login baixa em segundo plano o menu e as telas iniciais, e o
+     menu, depois de entrar, só o que o papel pode abrir (o coordenador não baixa gráficos nem
+     telas do administrador). Depois de um deploy (a Vercel devolve o `index.html` no lugar do
+     arquivo sumido), tela que pede um arquivo da versão antiga recarrega a página **uma vez**
+     (janela de 10 s contra ciclo); sem internet não recarrega; nos dois casos, a tela de erro
+     diz para conferir a conexão. **Tela nova da gestão:** registrar em `telasDaGestao.ts`
 
 Prazo: ~3 semanas até o fim de outubro. Etapas 0–2 na primeira semana e meia; a 3 é a maior. Se
 apertar, a 4 encolhe.
