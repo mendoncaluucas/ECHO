@@ -154,10 +154,17 @@ inicial levava a um formulário que nunca funciona sem QR. O diagnóstico de 06/
      descrição; salvar volta para a tela de origem com um **aviso rápido** ("Ocorrência marcada
      como resolvida", `avisoRapido.ts`, mostrado pelo layout). No celular a tratativa vem antes
      do contato. O item de lista (`ItemDaOcorrencia`) é o mesmo do "Chegaram agora" do painel
-   - as telas seguintes passam a usar `Pagina.tsx`, `rotulos.ts` e o aviso rápido. O Registro tem
-     as categorias escritas no código: trocar por `listarCategorias`. A de QR Codes usa largura
-     `max-w-5xl` e as novas `max-w-6xl`: alinhar quando as telas do administrador forem
-     redesenhadas
+   - ~~notificações e registro~~ — **feito (09/10):** **Notificações** com abas Todas/Não lidas
+     no endereço, selo "Nova" (no lugar de uma segunda bolinha ao lado da cor do tipo), cada uma
+     um link que marca como lida ao abrir, e aviso rápido ao marcar todas. **Registro** com busca,
+     tipo, situação, categoria (do banco) e período de/até, tudo no endereço junto com a página;
+     tabela de cinco colunas em tela média e larga (tipo e área juntos, notas embaixo do
+     comentário), a lista da fila no celular, e o CSV leva o resultado inteiro do filtro
+   - as telas seguintes passam a usar `Pagina.tsx`, `rotulos.ts` e o aviso rápido. A de QR Codes
+     usa largura `max-w-5xl` e as novas `max-w-6xl`: alinhar quando as telas do administrador
+     forem redesenhadas. **Cuidado com `sr-only` dentro de caixa com rolagem:** sem um ancestral
+     `relative`, o texto escondido escapa da caixa e estica a página (aconteceu na tabela do
+     Registro)
 4. **Acabamento:** título e ícone da aba, contraste e foco visível, revisão de todas as telas no
    celular
 
