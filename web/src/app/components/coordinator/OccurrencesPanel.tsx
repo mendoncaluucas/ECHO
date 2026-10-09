@@ -222,6 +222,11 @@ export function OccurrencesPanel() {
                     {c.nome}
                   </option>
                 ))}
+                {/* Categoria do endereço que não está na lista (link antigo): aparece,
+                    senão o filtro valeria com o campo mostrando "Todas". */}
+                {categoria && !categorias.some((c) => c.nome === categoria) && (
+                  <option value={categoria}>{categoria}</option>
+                )}
               </select>
             </label>
           )}

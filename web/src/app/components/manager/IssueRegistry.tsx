@@ -1,159 +1,182 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Download, Eye, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Download, Loader2, Search, SearchX, X } from 'lucide-react';
 import {
-  encerrarSessao,
+  listarCategorias,
   listarOcorrencias,
   MAXIMO_POR_PAGINA,
   tokenDaSessao,
+  type Categoria,
   type FiltrosDeOcorrencia,
   type Ocorrencia,
   type StatusOcorrencia,
   type TipoFeedback,
 } from '../../services/api';
 import { baixarCsv, montarCsv } from '../../services/csv';
+import {
+  corDoTipo,
+  ROTULO_STATUS,
+  ROTULO_TIPO,
+  rotuloDoStatus,
+  rotuloDoTipo,
+  seloDoStatus,
+} from '../../rotulos';
+import { AvisoDeErro, CabecalhoDaPagina, Cartao, Esqueleto, EstadoVazio, Pagina } from '../layout/Pagina';
+import { ItemDaOcorrencia } from '../coordinator/ItemDaOcorrencia';
 
 const POR_PAGINA = 20;
+const PAGINA_MAXIMA = 10_000;
 
-// Classes inteiras: o Tailwind varre o código por strings completas.
-const CONFIG_STATUS: Record<StatusOcorrencia, { rotulo: string; classe: string }> = {
-  PENDENTE: { rotulo: 'Pendente', classe: 'bg-red-100 text-red-700' },
-  EM_ANDAMENTO: { rotulo: 'Em andamento', classe: 'bg-amber-100 text-amber-700' },
-  RESOLVIDO: { rotulo: 'Resolvido', classe: 'bg-green-100 text-green-700' },
-};
+const TIPOS = Object.keys(ROTULO_TIPO) as TipoFeedback[];
+const SITUACOES = Object.keys(ROTULO_STATUS) as StatusOcorrencia[];
 
-const ROTULO_TIPO: Record<TipoFeedback, string> = {
-  ELOGIO: 'Elogio',
-  SUGESTAO: 'Sugestão',
-  RECLAMACAO: 'Reclamação',
-};
+// Os filtros que vivem no endereço. "pagina" também: voltar de uma ocorrência devolve
+// a mesma página, e o link pode ser mandado para outra pessoa.
+const CHAVES = ['busca', 'tipo', 'status', 'categoria', 'de', 'ate'] as const;
+type Chave = (typeof CHAVES)[number];
 
-const STATUS_DESCONHECIDO = { rotulo: 'Desconhecido', classe: 'bg-gray-100 text-gray-700' };
-
-const CATEGORIAS = ['Higiene', 'Atendimento', 'Alimento'];
+const DATA = /^\d{4}-\d{2}-\d{2}$/;
 
 const campo =
-  'px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500';
+  'h-10 w-full min-w-0 rounded-lg border border-border bg-input-background px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+const botaoSecundario =
+  'inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+function dataEHora(iso: string) {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 function csvDasOcorrencias(ocorrencias: Ocorrencia[]) {
-  const cabecalho = [
-    'ID',
-    'Data',
-    'Tipo',
-    'Status',
-    'Setor',
-    'Categorias',
-    'Comentario',
-    'Tratado por',
-  ];
-
-  const linhas = ocorrencias.map((o) =>
-    [
-      o.id,
-      new Date(o.criadoEm).toLocaleString('pt-BR'),
-      ROTULO_TIPO[o.tipo] ?? o.tipo,
-      (CONFIG_STATUS[o.status] ?? STATUS_DESCONHECIDO).rotulo,
-      o.area?.nome ?? '',
-      o.avaliacoes.map((a) => `${a.categoria}: ${a.estrelas}`).join(' | '),
-      o.comentario ?? '',
-      o.tratadoPor?.nome ?? '',
-    ]
-  );
-
+  const cabecalho = ['ID', 'Data', 'Tipo', 'Status', 'Setor', 'Categorias', 'Comentario', 'Tratado por'];
+  const linhas = ocorrencias.map((o) => [
+    o.id,
+    new Date(o.criadoEm).toLocaleString('pt-BR'),
+    rotuloDoTipo(o.tipo),
+    rotuloDoStatus(o.status),
+    o.area?.nome ?? '',
+    o.avaliacoes.map((a) => `${a.categoria}: ${a.estrelas}`).join(' | '),
+    o.comentario ?? '',
+    o.tratadoPor?.nome ?? '',
+  ]);
   return montarCsv([cabecalho, ...linhas]);
 }
 
+type Resultado = { itens: Ocorrencia[]; total: number; paginas: number };
+
 export function IssueRegistry() {
   const navigate = useNavigate();
-  const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
-  const [total, setTotal] = useState(0);
-  const [paginas, setPaginas] = useState(1);
-  const [pagina, setPagina] = useState(1);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
-  const [exportando, setExportando] = useState(false);
+  const token = tokenDaSessao() ?? '';
+  const [parametros, setParametros] = useSearchParams();
 
-  const [busca, setBusca] = useState('');
-  const [buscaAplicada, setBuscaAplicada] = useState('');
-  const [categoria, setCategoria] = useState('');
-  const [status, setStatus] = useState<StatusOcorrencia | ''>('');
-  const [de, setDe] = useState('');
-
-  const requisicaoAtual = useRef(0);
+  // Só passa adiante o que é válido: um endereço editado à mão não pode virar erro 400.
+  const ler = (chave: Chave) => parametros.get(chave)?.trim() ?? '';
+  const tipo = TIPOS.includes(ler('tipo') as TipoFeedback) ? (ler('tipo') as TipoFeedback) : '';
+  const status = SITUACOES.includes(ler('status') as StatusOcorrencia)
+    ? (ler('status') as StatusOcorrencia)
+    : '';
+  const de = DATA.test(ler('de')) ? ler('de') : '';
+  const ate = DATA.test(ler('ate')) ? ler('ate') : '';
+  const categoria = ler('categoria');
+  const buscaAplicada = ler('busca');
+  // Teto folgado: um "?pagina=1e20" digitado à mão vai para a última página (efeito
+  // abaixo) em vez de virar erro da API.
+  const pagina = Math.min(PAGINA_MAXIMA, Math.max(1, Math.floor(Number(parametros.get('pagina'))) || 1));
+  const periodoInvalido = de !== '' && ate !== '' && de > ate;
+  // O que está no campo de busca; só vira filtro com Enter ou ao sair do campo.
+  const [textoDaBusca, setTextoDaBusca] = useState(buscaAplicada);
+  // A tela não é recriada quando o endereço muda na mesma rota (o "Registro" do menu
+  // limpa os filtros): sem isto, o campo seguia mostrando uma busca que já não valia.
+  useEffect(() => setTextoDaBusca(buscaAplicada), [buscaAplicada]);
 
   const filtros: FiltrosDeOcorrencia = {
+    ...(buscaAplicada && { busca: buscaAplicada }),
+    ...(tipo && { tipo }),
     ...(status && { status }),
     ...(categoria && { categoria }),
-    ...(buscaAplicada && { busca: buscaAplicada }),
     ...(de && { de }),
+    ...(ate && { ate }),
   };
   // Serializado para o efeito reagir a mudança de conteúdo, não de identidade do objeto.
   const chaveDosFiltros = JSON.stringify(filtros);
+  const temFiltro = chaveDosFiltros !== '{}';
 
-  const tratarFalha = (e: Error & { status?: number }) => {
-    if (e.status === 401) {
-      encerrarSessao();
-      navigate('/gerente/login');
-      return true;
-    }
-    setErro(e.message || 'Não foi possível carregar as ocorrências.');
-    return false;
+  // Trocar filtro volta para a primeira página: continuar na página 5 de um resultado
+  // que agora tem 2 mostraria uma tela vazia sem explicação.
+  const mudarFiltro = (chave: Chave, valor: string) => {
+    const novos = new URLSearchParams(parametros);
+    if (valor.trim()) novos.set(chave, valor.trim());
+    else novos.delete(chave);
+    novos.delete('pagina');
+    setParametros(novos, { replace: true });
+  };
+  const irParaPagina = (nova: number) => {
+    const novos = new URLSearchParams(parametros);
+    if (nova > 1) novos.set('pagina', String(nova));
+    else novos.delete('pagina');
+    setParametros(novos, { replace: true });
+  };
+  const limparFiltros = () => {
+    setTextoDaBusca('');
+    setParametros({}, { replace: true });
   };
 
-  const carregar = useCallback(() => {
-    const token = tokenDaSessao();
-    if (!token) {
-      navigate('/gerente/login');
-      return;
-    }
+  const [resultado, setResultado] = useState<Resultado | null>(null);
+  const [buscando, setBuscando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+  const [exportando, setExportando] = useState(false);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [tentativa, setTentativa] = useState(0);
+  const pedidoAtual = useRef(0);
 
-    const minhaVez = ++requisicaoAtual.current;
+  // Sessão vencida (401) é tratada no serviço da API, que leva ao login.
+  useEffect(() => {
+    if (periodoInvalido) return;
+    const meu = ++pedidoAtual.current;
+    setBuscando(true);
     setErro(null);
 
     listarOcorrencias(token, { ...JSON.parse(chaveDosFiltros), pagina, porPagina: POR_PAGINA })
       .then((res) => {
-        if (minhaVez !== requisicaoAtual.current) return;
-        setOcorrencias(res.itens);
-        setTotal(res.total);
-        setPaginas(res.paginas);
+        if (meu === pedidoAtual.current) setResultado({ itens: res.itens, total: res.total, paginas: res.paginas });
       })
-      .catch((e: Error & { status?: number }) => {
-        if (minhaVez !== requisicaoAtual.current) return;
-        tratarFalha(e);
+      .catch((e: Error) => {
+        if (meu === pedidoAtual.current) setErro(e.message || 'Não foi possível carregar o registro.');
       })
       .finally(() => {
-        if (minhaVez === requisicaoAtual.current) setCarregando(false);
+        if (meu === pedidoAtual.current) setBuscando(false);
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chaveDosFiltros, pagina, navigate]);
+  }, [token, chaveDosFiltros, pagina, periodoInvalido, tentativa]);
 
   useEffect(() => {
-    carregar();
-    return () => {
-      requisicaoAtual.current++;
-    };
-  }, [carregar]);
+    listarCategorias(token)
+      .then((res) => setCategorias(res.itens))
+      .catch(() => {
+        // Sem a lista, o filtro de categoria some; o resto funciona.
+      });
+  }, [token]);
 
-  // Trocar filtro tem que voltar para a primeira página: continuar na página 5 de um
-  // resultado que agora tem 2 mostraria uma tela vazia sem explicação.
-  const aplicarFiltro = (aplicar: () => void) => {
-    aplicar();
-    setPagina(1);
-  };
+  // Página além do fim (filtro mudou em outra aba, item apagado): vai para a última.
+  useEffect(() => {
+    if (resultado && resultado.total > 0 && pagina > resultado.paginas) irParaPagina(resultado.paginas);
+    // irParaPagina deriva de parametros, que muda junto com pagina.
+  }, [resultado, pagina]);
 
   const exportar = async () => {
-    const token = tokenDaSessao();
-    if (!token) return;
     setErro(null);
     setExportando(true);
-
     try {
-      // A exportação leva o resultado inteiro do filtro, não só a página na tela —
-      // por isso busca de novo, em blocos do tamanho máximo que a API aceita.
+      // Leva o resultado inteiro do filtro, não só a página na tela: busca de novo, em
+      // blocos do tamanho máximo que a API aceita.
       const todas: Ocorrencia[] = [];
       let paginaAtual = 1;
       let totalDePaginas = 1;
-
       do {
         const res = await listarOcorrencias(token, {
           ...filtros,
@@ -168,207 +191,308 @@ export function IssueRegistry() {
       const hoje = new Date().toISOString().slice(0, 10);
       baixarCsv(`ocorrencias-${hoje}.csv`, csvDasOcorrencias(todas));
     } catch (e) {
-      tratarFalha(e as Error & { status?: number });
+      setErro(e instanceof Error && e.message ? e.message : 'Não foi possível exportar.');
     } finally {
       setExportando(false);
     }
   };
 
-  const primeiroDaPagina = total === 0 ? 0 : (pagina - 1) * POR_PAGINA + 1;
-  const ultimoDaPagina = Math.min(pagina * POR_PAGINA, total);
+  const total = resultado?.total ?? 0;
+  const primeiro = total === 0 ? 0 : (pagina - 1) * POR_PAGINA + 1;
+  const ultimo = Math.min(pagina * POR_PAGINA, total);
 
   return (
-    <div>
-      <div className="max-w-6xl mx-auto p-4 pb-8">
-        <div className="pt-6 pb-4">
-          <h1 className="text-2xl font-bold text-gray-900">Registro de Ocorrências</h1>
-          <p className="text-gray-600 mt-1">Histórico completo de feedbacks</p>
+    <Pagina>
+      <CabecalhoDaPagina
+        titulo="Registro"
+        descricao="Todas as ocorrências, com busca, filtros e exportação."
+        acoes={
+          <button
+            type="button"
+            onClick={exportar}
+            disabled={exportando || total === 0 || periodoInvalido}
+            className={botaoSecundario}
+          >
+            {exportando ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Download className="size-4" aria-hidden="true" />
+            )}
+            Exportar CSV
+          </button>
+        }
+      />
+
+      <Cartao className="mb-4">
+        <form
+          role="search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            mudarFiltro('busca', textoDaBusca);
+          }}
+          className="relative"
+        >
+          <label htmlFor="busca-registro" className="sr-only">
+            Buscar no comentário ou na área
+          </label>
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <input
+            id="busca-registro"
+            type="search"
+            value={textoDaBusca}
+            onChange={(e) => setTextoDaBusca(e.target.value)}
+            onBlur={() => textoDaBusca.trim() !== buscaAplicada && mudarFiltro('busca', textoDaBusca)}
+            placeholder="Buscar no comentário ou na área e apertar Enter"
+            className="h-11 w-full rounded-xl border border-border bg-input-background pr-10 pl-10 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-search-cancel-button]:hidden"
+          />
+          {textoDaBusca && (
+            <button
+              type="button"
+              onClick={() => {
+                setTextoDaBusca('');
+                mudarFiltro('busca', '');
+              }}
+              aria-label="Limpar a busca"
+              className="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          )}
+        </form>
+
+        {/* Cinco lado a lado só em tela larga: antes disso a data ficava "dd/mm/aa". */}
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <label className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-bold text-muted-foreground">Tipo</span>
+            <select value={tipo} onChange={(e) => mudarFiltro('tipo', e.target.value)} className={campo}>
+              <option value="">Todos</option>
+              {TIPOS.map((t) => (
+                <option key={t} value={t}>
+                  {ROTULO_TIPO[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-bold text-muted-foreground">Situação</span>
+            <select value={status} onChange={(e) => mudarFiltro('status', e.target.value)} className={campo}>
+              <option value="">Todas</option>
+              {SITUACOES.map((s) => (
+                <option key={s} value={s}>
+                  {ROTULO_STATUS[s]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {categorias.length > 0 && (
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="text-xs font-bold text-muted-foreground">Categoria avaliada</span>
+              <select
+                value={categoria}
+                onChange={(e) => mudarFiltro('categoria', e.target.value)}
+                className={campo}
+              >
+                <option value="">Todas</option>
+                {categorias.map((c) => (
+                  <option key={c.id} value={c.nome}>
+                    {c.nome}
+                  </option>
+                ))}
+                {/* Categoria do endereço que não está na lista (link antigo): aparece,
+                    senão o filtro valeria com o campo mostrando "Todas". */}
+                {categoria && !categorias.some((c) => c.nome === categoria) && (
+                  <option value={categoria}>{categoria}</option>
+                )}
+              </select>
+            </label>
+          )}
+          <label className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-bold text-muted-foreground">De</span>
+            <input type="date" value={de} max={ate || undefined} onChange={(e) => mudarFiltro('de', e.target.value)} className={campo} />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-bold text-muted-foreground">Até</span>
+            <input type="date" value={ate} min={de || undefined} onChange={(e) => mudarFiltro('ate', e.target.value)} className={campo} />
+          </label>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 space-y-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  aplicarFiltro(() => setBuscaAplicada(busca));
-                }}
-                className="relative"
-              >
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar por comentário ou setor e pressionar Enter..."
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  onBlur={() => aplicarFiltro(() => setBuscaAplicada(busca))}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-              </form>
-            </div>
+        {(temFiltro || periodoInvalido) && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            {periodoInvalido ? (
+              <p role="alert" className="text-sm font-semibold text-perigo">
+                A data inicial precisa ser anterior à final.
+              </p>
+            ) : (
+              <span />
+            )}
             <button
-              onClick={exportar}
-              disabled={exportando || total === 0}
-              className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              type="button"
+              onClick={limparFiltros}
+              className="rounded-md px-1 text-sm font-bold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
-              {exportando ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Download className="w-5 h-5" />
-              )}
-              Exportar CSV
+              Limpar filtros
             </button>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <select
-              value={categoria}
-              onChange={(e) => aplicarFiltro(() => setCategoria(e.target.value))}
-              className={campo}
-            >
-              <option value="">Todas as Categorias</option>
-              {CATEGORIAS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={status}
-              onChange={(e) =>
-                aplicarFiltro(() => setStatus(e.target.value as StatusOcorrencia | ''))
-              }
-              className={campo}
-            >
-              <option value="">Todos os Status</option>
-              {(Object.keys(CONFIG_STATUS) as StatusOcorrencia[]).map((s) => (
-                <option key={s} value={s}>
-                  {CONFIG_STATUS[s].rotulo}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="date"
-              value={de}
-              onChange={(e) => aplicarFiltro(() => setDe(e.target.value))}
-              title="Mostrar a partir desta data"
-              className={campo}
-            />
-          </div>
-        </div>
-
-        {erro && (
-          <p className="mb-6 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-            {erro}
-          </p>
         )}
+      </Cartao>
 
-        {carregando ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
+      {periodoInvalido ? null : erro ? (
+        <AvisoDeErro mensagem={erro} aoTentarDeNovo={() => setTentativa((t) => t + 1)} />
+      ) : !resultado ? (
+        <Cartao>
+          <div className="flex flex-col gap-3" aria-busy="true" aria-label="Carregando o registro">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Esqueleto key={i} className="h-12" />
+            ))}
           </div>
+        </Cartao>
+      ) : resultado.itens.length === 0 ? (
+        temFiltro ? (
+          <EstadoVazio icone={SearchX} titulo="Nenhuma ocorrência com esses filtros">
+            <button type="button" onClick={limparFiltros} className={botaoSecundario}>
+              Limpar filtros
+            </button>
+          </EstadoVazio>
         ) : (
-          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-orange-100">
+          <EstadoVazio
+            icone={SearchX}
+            titulo="Nenhuma ocorrência registrada ainda"
+            descricao="Quando um cliente avaliar pelo QR Code da mesa, ela aparece aqui."
+          />
+        )
+      ) : (
+        <div aria-busy={buscando} className={`transition-opacity ${buscando ? 'opacity-60' : ''}`}>
+          {/* Celular: a mesma lista da fila de ocorrências. Uma tabela de sete colunas
+              não cabe em 375 px sem rolar de lado. */}
+          <Cartao className="md:hidden">
+            <ul className="-my-1 divide-y divide-[#efefea]">
+              {resultado.itens.map((o) => (
+                <li key={o.id}>
+                  <ItemDaOcorrencia ocorrencia={o} />
+                </li>
+              ))}
+            </ul>
+          </Cartao>
+
+          <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
+            {/* relative: os textos só para leitor de tela (sr-only) são absolutos e, sem
+                um ancestral posicionado, escapavam desta caixa e esticavam a página. */}
+            <div className="relative overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <caption className="sr-only">Ocorrências registradas</caption>
+                <thead className="border-b border-border bg-[#fafaf7] text-xs font-bold tracking-wide text-muted-foreground uppercase">
                   <tr>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Data</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Tipo</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Setor</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Categorias</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Comentário</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Ações</th>
+                    <th scope="col" className="px-4 py-3 whitespace-nowrap">Data</th>
+                    <th scope="col" className="px-4 py-3">Ocorrência</th>
+                    <th scope="col" className="px-4 py-3">Comentário e notas</th>
+                    <th scope="col" className="px-4 py-3">Situação</th>
+                    <th scope="col" className="px-4 py-3">
+                      <span className="sr-only">Abrir</span>
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {ocorrencias.map((occ) => {
-                    const info = CONFIG_STATUS[occ.status] ?? STATUS_DESCONHECIDO;
-
-                    return (
-                      <tr key={occ.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
-                          {new Date(occ.criadoEm).toLocaleDateString('pt-BR')}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
-                          {ROTULO_TIPO[occ.tipo] ?? occ.tipo}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
-                          {occ.area?.nome ?? '—'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {occ.avaliacoes.length > 0
-                            ? occ.avaliacoes.map((a) => `${a.categoria} ${a.estrelas}★`).join(', ')
-                            : '—'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
-                          {occ.comentario || '—'}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-semibold ${info.classe}`}
-                          >
-                            {info.rotulo}
+                <tbody className="divide-y divide-[#efefea]">
+                  {resultado.itens.map((o) => (
+                    <tr
+                      key={o.id}
+                      // A linha inteira abre a ocorrência com o mouse; pelo teclado, o
+                      // link da última coluna. Clique no próprio link não navega duas vezes.
+                      onClick={(e) => {
+                        if (!(e.target as HTMLElement).closest('a')) navigate(`/coordenador/ocorrencia/${o.id}`);
+                      }}
+                      className="cursor-pointer transition-colors hover:bg-[#f6f6f2]"
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap tabular-nums">
+                        <time dateTime={o.criadoEm}>
+                          {new Date(o.criadoEm).toLocaleDateString('pt-BR')}
+                          <span className="block text-xs text-muted-foreground">
+                            {new Date(o.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <button
-                            onClick={() => navigate(`/coordenador/ocorrencia/${occ.id}`)}
-                            className="text-orange-600 hover:text-orange-700 font-semibold flex items-center gap-1"
-                          >
-                            <Eye className="w-4 h-4" />
-                            Ver
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                        </time>
+                      </td>
+                      {/* Tipo e área numa coluna, e as notas embaixo do comentário: com uma
+                          coluna para cada, a tabela não cabia num notebook com o menu aberto. */}
+                      <td className="px-4 py-3">
+                        <span className="flex items-start gap-2 font-semibold">
+                          <span className={`mt-1.5 size-2.5 flex-none rounded-full ${corDoTipo(o.tipo)}`} aria-hidden="true" />
+                          <span>
+                            {rotuloDoTipo(o.tipo)}
+                            <span className="block text-xs font-medium text-muted-foreground">
+                              {o.area?.nome ?? 'Restaurante'}
+                            </span>
+                          </span>
+                        </span>
+                      </td>
+                      <td className="min-w-56 px-4 py-3">
+                        {o.comentario ? (
+                          <span className="line-clamp-2 break-words text-[#3a3f4a]">{o.comentario}</span>
+                        ) : (
+                          <span className="text-muted-foreground italic">Sem comentário</span>
+                        )}
+                        {o.avaliacoes.length > 0 && (
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {o.avaliacoes.map((a) => `${a.categoria} ${a.estrelas}★`).join(' · ')}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${seloDoStatus(o.status)}`}
+                        >
+                          {rotuloDoStatus(o.status)}
+                        </span>
+                      </td>
+                      <td className="px-2 py-3 text-right">
+                        <Link
+                          to={`/coordenador/ocorrencia/${o.id}`}
+                          aria-label={`Abrir a ocorrência de ${dataEHora(o.criadoEm)}`}
+                          className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        >
+                          <ChevronRight className="size-4" aria-hidden="true" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
+          </div>
 
-            {ocorrencias.length === 0 && (
-              <p className="px-6 py-10 text-center text-gray-600">
-                {total === 0 && !status && !categoria && !buscaAplicada && !de
-                  ? 'Nenhuma ocorrência registrada ainda.'
-                  : 'Nenhuma ocorrência encontrada para estes filtros.'}
-              </p>
-            )}
-
-            {total > 0 && (
-              <div className="flex items-center justify-between gap-4 px-6 py-4 border-t border-gray-200">
-                <p className="text-sm text-gray-600">
-                  {primeiroDaPagina}–{ultimoDaPagina} de {total}
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setPagina((p) => Math.max(1, p - 1))}
-                    disabled={pagina <= 1}
-                    className="p-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                    aria-label="Página anterior"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <span className="text-sm text-gray-600">
-                    {pagina} de {paginas}
-                  </span>
-                  <button
-                    onClick={() => setPagina((p) => Math.min(paginas, p + 1))}
-                    disabled={pagina >= paginas}
-                    className="p-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                    aria-label="Próxima página"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
+          <nav aria-label="Páginas" className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+            <p className="text-muted-foreground tabular-nums">
+              {primeiro}–{ultimo} de {total}
+            </p>
+            {resultado.paginas > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => irParaPagina(pagina - 1)}
+                  disabled={pagina <= 1}
+                  aria-label="Página anterior"
+                  className={`${botaoSecundario} w-10 px-0`}
+                >
+                  <ChevronLeft className="size-4" aria-hidden="true" />
+                </button>
+                <span className="px-1 font-semibold tabular-nums">
+                  {pagina} de {resultado.paginas}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => irParaPagina(pagina + 1)}
+                  disabled={pagina >= resultado.paginas}
+                  aria-label="Próxima página"
+                  className={`${botaoSecundario} w-10 px-0`}
+                >
+                  <ChevronRight className="size-4" aria-hidden="true" />
+                </button>
               </div>
             )}
-          </div>
-        )}
-      </div>
-    </div>
+          </nav>
+        </div>
+      )}
+    </Pagina>
   );
 }
