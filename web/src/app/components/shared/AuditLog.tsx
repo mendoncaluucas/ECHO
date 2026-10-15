@@ -22,7 +22,7 @@ const CHAVES = ['usuario', 'acao', 'de', 'ate'] as const;
 type Chave = (typeof CHAVES)[number];
 
 const campo =
-  'h-10 w-full min-w-0 rounded-lg border border-border bg-input-background px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-10 w-full min-w-0 rounded-lg border border-borda-campo bg-input-background px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const botaoSecundario =
   'inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
@@ -123,8 +123,10 @@ export function AuditLog() {
       <CabecalhoDaPagina titulo="Log de atividades" descricao="Quem fez o quê no Echo, e quando." />
 
       <Cartao className="mb-4">
+        {/* No celular, um seletor por linha: lado a lado, "Todas as ações" e os nomes
+            saíam cortados. As datas cabem em duas colunas. */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <label className="flex min-w-0 flex-col gap-1">
+          <label className="col-span-2 flex min-w-0 flex-col gap-1 sm:col-span-1">
             <span className="text-xs font-bold text-muted-foreground">Quem</span>
             <select value={usuarioId} onChange={(e) => mudarFiltro('usuario', e.target.value)} className={campo}>
               <option value="">Todos</option>
@@ -139,7 +141,7 @@ export function AuditLog() {
               {usuarioDoFiltroForaDaLista && <option value={usuarioId}>Usuário não encontrado</option>}
             </select>
           </label>
-          <label className="flex min-w-0 flex-col gap-1">
+          <label className="col-span-2 flex min-w-0 flex-col gap-1 sm:col-span-1">
             <span className="text-xs font-bold text-muted-foreground">O quê</span>
             <select value={acao} onChange={(e) => mudarFiltro('acao', e.target.value)} className={campo}>
               <option value="">Todas as ações</option>

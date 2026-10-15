@@ -107,7 +107,7 @@ const botaoPrincipal =
   'flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-[17px] font-bold text-primary-foreground transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50';
 
 const campo =
-  'h-12 w-full rounded-xl border border-border bg-card px-4 text-base transition-colors placeholder:text-[#8a8f9a] focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20 aria-[invalid=true]:border-red-500';
+  'h-12 w-full rounded-xl border border-borda-campo bg-card px-4 text-base transition-colors focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20 aria-[invalid=true]:border-red-500';
 
 function Estrelas({
   categoria,
@@ -152,7 +152,7 @@ function Estrelas({
               <Star
                 aria-hidden="true"
                 className={`size-9 transition-transform duration-150 active:scale-90 ${
-                  nota <= mostrado ? 'fill-estrela text-estrela' : 'fill-transparent text-[#d4d4cd]'
+                  nota <= mostrado ? 'fill-estrela text-atencao' : 'fill-transparent text-borda-campo'
                 } ${nota === valor ? 'scale-110' : ''}`}
               />
             </span>
@@ -175,7 +175,7 @@ function TelaDeAviso({
   acao?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-full items-center justify-center bg-background p-6">
+    <main className="flex min-h-full items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm text-center">
         <span className="mx-auto mb-5 flex size-16 items-center justify-center rounded-full bg-[#fdf3dc] text-[#a8590a]">
           {icone}
@@ -184,7 +184,7 @@ function TelaDeAviso({
         <p className="mt-2 text-muted-foreground">{texto}</p>
         {acao && <div className="mt-6">{acao}</div>}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -364,14 +364,14 @@ export function FeedbackForm() {
 
   if (estado === 'carregando' || !contexto) {
     return (
-      <div className="flex min-h-full flex-col items-center justify-center gap-4 bg-background p-6 text-center">
+      <main className="flex min-h-full flex-col items-center justify-center gap-4 bg-background p-6 text-center">
         <Loader2 className="size-8 animate-spin text-primary" aria-hidden="true" />
         <p role="status" className="max-w-xs text-muted-foreground">
           {acordando
             ? 'Só um instante: estamos preparando a sua avaliação.'
             : 'Carregando…'}
         </p>
-      </div>
+      </main>
     );
   }
 
@@ -531,7 +531,7 @@ export function FeedbackForm() {
                   onChange={(e) => mudar({ comentario: e.target.value })}
                   rows={5}
                   placeholder="Escreva aqui (opcional)"
-                  className="w-full resize-none rounded-2xl border border-border bg-card px-4 py-3 text-base leading-relaxed placeholder:text-[#8a8f9a] focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
+                  className="w-full resize-none rounded-2xl border border-borda-campo bg-card px-4 py-3 text-base leading-relaxed focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20"
                 />
                 <span className="self-end text-xs text-muted-foreground">
                   {rascunho.comentario.length}/{MAX_COMENTARIO}

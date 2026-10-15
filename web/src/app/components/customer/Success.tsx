@@ -9,7 +9,7 @@ export function Success() {
     (location.state as { qrToken?: string; comRetorno?: boolean } | null) ?? {};
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-background p-6">
+    <main className="flex min-h-full items-center justify-center bg-background p-6">
       <div className="flex w-full max-w-sm flex-col items-center text-center">
         <span className="flex size-24 items-center justify-center rounded-full bg-accent animate-in zoom-in-50 fade-in duration-500">
           <span className="flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -39,6 +39,6 @@ export function Success() {
           </button>
         )}
       </div>
-    </div>
+    </main>
   );
 }

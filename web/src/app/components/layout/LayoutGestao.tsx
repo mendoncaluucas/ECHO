@@ -209,7 +209,7 @@ export function LayoutGestao({ usuario }: { usuario: Usuario }) {
 
           <main id="conteudo" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
             {/* Chave por tela: um erro numa tela não prende as próximas. */}
-            <ErrorBoundary key={location.pathname}>
+            <ErrorBoundary key={location.pathname} dentroDoMenu>
               {/* A tela chega sob demanda; o menu fica parado e só o conteúdo espera. */}
               <Suspense fallback={<CarregandoTela />}>
                 <Outlet />

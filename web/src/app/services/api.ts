@@ -687,6 +687,30 @@ export function usuarioLogado(): Usuario | null {
   return sessaoAtual()?.usuario ?? null;
 }
 
+// Disparado quando o usuário guardado na sessão muda sem novo login. A guarda de rota
+// escuta e remonta o menu, que mostra o nome de quem está logado.
+export const EVENTO_SESSAO_ATUALIZADA = 'echo:sessao-atualizada';
+
+// O administrador editou a própria conta: o nome guardado no login ficaria velho no
+// menu até sair e entrar de novo. Grava no mesmo lugar onde a sessão está, sem mexer
+// no token nem no "Manter conectado".
+export function atualizarUsuarioDaSessao(dados: Pick<Usuario, 'nome'>) {
+  const sessao = sessaoAtual();
+  if (!sessao) return;
+  const usuario = { ...sessao.usuario, ...dados };
+  try {
+    if (localStorage.getItem('echo_token')) {
+      localStorage.setItem('echo_usuario', JSON.stringify(usuario));
+    } else {
+      gravarCookieDaSessao({ token: sessao.token, usuario });
+    }
+  } catch {
+    // Armazenamento bloqueado: o nome novo aparece no próximo login.
+    return;
+  }
+  window.dispatchEvent(new Event(EVENTO_SESSAO_ATUALIZADA));
+}
+
 // Há quanto tempo a sessão atual foi aberta, em horas, lida do `iat` do token. Só
 // para avisar na tela: quem decide se a sessão vale é o backend.
 export function idadeDaSessaoEmHoras(): number | null {

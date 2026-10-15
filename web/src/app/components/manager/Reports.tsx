@@ -149,7 +149,7 @@ const botaoSecundario =
   'inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 const campoDeData =
-  'h-10 w-full min-w-0 rounded-lg border border-border bg-input-background px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-10 w-full min-w-0 rounded-lg border border-borda-campo bg-input-background px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export function Reports() {
   const token = tokenDaSessao() ?? '';

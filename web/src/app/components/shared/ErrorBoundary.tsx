@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { AlertTriangle, RotateCw, Home } from 'lucide-react';
+import { AlertTriangle, Home, RotateCw, WifiOff } from 'lucide-react';
 
 // Rede de segurança contra erro de render. Sem isso, uma exceção em qualquer tela
 // desmonta a árvore inteira e o usuário vê uma página em branco — sem navegação,
@@ -11,6 +11,9 @@ import { AlertTriangle, RotateCw, Home } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
+  // Dentro do menu da gestão: ocupa só a área do conteúdo e o menu continua
+  // funcionando. Sem isso, ocupa a tela inteira (erro no login, no cliente ou no menu).
+  dentroDoMenu?: boolean;
 }
 
 interface State {
@@ -49,47 +52,55 @@ export class ErrorBoundary extends Component<Props, State> {
     const ehDoCliente = ['/feedback', '/identificacao', '/sucesso', '/boas-vindas'].some((rota) =>
       window.location.pathname.startsWith(rota)
     );
+    const falhaAoBaixar = ehFalhaAoBaixarATela(erro);
+    const Icone = falhaAoBaixar ? WifiOff : AlertTriangle;
+    // Dentro do menu o conteúdo já está num <main>; fora dele, esta é a página inteira.
+    const Envoltorio = this.props.dentroDoMenu ? 'div' : 'main';
 
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 text-center space-y-4">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
-            <AlertTriangle className="w-8 h-8 text-red-600" />
-          </div>
+      <Envoltorio
+        className={
+          this.props.dentroDoMenu
+            ? 'flex justify-center px-4 py-10 sm:px-6 lg:py-16'
+            : 'flex min-h-full items-center justify-center bg-background p-4 sm:p-6'
+        }
+      >
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center sm:p-8">
+          <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-perigo-fundo text-perigo">
+            <Icone className="size-7" aria-hidden="true" />
+          </span>
 
           {/* Falha ao baixar pede ação de quem está usando (conferir a internet); erro
               do código, não. Antes as duas diziam "o problema foi registrado", que não
               ajudava quem estava sem conexão (e não havia registro nenhum além do console). */}
-          {ehFalhaAoBaixarATela(erro) ? (
-            <>
-              <h1 className="text-xl font-bold text-gray-900">Não foi possível abrir esta tela</h1>
-              <p className="text-gray-600">
-                Confira a conexão com a internet e toque em Recarregar.
-              </p>
-            </>
-          ) : (
-            <>
-              <h1 className="text-xl font-bold text-gray-900">Algo deu errado nesta tela</h1>
-              <p className="text-gray-600">Você pode tentar de novo ou voltar ao início.</p>
-            </>
-          )}
+          <h1 className="mt-5 text-xl leading-tight font-extrabold tracking-tight">
+            {falhaAoBaixar ? 'Não foi possível abrir esta tela' : 'Algo deu errado nesta tela'}
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            {falhaAoBaixar
+              ? 'Confira a conexão com a internet e toque em Recarregar.'
+              : ehDoCliente
+                ? 'Toque em Recarregar para tentar de novo.'
+                : 'Você pode tentar de novo ou voltar ao seu painel.'}
+          </p>
 
           {/* A mensagem ajuda a equipe a identificar o problema sem abrir o DevTools. */}
-          <details className="text-left">
-            <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700">
+          <details className="mt-5 text-left">
+            <summary className="w-fit cursor-pointer rounded text-sm font-semibold text-muted-foreground hover:text-foreground">
               Detalhes técnicos
             </summary>
-            <p className="mt-2 text-sm text-gray-700 bg-gray-50 rounded-lg p-3 break-words font-mono">
+            <p className="mt-2 rounded-lg bg-muted p-3 font-mono text-sm break-words">
               {erro.message || 'Erro sem mensagem.'}
             </p>
           </details>
 
-          <div className="flex gap-3 pt-2">
+          <div className="mt-6 flex flex-wrap gap-3">
             <button
+              type="button"
               onClick={() => window.location.reload()}
-              className="flex-1 bg-gray-900 hover:bg-gray-800 text-white py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"
+              className="flex h-12 flex-[1_1_9rem] items-center justify-center gap-2 rounded-xl bg-primary px-4 font-bold text-primary-foreground transition-colors hover:bg-primary/90"
             >
-              <RotateCw className="w-4 h-4" />
+              <RotateCw className="size-4" aria-hidden="true" />
               Recarregar
             </button>
             {/* Link de verdade, não navegação do router: recarrega a página inteira
@@ -97,15 +108,15 @@ export class ErrorBoundary extends Component<Props, State> {
             {!ehDoCliente && (
               <a
                 href="/"
-                className="flex-1 bg-white hover:bg-gray-50 text-gray-900 border-2 border-gray-300 py-3 px-4 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"
+                className="flex h-12 flex-[1_1_9rem] items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 font-bold transition-colors hover:bg-muted"
               >
-                <Home className="w-4 h-4" />
+                <Home className="size-4" aria-hidden="true" />
                 Meu painel
               </a>
             )}
           </div>
         </div>
-      </div>
+      </Envoltorio>
     );
   }
 }

@@ -17,7 +17,7 @@ import {
 const ESPERA_ANTES_DE_EXPLICAR = 4000;
 
 const campo =
-  'h-12 w-full rounded-xl border border-border bg-input-background px-4 text-base transition-colors placeholder:text-[#8a8f9a] focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20';
+  'h-12 w-full rounded-xl border border-borda-campo bg-input-background px-4 text-base transition-colors focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20';
 
 // Tela inicial do sistema: o login único da equipe. Cada papel cai direto no próprio
 // painel. Substitui a antiga escolha de papel, cujo cartão "Cliente" levava a um
@@ -89,17 +89,17 @@ export function Entrar() {
   };
 
   return (
-    <div className="flex min-h-full flex-wrap bg-background text-foreground">
-      <section className="hidden min-w-0 flex-[1_1_480px] flex-col justify-between gap-12 bg-marca-escura px-16 py-14 text-[#f2f5f3] lg:flex">
+    <main className="flex min-h-full flex-wrap bg-background text-foreground">
+      <aside className="hidden min-w-0 flex-[1_1_480px] flex-col justify-between gap-12 bg-marca-escura px-16 py-14 text-[#f2f5f3] lg:flex">
         <Marca escura />
 
         <div className="max-w-[480px]">
           <p className="mb-4 text-sm font-semibold tracking-[0.08em] text-[#8fd9c2] uppercase">
             Restaurante Sinuelo
           </p>
-          <h1 className="text-5xl leading-[1.08] font-extrabold tracking-tight">
+          <p className="text-5xl leading-[1.08] font-extrabold tracking-tight">
             Cada opinião da mesa chega até quem pode resolver.
-          </h1>
+          </p>
           <p className="mt-5 text-[17px] leading-relaxed text-[#b9c7c1]">
             O cliente avalia pelo QR Code da mesa. A equipe recebe na hora, trata e acompanha a
             evolução de cada setor.
@@ -115,7 +115,7 @@ export function Entrar() {
             )
           )}
         </ul>
-      </section>
+      </aside>
 
       <section className="flex min-w-0 flex-[1_1_420px] items-center justify-center px-6 py-14">
         <form onSubmit={entrar} className="flex w-full max-w-[380px] flex-col gap-5" noValidate>
@@ -124,7 +124,7 @@ export function Entrar() {
           </div>
 
           <div>
-            <h2 className="text-3xl font-extrabold tracking-tight">Bem-vindo ao Echo</h2>
+            <h1 className="text-3xl font-extrabold tracking-tight">Bem-vindo ao Echo</h1>
             <p className="mt-2 text-muted-foreground">
               Entre com a conta da equipe. Você vai direto para o seu painel.
             </p>
@@ -235,6 +235,6 @@ export function Entrar() {
           </div>
         </form>
       </section>
-    </div>
+    </main>
   );
 }
