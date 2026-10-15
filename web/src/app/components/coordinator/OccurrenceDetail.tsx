@@ -44,7 +44,7 @@ function Estrelas({ quantidade }: { quantidade: number }) {
         <Star
           key={i}
           aria-hidden="true"
-          className={`size-5 ${i <= quantidade ? 'fill-estrela text-estrela' : 'text-[#d6d6cf]'}`}
+          className={`size-5 ${i <= quantidade ? 'fill-estrela text-atencao' : 'text-borda-campo'}`}
         />
       ))}
     </span>

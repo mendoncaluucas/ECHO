@@ -31,6 +31,11 @@
   /* Do Echo, além dos tokens do shadcn: o painel escuro da marca e a cor das estrelas. */
   --marca-escura: #10201c;
   --estrela: #e8a317;
+  /* Contorno dos campos de digitar e das estrelas vazias: 3:1 sobre o branco e o fundo,
+     para dar para ver onde tocar. A borda dos cartões (--border) é só divisória. */
+  --borda-campo: #878a82;
+  /* Texto de exemplo dentro dos campos: 4,5:1 sobre o branco. */
+  --texto-de-exemplo: #6e7380;
   /* Cores com significado, as mesmas em todas as telas. Cada texto passa de 4,5:1 sobre
      o próprio fundo e sobre o branco. As três cores de tipo têm a mesma claridade:
      nunca aparecem sozinhas, o nome do tipo vem sempre ao lado. */
@@ -101,6 +106,7 @@
   --font-sans: 'Manrope Variable', ui-sans-serif, system-ui, sans-serif;
   --color-marca-escura: var(--marca-escura);
   --color-estrela: var(--estrela);
+  --color-borda-campo: var(--borda-campo);
   --color-sucesso: var(--sucesso);
   --color-perigo: var(--perigo);
   --color-perigo-fundo: var(--perigo-fundo);
@@ -154,6 +160,19 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+
+  /* Foco de teclado visível em tudo que não define o próprio: o padrão do navegador
+     saía com metade da cor da marca e menos de 1 px, quase invisível. Só no teclado
+     (focus-visible), então o clique com o mouse não deixa contorno. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* O padrão do Tailwind (metade da cor do texto) ficava em 3,3:1. */
+  ::placeholder {
+    color: var(--texto-de-exemplo);
   }
 
   body {

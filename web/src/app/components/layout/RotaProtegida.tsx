@@ -1,9 +1,10 @@
-import { Suspense, type ReactNode } from 'react';
+import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { LayoutGestaoSobDemanda } from '../../telasDaGestao';
 import { Marca } from './Marca';
 import {
+  EVENTO_SESSAO_ATUALIZADA,
   ROTA_DE_LOGIN,
   sessaoAtual,
   telaInicialDe,
@@ -18,6 +19,14 @@ import {
 // própria, cada uma com o login de um papel fixo — o administrador nem tinha o seu.
 export function RotaProtegida() {
   const location = useLocation();
+  // A sessão é relida a cada render; isto só força um render quando o usuário guardado
+  // muda sem troca de tela (o administrador editou o próprio nome).
+  const [, setVersaoDaSessao] = useState(0);
+  useEffect(() => {
+    const reler = () => setVersaoDaSessao((v) => v + 1);
+    window.addEventListener(EVENTO_SESSAO_ATUALIZADA, reler);
+    return () => window.removeEventListener(EVENTO_SESSAO_ATUALIZADA, reler);
+  }, []);
   const sessao = sessaoAtual();
 
   if (!sessao) {

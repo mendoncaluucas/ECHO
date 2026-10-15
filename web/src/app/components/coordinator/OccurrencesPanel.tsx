@@ -30,7 +30,7 @@ const ABA_PADRAO: Aba = 'PENDENTE';
 const TIPOS = Object.keys(ROTULO_TIPO) as TipoFeedback[];
 
 const campoDeSelecao =
-  'h-10 w-full rounded-lg border border-border bg-input-background px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto';
+  'h-10 w-full rounded-lg border border-borda-campo bg-input-background px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto';
 
 type Lista = { itens: Ocorrencia[]; total: number; pagina: number };
 
@@ -70,6 +70,24 @@ export function OccurrencesPanel() {
   // Só a resposta do pedido mais recente vale: trocar de aba rápido não pode deixar a
   // lista de uma aba aparecendo sob o título de outra.
   const pedidoAtual = useRef(0);
+
+  // Abas da situação no celular, que rolam de lado (ver a faixa no JSX). Também ao
+  // chegarem as contagens: os números alargam as abas e podem empurrar a escolhida.
+  // Só a faixa rola, nunca a página: as contagens podem chegar (servidor acordando)
+  // com a pessoa já lá embaixo na lista, e scrollIntoView a puxaria de volta ao topo.
+  const faixa = useRef<HTMLDivElement>(null);
+  const abaEscolhida = useRef<HTMLButtonElement>(null);
+  const mostrarNaFaixa = (el: HTMLElement) => {
+    if (!faixa.current) return;
+    const folga = 16; // espaço para o contorno do foco
+    const a = el.getBoundingClientRect();
+    const f = faixa.current.getBoundingClientRect();
+    if (a.left < f.left + folga) faixa.current.scrollLeft -= f.left + folga - a.left;
+    else if (a.right > f.right - folga) faixa.current.scrollLeft += a.right - (f.right - folga);
+  };
+  useEffect(() => {
+    if (abaEscolhida.current) mostrarNaFaixa(abaEscolhida.current);
+  }, [aba, contagens]);
 
   const filtrosDaLista = (pagina: number): FiltrosDeOcorrencia => ({
     pagina,
@@ -160,7 +178,13 @@ export function OccurrencesPanel() {
       <div className="mb-4 flex flex-col gap-3">
         {/* Rola de lado no celular em vez de quebrar em duas linhas. A barra de rolagem
             fica escondida: a aba cortada na borda já mostra que há mais. */}
-        <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+        {/* A aba escolhida e a que recebe o foco entram na faixa: o navegador não rola
+            até uma aba meio visível, e quem abria com ?status=todas não via qual estava
+            marcada. */}
+        <div
+          ref={faixa}
+          className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
+        >
           <div role="group" aria-label="Situação" className="inline-flex gap-1 rounded-xl bg-muted p-1">
             {ABAS.map((a) => {
               const escolhida = a.valor === aba;
@@ -168,9 +192,11 @@ export function OccurrencesPanel() {
               return (
                 <button
                   key={a.valor}
+                  ref={escolhida ? abaEscolhida : undefined}
                   type="button"
                   aria-pressed={escolhida}
                   onClick={() => mudarFiltro('status', a.valor)}
+                  onFocus={(e) => mostrarNaFaixa(e.currentTarget)}
                   className={`inline-flex h-9 flex-none items-center gap-2 rounded-[9px] px-3.5 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
                     escolhida
                       ? 'bg-card font-bold text-foreground shadow-sm'
@@ -216,7 +242,7 @@ export function OccurrencesPanel() {
                 onChange={(e) => mudarFiltro('categoria', e.target.value)}
                 className={campoDeSelecao}
               >
-                <option value="">Todas as categorias</option>
+                <option value="">Todas</option>
                 {categorias.map((c) => (
                   <option key={c.id} value={c.nome}>
                     {c.nome}

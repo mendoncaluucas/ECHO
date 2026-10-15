@@ -18,7 +18,7 @@ import { avisarRapido } from '../../avisoRapido';
 import { CabecalhoDaPagina, Cartao, Esqueleto, Pagina } from '../layout/Pagina';
 
 const campo =
-  'h-11 w-full min-w-0 rounded-xl border border-border bg-input-background px-3.5 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-11 w-full min-w-0 rounded-xl border border-borda-campo bg-input-background px-3.5 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const botaoPrimario =
   'inline-flex h-11 flex-none items-center justify-center gap-2 rounded-xl bg-primary px-4 font-semibold text-primary-foreground transition-colors hover:bg-[#0a5242] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const botaoDeIcone =

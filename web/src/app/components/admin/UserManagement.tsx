@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { KeyRound, Loader2, Pencil, Plus, Search, UserCheck, UserX, Users, X } from 'lucide-react';
 import {
   atualizarUsuario,
+  atualizarUsuarioDaSessao,
   criarUsuario,
   listarUsuarios,
   redefinirSenha,
@@ -52,7 +53,7 @@ type Janela =
   | { tipo: 'desativar'; usuario: UsuarioGestao };
 
 const campo =
-  'h-11 w-full rounded-xl border border-border bg-input-background px-3.5 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'h-11 w-full rounded-xl border border-borda-campo bg-input-background px-3.5 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const rotuloDoCampo = 'mb-1.5 block text-sm font-semibold';
 const botaoPrimario =
   'inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 font-semibold text-primary-foreground transition-colors hover:bg-[#0a5242] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -205,7 +206,7 @@ export function UserManagement() {
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar por nome ou e-mail"
-            className="h-11 w-full rounded-xl border border-border bg-input-background pr-10 pl-10 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-search-cancel-button]:hidden"
+            className="h-11 w-full rounded-xl border border-borda-campo bg-input-background pr-10 pl-10 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-search-cancel-button]:hidden"
           />
           {busca && (
             <button
@@ -437,7 +438,9 @@ function ConteudoDaJanela({
           papel: formulario.papel,
           setor: formulario.setor.trim() || null,
         };
-        await atualizarUsuario(janela.usuario.id, alteracoes, token);
+        const salvo = await atualizarUsuario(janela.usuario.id, alteracoes, token);
+        // A própria conta: o menu mostra o nome guardado no login.
+        if (salvo.id === usuarioLogado()?.id) atualizarUsuarioDaSessao({ nome: salvo.nome });
         aoConcluir('Alterações salvas');
       } else if (janela.tipo === 'senha') {
         await redefinirSenha(janela.usuario.id, formulario.senha, token);
