@@ -189,6 +189,25 @@ inicial levava a um formulário que nunca funciona sem QR. O diagnóstico de 06/
      arquivo sumido), tela que pede um arquivo da versão antiga recarrega a página **uma vez**
      (janela de 10 s contra ciclo); sem internet não recarrega; nos dois casos, a tela de erro
      diz para conferir a conexão. **Tela nova da gestão:** registrar em `telasDaGestao.ts`
+   - ~~ícone, contraste, foco e celular~~ — **feito (10/10):** ícone da marca na aba
+     (`favicon.svg` e um PNG para o Safari antigo), na tela inicial do iPhone e do Android
+     (`manifest.webmanifest`, com `display: browser` de propósito: como app instalável, o Chrome
+     ofereceria "Instalar" ao cliente no meio do formulário, e o app abriria no login da equipe).
+     Tela de erro e "página não encontrada" no visual novo; dentro do menu, o erro ocupa só o
+     conteúdo. **Foco de teclado** visível em tudo (regra única no `theme.css`; o do navegador saía
+     com meia cor e menos de 1 px). **Contraste** conferido com o axe-core em todas as telas, nos
+     três passos do cliente e no login (zero problemas), e à mão o que ele não mede: estrelas
+     vazias (1,5:1 → 3,5:1), estrela cheia com contorno escuro, contorno dos campos (1,25:1 →
+     3,5:1, cor `--borda-campo`; a borda dos cartões continua clara) e texto de exemplo nos campos
+     (3,2:1 → 4,7:1). Login com região principal e título principal também no celular. **375 px:**
+     nenhuma tela transborda; filtros do log um por linha, "Todas" na categoria das ocorrências e
+     busca do registro mais curta, que saíam cortados. As abas de situação das ocorrências, que
+     rolam de lado no celular, levam para a vista a aba escolhida e a que recebe o foco (antes,
+     aberta com `?status=todas`, a aba marcada ficava fora da tela). "Obrigado", "QR Code não
+     identificado" e o carregando do cliente ganharam a região principal da página. O nome no
+     menu passa a mudar quando o administrador edita a própria conta
+   - **Etapa 4 concluída.** Fica para decidir: aceitar as prévias da Vercel no CORS da API (a
+     `CORS_ORIGIN` do Render)
 
 Prazo: ~3 semanas até o fim de outubro. Etapas 0–2 na primeira semana e meia; a 3 é a maior. Se
 apertar, a 4 encolhe.
