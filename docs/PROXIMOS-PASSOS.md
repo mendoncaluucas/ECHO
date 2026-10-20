@@ -1,12 +1,12 @@
 # Próximos passos — até a apresentação
 
-> Atualizado em 06/10/2026. Complementa o [ROADMAP](ROADMAP.md) com o estado atual e a ordem
+> Atualizado em 15/10/2026. Complementa o [ROADMAP](ROADMAP.md) com o estado atual e a ordem
 > recomendada. A apresentação ao professor é no fim de outubro, e o critério é **projeto inteiro
 > funcional: nenhuma tela pode ser mock**.
 
 ## Onde estamos
 
-**Todas as 12 telas ligadas à API — nenhuma mock.** 26 endpoints, 231 testes, CI verde, sistema publicado.
+**Todas as 12 telas ligadas à API — nenhuma mock.** 273 testes na API e 116 no front, CI verde, sistema publicado.
 
 fluxo do cliente · dois logins · painel e detalhe de ocorrências · dashboard do gerente · gerador de QR · gestão de usuários · painel administrativo · registro de ocorrências · configurações (áreas) · log de auditoria · notificações · relatórios
 
@@ -208,6 +208,17 @@ inicial levava a um formulário que nunca funciona sem QR. O diagnóstico de 06/
      menu passa a mudar quando o administrador edita a própria conta
    - **Etapa 4 concluída.** Fica para decidir: aceitar as prévias da Vercel no CORS da API (a
      `CORS_ORIGIN` do Render)
+
+## ~~5. Testes do front~~ — feito (16/10)
+
+O front não tinha teste nenhum: só o typecheck e o build seguravam o CI. Agora **116 testes**
+(Vitest 4 + Testing Library, navegador simulado, API falsa), no mesmo job do CI. Cobrem o que
+quebraria em silêncio: a sessão com e sem "Manter conectado", as três etapas do cliente e o que
+vai no envio, os filtros no endereço, o login voltando para a tela onde a sessão caiu, a recarga
+depois de deploy e se o menu e as rotas concordam para cada papel. Cada regra importante foi
+**sabotada de propósito** (20 sabotagens, 19 acusadas; a outra é o `trim` do e-mail, que o
+navegador já faz no campo de e-mail) para confirmar que algum teste acusa. Como escrever
+um teste novo: `web/README.md`.
 
 Prazo: ~3 semanas até o fim de outubro. Etapas 0–2 na primeira semana e meia; a 3 é a maior. Se
 apertar, a 4 encolhe.
