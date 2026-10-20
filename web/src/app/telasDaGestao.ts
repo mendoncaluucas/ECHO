@@ -30,7 +30,13 @@ const JANELA_SEM_NOVA_RECARGA = 10_000;
 // Sem internet, não recarrega: trocaria o Echo pela página "sem conexão" do navegador
 // e a pessoa perderia o que estava na tela. A tela de erro, com "Recarregar", espera
 // a rede voltar.
-function comRecargaSeAVersaoMudou<T>(importar: () => Promise<T>): () => Promise<T> {
+//
+// Exportada e com `recarregar` trocável só para os testes: no jsdom não dá para
+// espionar o location.reload.
+export function comRecargaSeAVersaoMudou<T>(
+  importar: () => Promise<T>,
+  recarregar: () => void = () => window.location.reload()
+): () => Promise<T> {
   return () =>
     importar().catch((erro: unknown) => {
       if (!navigator.onLine) throw erro;
@@ -44,7 +50,7 @@ function comRecargaSeAVersaoMudou<T>(importar: () => Promise<T>): () => Promise<
         // Sem armazenamento não há como saber se já recarregou: melhor não arriscar.
       }
       if (!recarregouHaPouco) {
-        window.location.reload();
+        recarregar();
         // A página vai recarregar; a promessa nunca resolve, para nada piscar antes.
         return new Promise<T>(() => {});
       }
