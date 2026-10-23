@@ -123,6 +123,10 @@ export interface Ocorrencia {
   tratadoPor: { nome: string } | null;
   area: { nome: string } | null;
   avaliacoes: AvaliacaoOcorrencia[];
+  // Retenção (LGPD): quando o contato e o comentário foram apagados, pelo prazo ou a
+  // pedido do cliente. Opcionais: a API de antes da retenção não os manda.
+  contatoApagadoEm?: string | null;
+  comentarioApagadoEm?: string | null;
   // Só no detalhe (GET /occurrences/:id), e só de quem pediu retorno. Listas nunca
   // trazem o contato (LGPD).
   contato?: { nome: string | null; email: string } | null;
@@ -417,14 +421,20 @@ export function redefinirSenha(
 
 export interface Configuracoes {
   duracaoSessaoHoras: number;
+  // Retenção (LGPD), em dias. Ver api/src/retencao.ts.
+  retencaoContatoDias: number;
+  retencaoComentarioDias: number;
+  retencaoNotificacaoDias: number;
+  ultimaRetencaoEm: string | null;
 }
 
 export function buscarConfiguracoes(token: string): Promise<Configuracoes> {
   return request(`/configuracoes`, { headers: comAutorizacao(token) });
 }
 
+// Só os campos enviados mudam (a API aceita qualquer combinação deles).
 export function salvarConfiguracoes(
-  dados: Configuracoes,
+  dados: Partial<Omit<Configuracoes, 'ultimaRetencaoEm'>>,
   token: string
 ): Promise<Configuracoes> {
   return request(`/configuracoes`, {
@@ -452,7 +462,9 @@ export type AcaoAuditoria =
   | 'QRCODE_DESATIVADO'
   | 'QRCODE_REATIVADO'
   | 'OCORRENCIA_STATUS'
-  | 'CONFIGURACAO_ALTERADA';
+  | 'CONFIGURACAO_ALTERADA'
+  | 'RETENCAO_APLICADA'
+  | 'DADOS_DO_TITULAR_APAGADOS';
 
 export interface RegistroDeAuditoria {
   id: string;
@@ -462,7 +474,9 @@ export interface RegistroDeAuditoria {
   // O formato varia por ação — ver a tabela do GET /api/audit no contrato.
   detalhes: Record<string, unknown> | null;
   criadoEm: string;
-  usuario: { id: string; nome: string };
+  // null: o próprio sistema, sem ninguém logado (a retenção automática). Ver
+  // nomeDeQuemFez em descricaoDaAuditoria.ts.
+  usuario: { id: string; nome: string } | null;
 }
 
 export interface FiltrosDeAuditoria {

@@ -20,7 +20,35 @@ export const ROTULO_ACAO: Record<AcaoAuditoria, string> = {
   QRCODE_REATIVADO: 'QR Code reativado',
   OCORRENCIA_STATUS: 'Status de ocorrência',
   CONFIGURACAO_ALTERADA: 'Configuração alterada',
+  RETENCAO_APLICADA: 'Retenção de dados',
+  DADOS_DO_TITULAR_APAGADOS: 'Dados de cliente apagados',
 };
+
+// Quem fez. Sem usuário é o próprio Echo, sozinho: hoje só a retenção automática.
+export function nomeDeQuemFez(registro: RegistroDeAuditoria): string {
+  return registro.usuario?.nome ?? 'Sistema (automático)';
+}
+
+// Prazos de retenção e a sessão, para a frase da configuração alterada.
+const CONFIGURACAO: Record<string, { nome: string; unidade: string }> = {
+  duracaoSessaoHoras: { nome: 'o tempo de sessão', unidade: 'h' },
+  retencaoContatoDias: { nome: 'por quanto tempo o contato do cliente fica', unidade: ' dias' },
+  retencaoComentarioDias: { nome: 'por quanto tempo o comentário fica', unidade: ' dias' },
+  retencaoNotificacaoDias: { nome: 'por quanto tempo as notificações ficam', unidade: ' dias' },
+};
+
+// "1 contato", "3 contatos". Número que não veio (registro antigo) conta como 0.
+function quantos(detalhes: Record<string, unknown> | null, chave: string, um: string, varios: string) {
+  const n = Number(detalhes?.[chave]) || 0;
+  return `${n} ${n === 1 ? um : varios}`;
+}
+
+// "a, b e c", só com o que não é zero.
+function lista(partes: string[]) {
+  const comAlgo = partes.filter((p) => !p.startsWith('0 '));
+  if (comAlgo.length <= 1) return comAlgo.join('');
+  return `${comAlgo.slice(0, -1).join(', ')} e ${comAlgo[comAlgo.length - 1]}`;
+}
 
 const ROTULO_VALOR: Record<string, string> = {
   PENDENTE: 'Pendente',
@@ -106,11 +134,29 @@ export function descrever(registro: RegistroDeAuditoria): string {
       const area = ler(d, 'area');
       return `Mudou o status de uma ocorrência${area !== '—' ? ` (${area})` : ''}: ${ler(d, 'de')} → ${ler(d, 'para')}`;
     }
-    case 'CONFIGURACAO_ALTERADA':
-      // Hoje só existe a duração da sessão; outro campo cai na frase genérica.
-      return d?.campo === 'duracaoSessaoHoras'
-        ? `Alterou o tempo de sessão de ${ler(d, 'de')}h para ${ler(d, 'para')}h`
+    case 'CONFIGURACAO_ALTERADA': {
+      // Campo que o front ainda não conhece cai na frase genérica.
+      const campo = CONFIGURACAO[String(d?.campo)];
+      return campo
+        ? `Alterou ${campo.nome} de ${ler(d, 'de')}${campo.unidade} para ${ler(d, 'para')}${campo.unidade}`
         : `Alterou a configuração "${ler(d, 'campo')}" de ${ler(d, 'de')} para ${ler(d, 'para')}`;
+    }
+    case 'RETENCAO_APLICADA': {
+      const apagado = lista([
+        quantos(d, 'contatos', 'contato', 'contatos'),
+        quantos(d, 'comentarios', 'comentário', 'comentários'),
+        quantos(d, 'notificacoes', 'notificação', 'notificações'),
+      ]);
+      return apagado
+        ? `Apagou o que passou do prazo de retenção: ${apagado}`
+        : 'Aplicou a retenção: nada tinha passado do prazo';
+    }
+    case 'DADOS_DO_TITULAR_APAGADOS': {
+      const n = Number(d?.feedbacks) || 0;
+      return n === 0
+        ? 'Pedido de cliente para apagar os dados: nenhuma avaliação com aquele e-mail'
+        : `Apagou, a pedido do cliente, o contato e o comentário de ${quantos(d, 'feedbacks', 'avaliação', 'avaliações')}`;
+    }
     default:
       // Ação nova no backend que o front ainda não conhece: mostra o código cru
       // em vez de quebrar.

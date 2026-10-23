@@ -10,13 +10,16 @@ import {
   type RegistroDeAuditoria,
   type UsuarioGestao,
 } from '../../services/api';
-import { descrever, ROTULO_ACAO } from '../../descricaoDaAuditoria';
+import { descrever, nomeDeQuemFez, ROTULO_ACAO } from '../../descricaoDaAuditoria';
 import { AvisoDeErro, CabecalhoDaPagina, Cartao, Esqueleto, EstadoVazio, Pagina } from '../layout/Pagina';
 
 const POR_PAGINA = 20;
 const PAGINA_MAXIMA = 10_000;
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
 const ACOES = Object.keys(ROTULO_ACAO) as AcaoAuditoria[];
+
+// Valor do filtro "Quem" para o próprio sistema (ver api/src/routes/audit.routes.ts).
+const USUARIO_SISTEMA = 'sistema';
 
 const CHAVES = ['usuario', 'acao', 'de', 'ate'] as const;
 type Chave = (typeof CHAVES)[number];
@@ -116,7 +119,8 @@ export function AuditLog() {
   const total = resultado?.total ?? 0;
   const primeiro = total === 0 ? 0 : (pagina - 1) * POR_PAGINA + 1;
   const ultimo = Math.min(pagina * POR_PAGINA, total);
-  const usuarioDoFiltroForaDaLista = usuarioId !== '' && usuarios.length > 0 && !usuarios.some((u) => u.id === usuarioId);
+  const usuarioDoFiltroForaDaLista =
+    usuarioId !== '' && usuarioId !== USUARIO_SISTEMA && usuarios.length > 0 && !usuarios.some((u) => u.id === usuarioId);
 
   return (
     <Pagina>
@@ -130,6 +134,8 @@ export function AuditLog() {
             <span className="text-xs font-bold text-muted-foreground">Quem</span>
             <select value={usuarioId} onChange={(e) => mudarFiltro('usuario', e.target.value)} className={campo}>
               <option value="">Todos</option>
+              {/* O que o Echo fez sozinho, sem ninguém logado (a retenção automática). */}
+              <option value={USUARIO_SISTEMA}>Sistema (automático)</option>
               {usuarios.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.nome}
@@ -213,7 +219,7 @@ export function AuditLog() {
                   <p className="text-xs font-bold text-muted-foreground">{ROTULO_ACAO[r.acao] ?? r.acao}</p>
                   <p className="mt-0.5 text-sm font-semibold break-words">{descrever(r)}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {r.usuario.nome} · <time dateTime={r.criadoEm}>{dia(r.criadoEm)} {hora(r.criadoEm)}</time>
+                    {nomeDeQuemFez(r)} · <time dateTime={r.criadoEm}>{dia(r.criadoEm)} {hora(r.criadoEm)}</time>
                     {r.entidade === 'Feedback' && (
                       <>
                         {' · '}
@@ -248,7 +254,7 @@ export function AuditLog() {
                           <span className="block text-xs text-muted-foreground">{hora(r.criadoEm)}</span>
                         </time>
                       </td>
-                      <td className="px-4 py-3 font-semibold">{r.usuario.nome}</td>
+                      <td className="px-4 py-3 font-semibold">{nomeDeQuemFez(r)}</td>
                       <td className="min-w-64 px-4 py-3">
                         <span className="block text-xs font-bold text-muted-foreground">
                           {ROTULO_ACAO[r.acao] ?? r.acao}
