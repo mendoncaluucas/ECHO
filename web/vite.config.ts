@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
@@ -33,4 +34,19 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  // Testes do front (npm test): navegador simulado (jsdom), sem servidor nem banco. A
+  // API é sempre falsa (src/test/apiFalsa.ts); o que fala com a API de verdade é a
+  // suíte do backend.
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['./src/test/preparo.ts'],
+    // Os mocks voltam ao normal entre um teste e outro, sem precisar lembrar.
+    restoreMocks: true,
+    unstubGlobals: true,
+    // Folga para a máquina do CI: as telas da gestão chegam sob demanda (import
+    // dinâmico), e a primeira vez de cada uma é lenta.
+    testTimeout: 20_000,
+  },
 })

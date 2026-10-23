@@ -62,8 +62,9 @@ jobs:
         run: npm test
 
   web:
-    # O nome continua "Front — build" mesmo fazendo typecheck: a proteção da main exige
-    # o check por este nome exato, e renomear deixaria todo PR esperando para sempre.
+    # O nome continua "Front — build" mesmo fazendo typecheck e testes: a proteção da
+    # main exige o check por este nome exato, e renomear deixaria todo PR esperando
+    # para sempre.
     name: Front — build
     runs-on: ubuntu-latest
     defaults:
@@ -86,6 +87,10 @@ jobs:
       # tipo é este passo.
       - name: Typecheck
         run: npm run typecheck
+
+      # Navegador simulado (jsdom) e API falsa: não precisa de banco nem de servidor.
+      - name: Testes
+        run: npm test
 
       - name: Build
         run: npm run build
