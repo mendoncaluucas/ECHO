@@ -2,6 +2,7 @@ import { Router } from "express";
 import { TipoFeedback } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
+import { lerConfiguracoes } from "../configuracao.js";
 
 export const publicRoutes = Router();
 
@@ -13,6 +14,17 @@ const MAX_NOME = 100;
 const EMAIL_REGEX = /^[A-Za-z0-9._+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
 // Limite do padrão (RFC 5321) para um endereço inteiro.
 const MAX_EMAIL = 254;
+
+// GET /privacidade — por quanto tempo o Echo guarda o que identifica o cliente. Para o
+// formulário e a página de privacidade dizerem o prazo que vale, e não um texto fixo
+// que ficaria errado quando o administrador mudasse. Ver docs/CONTRATO-API.md
+publicRoutes.get(
+  "/privacidade",
+  asyncHandler(async (_req, res) => {
+    const { retencaoContatoDias, retencaoComentarioDias } = await lerConfiguracoes();
+    return res.json({ contatoDias: retencaoContatoDias, comentarioDias: retencaoComentarioDias });
+  })
+);
 
 // GET /venue/:qrToken — contexto do formulário a partir do QR. Ver docs/CONTRATO-API.md
 publicRoutes.get(

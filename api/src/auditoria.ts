@@ -10,11 +10,15 @@ import { prisma } from "./prisma.js";
 
 type Cliente = Prisma.TransactionClient | typeof prisma;
 
-export type EntidadeAuditada = "User" | "Area" | "QRCode" | "Feedback" | "Configuracao";
+// "Retencao": pedido de um cliente para apagar os dados dele, que pode atingir vários
+// feedbacks (ou nenhum). Não é "Feedback" porque a tela do log faz de todo registro de
+// "Feedback" um link para a ocorrência.
+export type EntidadeAuditada = "User" | "Area" | "QRCode" | "Feedback" | "Configuracao" | "Retencao";
 
 export interface RegistroDeAuditoria {
   acao: AcaoAuditoria;
-  usuarioId: string;
+  // null: o próprio sistema, sem ninguém logado (a retenção automática).
+  usuarioId: string | null;
   entidade: EntidadeAuditada;
   entidadeId: string;
   detalhes?: Prisma.InputJsonObject;

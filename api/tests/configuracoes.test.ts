@@ -8,6 +8,15 @@ import { autenticar, criarUsuario } from "./helpers.js";
 
 const HORA = 60 * 60;
 
+// Sem nada salvo: os mesmos @default do schema.
+const PADRAO = {
+  duracaoSessaoHoras: 8,
+  retencaoContatoDias: 90,
+  retencaoComentarioDias: 365,
+  retencaoNotificacaoDias: 90,
+  ultimaRetencaoEm: null,
+};
+
 function comToken(token: string) {
   return { Authorization: `Bearer ${token}` };
 }
@@ -43,7 +52,7 @@ describe("GET /api/configuracoes", () => {
     const res = await request(app).get("/api/configuracoes").set(comToken(token));
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ duracaoSessaoHoras: 8 });
+    expect(res.body).toEqual(PADRAO);
   });
 
   it.each([Papel.GERENTE, Papel.COORDENADOR])("recusa %s", async (papel) => {
@@ -69,8 +78,8 @@ describe("PATCH /api/configuracoes", () => {
     const lida = await request(app).get("/api/configuracoes").set(comToken(token));
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ duracaoSessaoHoras: 4 });
-    expect(lida.body).toEqual({ duracaoSessaoHoras: 4 });
+    expect(res.body).toEqual({ ...PADRAO, duracaoSessaoHoras: 4 });
+    expect(lida.body).toEqual({ ...PADRAO, duracaoSessaoHoras: 4 });
   });
 
   it.each([0, 25, 2.5, "4", null])("recusa duração inválida (%s)", async (valor) => {
