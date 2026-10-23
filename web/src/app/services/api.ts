@@ -444,6 +444,38 @@ export function salvarConfiguracoes(
   });
 }
 
+// ---------- Retenção de dados (LGPD) ----------
+//
+// A regra está em api/src/retencao.ts: passado o prazo, sai o que identifica o cliente
+// (contato, comentário) e o feedback fica.
+
+export interface ResultadoDaRetencao {
+  contatos: number;
+  comentarios: number;
+  notificacoes: number;
+}
+
+// O que sairia se a retenção rodasse agora, com os prazos salvos.
+export function buscarPreviaDaRetencao(
+  token: string
+): Promise<ResultadoDaRetencao & { ultimaRetencaoEm: string | null }> {
+  return request(`/retencao/previa`, { headers: comAutorizacao(token) });
+}
+
+export function aplicarRetencaoAgora(token: string): Promise<ResultadoDaRetencao> {
+  return request(`/retencao/aplicar`, { method: 'POST', headers: comAutorizacao(token) });
+}
+
+// Pedido do cliente (LGPD, art. 18): apaga na hora o contato e o comentário de todas as
+// avaliações daquele e-mail. Devolve quantas foram atingidas (pode ser 0).
+export function apagarDadosDoCliente(email: string, token: string): Promise<{ feedbacks: number }> {
+  return request(`/retencao/titular`, {
+    method: 'POST',
+    headers: comAutorizacao(token),
+    body: JSON.stringify({ email }),
+  });
+}
+
 // ---------- Auditoria ----------
 
 export type AcaoAuditoria =

@@ -50,6 +50,17 @@ function lista(partes: string[]) {
   return `${comAlgo.slice(0, -1).join(', ')} e ${comAlgo[comAlgo.length - 1]}`;
 }
 
+// O que a retenção apagou (ou apagaria): "3 contatos, 1 comentário e 5 notificações".
+// Vazio quando é tudo zero. Usado pelo log e pela tela de configurações.
+export function contagemDaRetencao(contagem: object | null) {
+  const r = contagem as Record<string, unknown> | null;
+  return lista([
+    quantos(r, 'contatos', 'contato', 'contatos'),
+    quantos(r, 'comentarios', 'comentário', 'comentários'),
+    quantos(r, 'notificacoes', 'notificação', 'notificações'),
+  ]);
+}
+
 const ROTULO_VALOR: Record<string, string> = {
   PENDENTE: 'Pendente',
   EM_ANDAMENTO: 'Em andamento',
@@ -142,11 +153,7 @@ export function descrever(registro: RegistroDeAuditoria): string {
         : `Alterou a configuração "${ler(d, 'campo')}" de ${ler(d, 'de')} para ${ler(d, 'para')}`;
     }
     case 'RETENCAO_APLICADA': {
-      const apagado = lista([
-        quantos(d, 'contatos', 'contato', 'contatos'),
-        quantos(d, 'comentarios', 'comentário', 'comentários'),
-        quantos(d, 'notificacoes', 'notificação', 'notificações'),
-      ]);
+      const apagado = contagemDaRetencao(d);
       return apagado
         ? `Apagou o que passou do prazo de retenção: ${apagado}`
         : 'Aplicou a retenção: nada tinha passado do prazo';
