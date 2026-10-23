@@ -14,7 +14,7 @@ erDiagram
     Area     |o--o{ Feedback       : origem
     Feedback ||--o{ FeedbackRating : contém
     Category ||--o{ FeedbackRating : avaliada
-    User     ||--o{ AuditLog       : autor
+    User     |o--o{ AuditLog       : autor
     User     ||--o{ Notification   : recebe
     Feedback ||--o{ Notification   : dispara
     Notification {
@@ -68,6 +68,8 @@ erDiagram
         boolean  anonimo
         string   contatoNome
         string   contatoEmail
+        datetime contatoApagadoEm
+        datetime comentarioApagadoEm
         datetime criadoEm
     }
     FeedbackRating {
@@ -87,11 +89,11 @@ erDiagram
 | **Area** | Mesa / área / setor do restaurante | `nome`, `ativo`, `venueId` — único por `(venueId, nome)` |
 | **QRCode** | QR físico que aponta para uma área | `token` (único), `ativo`, `areaId` |
 | **Category** | Categoria avaliável | `nome` (ex.: Higiene, Atendimento, Alimento) |
-| **Feedback** | Manifestação enviada pelo cliente | `tipo`, `comentario`, `anonimo`, `contatoNome`, `contatoEmail`, `venueId`, `areaId?`, `criadoEm` |
+| **Feedback** | Manifestação enviada pelo cliente | `tipo`, `comentario`, `anonimo`, `contatoNome`, `contatoEmail`, `contatoApagadoEm?`, `comentarioApagadoEm?`, `venueId`, `areaId?`, `criadoEm` |
 | **FeedbackRating** | Nota por categoria de um feedback | `estrelas` (1–5), `feedbackId`, `categoryId` |
 | **Notification** | Alerta de feedback novo para uma pessoa da gestão | `usuarioId`, `feedbackId`, `lida`, `criadoEm` — único por `(usuarioId, feedbackId)` |
-| **AuditLog** | Quem fez o quê, sobre qual registro e quando | `acao`, `usuarioId`, `entidade`, `entidadeId`, `detalhes` (JSON), `criadoEm` |
-| **Configuracao** | Configurações do sistema, numa linha única (`id = "sistema"`) | `duracaoSessaoHoras` (padrão 8), `atualizadoEm` |
+| **AuditLog** | Quem fez o quê, sobre qual registro e quando | `acao`, `usuarioId?` (vazio: o próprio sistema), `entidade`, `entidadeId`, `detalhes` (JSON), `criadoEm` |
+| **Configuracao** | Configurações do sistema, numa linha única (`id = "sistema"`) | `duracaoSessaoHoras` (padrão 8), `retencaoContatoDias` (90), `retencaoComentarioDias` (365), `retencaoNotificacaoDias` (90), `ultimaRetencaoEm?`, `atualizadoEm` |
 
 ## Enums
 - **Papel:** `COORDENADOR` · `GERENTE` · `ADMINISTRADOR` *(Cliente não faz login)*
@@ -99,7 +101,7 @@ erDiagram
 - **AcaoAuditoria:** `LOGIN` · `SENHA_ALTERADA` · `SENHA_REDEFINIDA` · `USUARIO_CRIADO` · `USUARIO_EDITADO` ·
   `USUARIO_DESATIVADO` · `USUARIO_REATIVADO` · `AREA_CRIADA` · `AREA_RENOMEADA` · `AREA_DESATIVADA` ·
   `AREA_REATIVADA` · `QRCODE_GERADO` · `QRCODE_DESATIVADO` · `QRCODE_REATIVADO` · `OCORRENCIA_STATUS` ·
-  `CONFIGURACAO_ALTERADA`
+  `CONFIGURACAO_ALTERADA` · `RETENCAO_APLICADA` · `DADOS_DO_TITULAR_APAGADOS`
 
 ## Decisões e observações
 - **Anonimato por padrão:** `Feedback.anonimo = true`. `contatoNome` e `contatoEmail` só são gravados quando o cliente pede resposta da equipe (sem e-mail, o feedback é gravado como anônimo). O contato só sai da API no detalhe da ocorrência, para quem vai responder; nunca em listas (LGPD).
@@ -118,6 +120,9 @@ erDiagram
   estrangeira, de propósito: o registro precisa sobreviver ao alvo. E `detalhes` guarda o nome do alvo
   na hora da ação, para que renomear depois não reescreva o passado. É gravado na **mesma transação**
   da ação que registra. Ver `GET /api/audit` no [contrato](CONTRATO-API.md).
+  `usuarioId` vazio é o próprio sistema, sem ninguém logado (hoje só a retenção automática). A
+  chave estrangeira continua `RESTRICT`: apagar um usuário não pode fazer as ações dele virarem
+  "Sistema".
 
 - **`Notification` é uma linha por destinatário**, não uma por feedback: cada pessoa tem o próprio
   "lida". Não guarda texto — a mensagem vem do feedback na leitura —, e por isso apaga em cascata com
@@ -126,7 +131,13 @@ erDiagram
 
 - **`Configuracao` é uma linha só, com uma coluna tipada por configuração** — não uma tabela
   chave/valor em texto, que aceitaria "oito" como duração. Enquanto ninguém salva nada a linha não
-  existe e valem os padrões das colunas. A retenção LGPD entra aqui como nova coluna.
+  existe e valem os padrões das colunas.
+
+- **Retenção (LGPD): anonimiza, não apaga o feedback.** Passado o prazo, a rotina (`src/retencao.ts`)
+  limpa `contatoNome`/`contatoEmail` e o `comentario` e anota quando (`contatoApagadoEm`,
+  `comentarioApagadoEm`); as notificações velhas são apagadas. Tipo, notas, área, data e situação
+  ficam, e os números dos painéis não mudam. Os prazos ficam na `Configuracao`. Ver a seção 23 do
+  [contrato](CONTRATO-API.md).
 
 ## Fora do escopo (MVP 2+)
 `Occurrence` (com status/tratativa), `CannedResponse`, `Sector` (múltiplos setores por usuário) e políticas de retenção/anonimização automática.

@@ -10,7 +10,7 @@ import {
   usuarioLogado,
   type RegistroDeAuditoria,
 } from '../../services/api';
-import { descrever } from '../../descricaoDaAuditoria';
+import { descrever, nomeDeQuemFez } from '../../descricaoDaAuditoria';
 import { haQuanto, primeiroNome, saudacao } from '../../rotulos';
 import {
   AvisoDeErro,
@@ -272,7 +272,7 @@ function AtividadeRecente({
         <li key={r.id} className="py-3">
           <p className="text-sm leading-snug font-semibold break-words">{descrever(r)}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {r.usuario.nome} · <time dateTime={r.criadoEm}>{haQuanto(r.criadoEm)}</time>
+            {nomeDeQuemFez(r)} · <time dateTime={r.criadoEm}>{haQuanto(r.criadoEm)}</time>
           </p>
         </li>
       ))}

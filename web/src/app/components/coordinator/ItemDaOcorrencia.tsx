@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Mail } from 'lucide-react';
 import type { Ocorrencia } from '../../services/api';
-import { corDoTipo, haQuanto, rotuloDoStatus, rotuloDoTipo, seloDoStatus } from '../../rotulos';
+import { comentarioApagado, corDoTipo, haQuanto, rotuloDoStatus, rotuloDoTipo, seloDoStatus } from '../../rotulos';
 
 // Uma ocorrência numa lista: no painel de ocorrências e no "Chegaram agora" do painel
 // do gerente. Link de verdade (não botão), para abrir em outra aba com o Ctrl.
@@ -18,8 +18,9 @@ export function ItemDaOcorrencia({ ocorrencia: o }: { ocorrencia: Ocorrencia }) 
           <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${seloDoStatus(o.status)}`}>
             {rotuloDoStatus(o.status)}
           </span>
-          {/* Só quem deixou e-mail é gravado como identificado: espera retorno. */}
-          {!o.anonimo && (
+          {/* Só quem deixou e-mail é gravado como identificado: espera retorno. Com o
+              contato já apagado (retenção), não há a quem responder. */}
+          {!o.anonimo && !o.contatoApagadoEm && (
             <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-bold text-accent-foreground">
               <Mail className="size-3" aria-hidden="true" />
               Pediu resposta
@@ -33,7 +34,9 @@ export function ItemDaOcorrencia({ ocorrencia: o }: { ocorrencia: Ocorrencia }) 
             “{o.comentario}”
           </p>
         ) : (
-          <p className="mt-1 text-sm text-muted-foreground italic">Sem comentário</p>
+          <p className="mt-1 text-sm text-muted-foreground italic">
+            {o.comentarioApagadoEm ? comentarioApagado(o.comentarioApagadoEm) : 'Sem comentário'}
+          </p>
         )}
         <p className="mt-1 text-xs text-muted-foreground">
           {o.avaliacoes.map((a) => `${a.categoria} ${a.estrelas}★`).join(' · ')}

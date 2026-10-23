@@ -76,6 +76,12 @@ export function saudacao(agora: Date = new Date()) {
   return 'Boa noite';
 }
 
+// Retenção (LGPD): o que foi apagado diz que foi, e quando. "Sem comentário" ou
+// "o cliente não deixou contato" seriam falsos: ele deixou, e saiu pelo prazo.
+export function comentarioApagado(iso: string) {
+  return `Comentário apagado em ${new Date(iso).toLocaleDateString('pt-BR')}, pela política de privacidade`;
+}
+
 export function primeiroNome(nome: string | null | undefined) {
   return nome?.trim().split(/\s+/)[0] || 'equipe';
 }

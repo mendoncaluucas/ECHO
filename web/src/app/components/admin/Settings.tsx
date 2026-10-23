@@ -402,8 +402,9 @@ function SecaoAindaNaoDisponivel() {
       texto: 'Os alertas de feedback novo chegam no sino do Echo. Por e-mail depende de um serviço de envio.',
     },
     {
-      titulo: 'Retenção de dados (LGPD)',
-      texto: 'Por quanto tempo os feedbacks ficam guardados. Depende da rotina que apaga o que passou do prazo.',
+      titulo: 'Ajustar a retenção de dados (LGPD)',
+      texto:
+        'A retenção já roda sozinha, uma vez por dia em que o Echo é usado, com os prazos padrão: o nome e o e-mail de quem pede resposta saem 90 dias depois do feedback, e o comentário, 12 meses depois. Ajustar os prazos e atender o pedido de um cliente chegam a esta tela em seguida.',
     },
   ];
   return (

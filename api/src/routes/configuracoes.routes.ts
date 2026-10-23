@@ -5,10 +5,11 @@ import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { registrarAuditoria } from "../auditoria.js";
 import {
-  DURACAO_SESSAO_MAXIMA_HORAS,
-  DURACAO_SESSAO_MINIMA_HORAS,
+  CAMPOS_EDITAVEIS,
   ID_DA_CONFIGURACAO,
+  LIMITES,
   lerConfiguracoes,
+  type CampoEditavel,
 } from "../configuracao.js";
 
 // Configurações do sistema — restritas ao administrador. DONO: Lucas
@@ -23,54 +24,60 @@ configuracoesRoutes.get(
   })
 );
 
-// PATCH / — altera as configurações. Ver docs/CONTRATO-API.md
+// PATCH / — altera as configurações enviadas; as que não vierem ficam como estão.
+// Ver docs/CONTRATO-API.md
 configuracoesRoutes.patch(
   "/",
   requireAuth([Papel.ADMINISTRADOR]),
   asyncHandler(async (req, res) => {
-    const { duracaoSessaoHoras } = req.body ?? {};
+    const corpo: Record<string, unknown> = req.body ?? {};
+    const enviados = CAMPOS_EDITAVEIS.filter((campo) => campo in corpo);
 
-    if (
-      !Number.isInteger(duracaoSessaoHoras) ||
-      duracaoSessaoHoras < DURACAO_SESSAO_MINIMA_HORAS ||
-      duracaoSessaoHoras > DURACAO_SESSAO_MAXIMA_HORAS
-    ) {
+    if (enviados.length === 0) {
       return res.status(400).json({
-        erro: `duracaoSessaoHoras deve ser um inteiro de ${DURACAO_SESSAO_MINIMA_HORAS} a ${DURACAO_SESSAO_MAXIMA_HORAS}`,
+        erro: `Envie ao menos um destes campos: ${CAMPOS_EDITAVEIS.join(", ")}`,
         codigo: "VALIDACAO",
       });
     }
 
+    const alteracoes: Partial<Record<CampoEditavel, number>> = {};
+    for (const campo of enviados) {
+      const valor = corpo[campo];
+      const { min, max } = LIMITES[campo];
+      if (typeof valor !== "number" || !Number.isInteger(valor) || valor < min || valor > max) {
+        return res.status(400).json({
+          erro: `${campo} deve ser um inteiro de ${min} a ${max}`,
+          codigo: "VALIDACAO",
+        });
+      }
+      alteracoes[campo] = valor;
+    }
+
     const antes = await lerConfiguracoes();
 
-    const depois = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       // Upsert: a linha só passa a existir na primeira vez que alguém salva.
-      const salva = await tx.configuracao.upsert({
+      await tx.configuracao.upsert({
         where: { id: ID_DA_CONFIGURACAO },
-        create: { id: ID_DA_CONFIGURACAO, duracaoSessaoHoras },
-        update: { duracaoSessaoHoras },
-        select: { duracaoSessaoHoras: true },
+        create: { id: ID_DA_CONFIGURACAO, ...alteracoes },
+        update: alteracoes,
       });
 
-      // Mudar quanto tempo um login vale é decisão de segurança; quem mudou e de
-      // quanto para quanto tem que ficar registrado.
-      if (antes.duracaoSessaoHoras !== duracaoSessaoHoras) {
+      // Quanto tempo um login vale e por quanto tempo um dado pessoal fica são decisões
+      // de segurança e de privacidade: quem mudou, e de quanto para quanto, fica
+      // registrado. Um registro por campo, como cada um aparece no log.
+      for (const campo of enviados) {
+        if (antes[campo] === alteracoes[campo]) continue;
         await registrarAuditoria(tx, {
           acao: "CONFIGURACAO_ALTERADA",
           usuarioId: req.usuario!.sub,
           entidade: "Configuracao",
           entidadeId: ID_DA_CONFIGURACAO,
-          detalhes: {
-            campo: "duracaoSessaoHoras",
-            de: antes.duracaoSessaoHoras,
-            para: duracaoSessaoHoras,
-          },
+          detalhes: { campo, de: antes[campo], para: alteracoes[campo]! },
         });
       }
-
-      return salva;
     });
 
-    return res.json(depois);
+    return res.json(await lerConfiguracoes());
   })
 );

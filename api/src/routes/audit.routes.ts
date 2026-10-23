@@ -11,6 +11,9 @@ export const auditRoutes = Router();
 
 const acoes = Object.values(AcaoAuditoria);
 
+// Valor do filtro `usuarioId` para as ações do próprio sistema (sem usuário).
+const USUARIO_SISTEMA = "sistema";
+
 // GET / — lista o log, do mais recente ao mais antigo. Ver docs/CONTRATO-API.md
 auditRoutes.get(
   "/",
@@ -37,7 +40,9 @@ auditRoutes.get(
     }
 
     const where: Prisma.AuditLogWhereInput = {
-      ...(usuarioId !== undefined && { usuarioId }),
+      // "sistema": o que rodou sozinho, sem ninguém logado (usuarioId null). Não colide
+      // com um usuário de verdade: os ids são UUIDs.
+      ...(usuarioId !== undefined && { usuarioId: usuarioId === USUARIO_SISTEMA ? null : usuarioId }),
       ...(acao !== undefined && { acao: acao as AcaoAuditoria }),
       ...((de || ate) && { criadoEm: { ...(de && { gte: de }), ...(ate && { lte: ate }) } }),
     };

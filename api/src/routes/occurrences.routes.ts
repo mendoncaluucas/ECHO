@@ -20,6 +20,10 @@ const camposDaOcorrencia = {
   criadoEm: true,
   status: true,
   tratadoEm: true,
+  // Retenção (LGPD): quando o contato e o comentário foram apagados, para a tela dizer
+  // "apagado em…" em vez de um espaço vazio. A data não identifica ninguém.
+  contatoApagadoEm: true,
+  comentarioApagadoEm: true,
   area: { select: { nome: true } },
   tratadoPor: { select: { nome: true } },
   avaliacoes: {

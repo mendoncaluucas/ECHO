@@ -14,6 +14,7 @@ import {
 } from '../../services/api';
 import { baixarCsv, montarCsv } from '../../services/csv';
 import {
+  comentarioApagado,
   corDoTipo,
   ROTULO_STATUS,
   ROTULO_TIPO,
@@ -53,7 +54,8 @@ function dataEHora(iso: string) {
   });
 }
 
-function csvDasOcorrencias(ocorrencias: Ocorrencia[]) {
+// Exportada para os testes.
+export function csvDasOcorrencias(ocorrencias: Ocorrencia[]) {
   const cabecalho = ['ID', 'Data', 'Tipo', 'Status', 'Setor', 'Categorias', 'Comentario', 'Tratado por'];
   const linhas = ocorrencias.map((o) => [
     o.id,
@@ -62,7 +64,8 @@ function csvDasOcorrencias(ocorrencias: Ocorrencia[]) {
     rotuloDoStatus(o.status),
     o.area?.nome ?? '',
     o.avaliacoes.map((a) => `${a.categoria}: ${a.estrelas}`).join(' | '),
-    o.comentario ?? '',
+    // Apagado pela retenção (LGPD): a célula vazia diria que o cliente não escreveu.
+    o.comentario ?? (o.comentarioApagadoEm ? `(${comentarioApagado(o.comentarioApagadoEm)})` : ''),
     o.tratadoPor?.nome ?? '',
   ]);
   return montarCsv([cabecalho, ...linhas]);
@@ -430,7 +433,9 @@ export function IssueRegistry() {
                         {o.comentario ? (
                           <span className="line-clamp-2 break-words text-[#3a3f4a]">{o.comentario}</span>
                         ) : (
-                          <span className="text-muted-foreground italic">Sem comentário</span>
+                          <span className="text-muted-foreground italic">
+                            {o.comentarioApagadoEm ? comentarioApagado(o.comentarioApagadoEm) : 'Sem comentário'}
+                          </span>
                         )}
                         {o.avaliacoes.length > 0 && (
                           <span className="mt-0.5 block text-xs text-muted-foreground">

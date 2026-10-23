@@ -8,7 +8,15 @@ import {
   type Ocorrencia,
   type StatusOcorrencia,
 } from '../../services/api';
-import { corDoTipo, haQuanto, ROTULO_STATUS, rotuloDoStatus, rotuloDoTipo, seloDoStatus } from '../../rotulos';
+import {
+  comentarioApagado,
+  corDoTipo,
+  haQuanto,
+  ROTULO_STATUS,
+  rotuloDoStatus,
+  rotuloDoTipo,
+  seloDoStatus,
+} from '../../rotulos';
 import { avisarRapido } from '../../avisoRapido';
 import { AvisoDeErro, CabecalhoDaPagina, Cartao, Esqueleto, EstadoVazio, Pagina } from '../layout/Pagina';
 
@@ -272,6 +280,9 @@ export function OccurrenceDetail() {
         <Cartao titulo="O que o cliente escreveu" className="xl:col-start-1">
           {o.comentario ? (
             <p className="text-lg leading-relaxed break-words whitespace-pre-line">“{o.comentario}”</p>
+          ) : o.comentarioApagadoEm ? (
+            // Retenção (LGPD): o cliente escreveu, e o texto saiu pelo prazo.
+            <p className="text-muted-foreground italic">{comentarioApagado(o.comentarioApagadoEm)}.</p>
           ) : (
             <p className="text-muted-foreground italic">O cliente não escreveu comentário, só deu as notas.</p>
           )}
@@ -298,6 +309,12 @@ export function OccurrenceDetail() {
         <div className="order-last min-w-0 xl:order-none xl:col-start-1">
           {o.contato ? (
             <ContatoDoCliente contato={o.contato} area={o.area?.nome ?? null} criadoEm={o.criadoEm} />
+          ) : !o.anonimo && o.contatoApagadoEm ? (
+            // Pediu resposta, mas o contato já saiu (retenção): dizer "anônima" seria falso.
+            <p className="px-1 text-sm text-muted-foreground">
+              O cliente pediu resposta, mas o contato foi apagado em{' '}
+              {new Date(o.contatoApagadoEm).toLocaleDateString('pt-BR')}, pela política de privacidade.
+            </p>
           ) : (
             <p className="px-1 text-sm text-muted-foreground">
               Avaliação anônima: o cliente não deixou contato para resposta.

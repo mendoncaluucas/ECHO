@@ -100,20 +100,25 @@ model Category {
 }
 
 model Feedback {
-  id           String           @id @default(uuid())
-  venue        Venue            @relation(fields: [venueId], references: [id])
-  venueId      String
-  area         Area?            @relation(fields: [areaId], references: [id])
-  areaId       String?
-  tipo         TipoFeedback
-  comentario   String?
-  anonimo      Boolean          @default(true)
+  id                  String           @id @default(uuid())
+  venue               Venue            @relation(fields: [venueId], references: [id])
+  venueId             String
+  area                Area?            @relation(fields: [areaId], references: [id])
+  areaId              String?
+  tipo                TipoFeedback
+  comentario          String?
+  anonimo             Boolean          @default(true)
   // Contato de quem pediu retorno. Só aparece no detalhe da ocorrência, nunca em
   // listas — é dado pessoal (LGPD) e só faz sentido para quem vai responder.
-  contatoNome  String?
-  contatoEmail String?
-  avaliacoes   FeedbackRating[]
-  criadoEm     DateTime         @default(now())
+  contatoNome         String?
+  contatoEmail        String?
+  // Retenção (LGPD): quando o contato e o comentário foram apagados, pelo prazo ou a
+  // pedido do cliente. O feedback fica (tipo, notas, área e data não identificam
+  // ninguém e sustentam os números dos painéis); só o que identifica sai.
+  contatoApagadoEm    DateTime?
+  comentarioApagadoEm DateTime?
+  avaliacoes          FeedbackRating[]
+  criadoEm            DateTime         @default(now())
 
   // Tratativa: quem da gestão mexeu na ocorrência e quando.
   status       StatusOcorrencia @default(PENDENTE)
@@ -144,11 +149,18 @@ model FeedbackRating {
 // padrão no banco, ao contrário de uma tabela chave/valor em texto. Enquanto a linha
 // não existe, valem os padrões das colunas (ver src/configuracao.ts).
 model Configuracao {
-  id                 String   @id @default("sistema")
+  id                      String    @id @default("sistema")
   // Por quanto tempo um login vale, em horas. Conferido a cada requisição contra a
   // idade da sessão, então mudar vale na hora para as sessões abertas.
-  duracaoSessaoHoras Int      @default(8)
-  atualizadoEm       DateTime @updatedAt
+  duracaoSessaoHoras      Int       @default(8)
+  // Retenção (LGPD), em dias contados da data do feedback ou da notificação. Ver
+  // src/retencao.ts.
+  retencaoContatoDias     Int       @default(90)
+  retencaoComentarioDias  Int       @default(365)
+  retencaoNotificacaoDias Int       @default(90)
+  // Última vez que a rotina rodou, aplicando ou não. Garante no máximo uma por dia.
+  ultimaRetencaoEm        DateTime?
+  atualizadoEm            DateTime  @updatedAt
 }
 
 // ---------- Notificações ----------
@@ -190,6 +202,8 @@ enum AcaoAuditoria {
   QRCODE_REATIVADO
   OCORRENCIA_STATUS
   CONFIGURACAO_ALTERADA
+  RETENCAO_APLICADA
+  DADOS_DO_TITULAR_APAGADOS
 }
 
 // Quem fez o quê, sobre qual registro e quando. Só cresce: nenhuma rota edita ou
@@ -199,11 +213,16 @@ enum AcaoAuditoria {
 // sobreviver ao alvo (o seed de demonstração apaga feedbacks, por exemplo). Pelo mesmo
 // motivo `detalhes` guarda o nome do alvo no momento da ação — renomear a área depois
 // não pode reescrever o que o log mostra.
+//
+// Sem usuário (null): ação do próprio sistema, sem ninguém logado. Hoje só a retenção
+// automática (RETENCAO_APLICADA), que roda ao ligar a API.
 model AuditLog {
   id         String        @id @default(uuid())
   acao       AcaoAuditoria
-  usuario    User          @relation(fields: [usuarioId], references: [id])
-  usuarioId  String
+  // Restrict, como antes de o usuário ser opcional: apagar alguém não pode fazer as
+  // ações dele virarem "Sistema" no log.
+  usuario    User?         @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  usuarioId  String?
   entidade   String
   entidadeId String
   detalhes   Json?

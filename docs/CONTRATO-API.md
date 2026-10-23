@@ -55,6 +55,14 @@
 
 ---
 
+## 1.1. `GET /public/privacidade` — prazos de retenção
+**Público.** Por quanto tempo o Echo guarda o que identifica o cliente, para o formulário e a página
+de privacidade dizerem o prazo que vale (e não um texto fixo que ficaria errado ao mudar o prazo).
+
+**Resposta `200`:** `{ "contatoDias": 90, "comentarioDias": 365 }`. Ver a seção 23.
+
+---
+
 ## 2. `POST /public/feedback` — enviar feedback
 **Público.** Grava o feedback do cliente.
 
@@ -195,9 +203,16 @@ o `contato`.
   "tratadoEm": "2026-09-21T18:00:00.000Z",
   "area": { "nome": "Mesa 12" },
   "avaliacoes": [{ "categoria": "Atendimento", "estrelas": 2 }],
+  "contatoApagadoEm": null,
+  "comentarioApagadoEm": null,
   "contato": { "nome": "Ana Souza", "email": "ana@exemplo.com" }
 }
 ```
+
+> **Retenção (LGPD, seção 23).** Passado o prazo, ou a pedido do cliente, o contato e o comentário
+> são apagados e o feedback fica. `contatoApagadoEm` e `comentarioApagadoEm` dizem quando, para a
+> tela mostrar "apagado em…" em vez de um espaço vazio; também vêm na listagem. Com o contato
+> apagado, `contato` é `null` e `anonimo` continua `false` (o cliente pediu resposta).
 
 > **O único lugar em que o contato do cliente sai.** Quem abre a ocorrência é quem vai responder;
 > listagens, notificações e métricas nunca o trazem (LGPD), e há teste travando isso. `contato` é
@@ -592,7 +607,7 @@ ao mais antigo. Somente leitura: nenhuma rota edita ou apaga registro do log.
 | Parâmetro | Valores | Observação |
 |---|---|---|
 | `pagina` / `porPagina` | como no `GET /occurrences` | padrão `1` e `20`, teto de **100** |
-| `usuarioId` | id de um usuário | só o que essa pessoa fez |
+| `usuarioId` | id de um usuário, ou `sistema` | só o que essa pessoa fez; `sistema`: só o que o Echo fez sozinho |
 | `acao` | uma das ações da tabela abaixo | |
 | `de` / `ate` | `YYYY-MM-DD` | `ate` inclui o dia inteiro |
 
@@ -614,6 +629,8 @@ ao mais antigo. Somente leitura: nenhuma rota edita ou apaga registro do log.
 }
 ```
 
+`usuario` é `null` no que o Echo fez sozinho, sem ninguém logado: hoje só a retenção automática.
+
 **O que é registrado, e o que vai em `detalhes`:**
 
 | `acao` | Quando | `detalhes` |
@@ -630,7 +647,9 @@ ao mais antigo. Somente leitura: nenhuma rota edita ou apaga registro do log.
 | `QRCODE_GERADO` | | `area`, `token` |
 | `QRCODE_DESATIVADO` / `QRCODE_REATIVADO` | pelo `PATCH`, ou ao substituir (só desativado) | `area`, `token`; `motivo: "substituido"` quando veio da substituição |
 | `OCORRENCIA_STATUS` | o status mudou | `de`, `para`, `area` |
-| `CONFIGURACAO_ALTERADA` | uma configuração do sistema mudou | `campo`, `de`, `para` |
+| `CONFIGURACAO_ALTERADA` | uma configuração do sistema mudou (um registro por campo) | `campo`, `de`, `para` |
+| `RETENCAO_APLICADA` | a retenção rodou: pela tela (sempre) ou sozinha (só se algo saiu, com `usuario` `null`) | `contatos`, `comentarios`, `notificacoes` (quantos saíram) e `prazos` da vez |
+| `DADOS_DO_TITULAR_APAGADOS` | o administrador atendeu o pedido de um cliente | `feedbacks` (quantos); o e-mail não é guardado |
 
 > **Gravado na mesma transação da ação.** Ou os dois entram, ou nenhum: um log que às vezes falta
 > não serve para auditar.
@@ -719,7 +738,17 @@ nada.
 ---
 
 ## 21. `GET /api/configuracoes` — configurações do sistema
-**Protegido** (`ADMINISTRADOR`). Resposta `200`: `{ "duracaoSessaoHoras": 8 }`.
+**Protegido** (`ADMINISTRADOR`). Resposta `200`:
+```json
+{
+  "duracaoSessaoHoras": 8,
+  "retencaoContatoDias": 90,
+  "retencaoComentarioDias": 365,
+  "retencaoNotificacaoDias": 90,
+  "ultimaRetencaoEm": "2026-10-21T21:45:46.000Z"
+}
+```
+`ultimaRetencaoEm` é a última vez que a retenção rodou (`null` antes da primeira).
 
 Enquanto ninguém salvou nada, devolve os padrões.
 
@@ -728,9 +757,17 @@ Enquanto ninguém salvou nada, devolve os padrões.
 ---
 
 ## 22. `PATCH /api/configuracoes` — alterar configurações
-**Protegido** (`ADMINISTRADOR`). Corpo: `{ "duracaoSessaoHoras": 4 }`, inteiro de **1 a 24**.
+**Protegido** (`ADMINISTRADOR`). Corpo: qualquer combinação dos campos abaixo; os que não vierem
+ficam como estão. Todos inteiros.
 
-**Resposta `200`:** as configurações salvas.
+| Campo | Faixa | Padrão |
+|---|---|---|
+| `duracaoSessaoHoras` | 1 a 24 | 8 |
+| `retencaoContatoDias` | 30 a 365 | 90 |
+| `retencaoComentarioDias` | 30 a 1825 | 365 |
+| `retencaoNotificacaoDias` | 7 a 365 | 90 |
+
+**Resposta `200`:** todas as configurações, como no `GET`.
 
 > **A duração da sessão vale na hora, nos dois sentidos.** O token sai do login sempre com o teto
 > de 24h; o `requireAuth` compara a **idade da sessão** com a duração configurada **agora**, a cada
@@ -738,10 +775,42 @@ Enquanto ninguém salvou nada, devolve os padrões.
 > alongar estende as que ainda valem. Se a duração ficasse gravada no token, encurtar por segurança
 > não teria efeito sobre quem já estava logado.
 
-> Toda mudança entra no log de auditoria (`CONFIGURACAO_ALTERADA`, com `de` e `para`). Salvar o
-> mesmo valor não gera registro.
+> Toda mudança entra no log de auditoria (`CONFIGURACAO_ALTERADA`, um registro por campo, com
+> `de` e `para`). Salvar o mesmo valor não gera registro.
 
-**Erros:** `400` `VALIDACAO` (fora de 1–24 ou não inteiro) · `401` · `403` `SEM_PERMISSAO`.
+**Erros:** `400` `VALIDACAO` (nenhum campo conhecido, fora da faixa ou não inteiro; nada é salvo)
+· `401` · `403` `SEM_PERMISSAO`.
+
+---
+
+## 23. Retenção de dados (LGPD)
+**Anonimiza, não apaga o feedback.** Passado o prazo, sai o que identifica o cliente: nome e e-mail
+de quem pediu resposta (`retencaoContatoDias`) e o comentário, texto livre
+(`retencaoComentarioDias`), além das notificações (`retencaoNotificacaoDias`). Tipo, notas, área,
+data e situação ficam: os painéis e relatórios não mudam (há teste travando isso). Os prazos
+contam da data do feedback (ou da notificação).
+
+**Roda sozinha:** ao ligar a API e de hora em hora enquanto ela está de pé, no máximo uma vez por
+dia (`ultimaRetencaoEm`). O Render gratuito não tem agendador; como a API acorda a cada uso, roda
+todo dia com movimento. Duas rodadas ao mesmo tempo não aplicam duas vezes. Idempotente. No log,
+só as contagens, nunca o conteúdo apagado.
+
+### 23.1. `GET /api/retencao/previa` — o que sairia agora
+**Protegido** (`ADMINISTRADOR`). Não muda nada. Resposta `200`:
+`{ "contatos": 12, "comentarios": 3, "notificacoes": 40, "ultimaRetencaoEm": "…" | null }`.
+
+### 23.2. `POST /api/retencao/aplicar` — aplicar agora
+**Protegido** (`ADMINISTRADOR`). Sem corpo. Resposta `200`: `{ "contatos": 12, "comentarios": 3,
+"notificacoes": 40 }` (quantos saíram). Sempre registra `RETENCAO_APLICADA` com quem aplicou.
+
+### 23.3. `POST /api/retencao/titular` — pedido do cliente (LGPD, art. 18)
+**Protegido** (`ADMINISTRADOR`). Corpo: `{ "email": "ana@exemplo.com" }`. Apaga na hora o
+contato e o comentário de **todos** os feedbacks daquele e-mail, sem diferenciar maiúsculas e sem
+esperar prazo. Resposta `200`: `{ "feedbacks": 2 }` (pode ser `0`). Registra
+`DADOS_DO_TITULAR_APAGADOS` só com a quantidade: o e-mail não fica em lugar nenhum.
+
+**Erros:** `400` `VALIDACAO` (e-mail ausente ou sem formato de e-mail) · `401` · `403`
+`SEM_PERMISSAO`.
 
 ---
 
