@@ -112,6 +112,10 @@ erDiagram
   aplicar `trim()` no nome, senão `"Mesa 1"` e `"Mesa 1 "` passam como áreas diferentes. Por isso a API
   também confere o nome **sem diferenciar maiúsculas** antes de criar ou renomear: `"mesa 1"` ao lado de
   `"Mesa 1"` passava pela constraint.
+- **Comparar sem diferenciar maiúsculas passa por `semCuringas`** (`src/consulta.ts`). O
+  `mode: "insensitive"` do Prisma vira `ILIKE` no Postgres sem escapar nada: `"Mesa_1"` era recusada
+  como repetida de `"Mesa 1"`, a busca `%` trazia tudo e uma barra invertida sumia. Vale para toda
+  consulta nova com `mode: "insensitive"`.
 - **"Ocorrência" no MVP 1** = um `Feedback`. Status, tratativa e respostas prontas viram entidades próprias no **MVP 2**.
 
 - **`AuditLog` só cresce.** Nenhuma rota edita ou apaga linha. `entidadeId` é texto sem chave

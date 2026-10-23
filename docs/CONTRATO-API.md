@@ -133,8 +133,8 @@
 | `porPagina` | inteiro de 1 a **100** | padrão `20` |
 | `status` | `PENDENTE` · `EM_ANDAMENTO` · `RESOLVIDO` | |
 | `tipo` | `ELOGIO` · `SUGESTAO` · `RECLAMACAO` | |
-| `categoria` | nome da categoria | traz quem **pontuou** aquela categoria |
-| `busca` | texto livre | procura no comentário e no nome da área, ignorando maiúsculas |
+| `categoria` | nome da categoria | traz quem **pontuou** aquela categoria (nome exato, ignorando maiúsculas) |
+| `busca` | texto livre | procura no comentário e no nome da área, ignorando maiúsculas. `%`, `_` e a barra invertida são texto, não curingas: buscar `10%` acha "10%", não tudo |
 | `de` / `ate` | `YYYY-MM-DD` | `ate` inclui o dia inteiro, não para à meia-noite. Data que não existe no calendário (31/02) responde `400` |
 
 **Resposta `200`:**
@@ -359,7 +359,8 @@ Ativas primeiro, depois por nome. Devolve `{ "itens": [] }` quando não há áre
 **Resposta `201`:** a área criada, no formato da listagem.
 
 **Erros:** `400` `VALIDACAO` · `401` · `403` · `409` `CONFLITO` (nome já usado no restaurante, sem
-diferenciar maiúsculas: com "Mesa 12" cadastrada, "mesa 12" é recusada).
+diferenciar maiúsculas: com "Mesa 12" cadastrada, "mesa 12" é recusada; "Mesa_12" não, porque `_` e
+`%` contam como texto).
 
 ---
 
