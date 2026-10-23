@@ -12,7 +12,8 @@ fluxo do cliente · dois logins · painel e detalhe de ocorrências · dashboard
 
 ## Migrations em produção
 
-Todas aplicadas até o PR #22. Quando uma PR trouxer migration nova, **aplicar antes do merge** —
+Todas aplicadas até o PR #33; a da retenção (`20261021213601_retencao_lgpd`) vai no PR seguinte.
+Quando uma PR trouxer migration nova, **aplicar antes do merge** —
 migration que só adiciona coluna com valor padrão não quebra o código antigo, e o contrário derruba
 a API até alguém rodar:
 
@@ -73,14 +74,13 @@ Nenhuma tela é mock. Das duas seções das configurações marcadas com o que f
    num cookie de sessão e fechar o navegador encerra o login (o computador do restaurante é
    compartilhado); marcada, fica no `localStorage` até vencer o tempo acima. Cookie e não
    `sessionStorage` porque este é de uma aba só. As telas leem o token por `tokenDaSessao()`
-2. **Retenção LGPD** — **adiada para depois do redesenho** (decisão de 06/10). Prazo configurável
-   **e** a rotina que apaga ou anonimiza o que passou dele: guardar o prazo sem aplicar não protege
-   ninguém. Não é necessária para a apresentação, mas é obrigatória antes da entrega ao Sinuelo. O
-   prazo entra como nova coluna da `Configuracao`, com o mesmo padrão de leitura e auditoria
+2. **Retenção LGPD** — **planejada (09/10), ver a seção 6.** Prazo configurável **e** a rotina que
+   anonimiza o que passou dele: guardar o prazo sem aplicar não protege ninguém. Não é necessária
+   para a apresentação, mas é obrigatória antes da entrega ao Sinuelo
 
 ---
 
-## 4. Redesenho: moderno, bonito, fluido e usável (em andamento)
+## ~~4. Redesenho: moderno, bonito, fluido e usável~~ — feito
 
 **Por quê:** o sistema funciona, mas não parece um produto. O que motivou: o cartão "Cliente" da tela
 inicial levava a um formulário que nunca funciona sem QR. O diagnóstico de 06/10 achou mais:
@@ -224,6 +224,91 @@ Prazo: ~3 semanas até o fim de outubro. Etapas 0–2 na primeira semana e meia;
 apertar, a 4 encolhe.
 
 ---
+
+## 6. Retenção de dados (LGPD) — em andamento
+
+**O que identifica alguém no Echo:** do cliente, o **nome e o e-mail** de quem pede resposta
+(`contatoNome`, `contatoEmail`) e o **comentário**, que é texto livre e pode trazer nome, telefone,
+placa. Tipo, notas, área, data e situação não identificam ninguém. Da equipe: nome, e-mail, senha
+(hash) e o log de atividades. O log **não** guarda dado de cliente (conferido: os `detalhes` têm área,
+status e nomes da equipe).
+
+**Princípio: anonimizar, não apagar o feedback.** Apagar a linha tiraria os números dos painéis e
+relatórios. A rotina apaga o que identifica e mantém o que conta; estatística anônima deixa de ser
+dado pessoal.
+
+**Regras (decididas pelo Lucas em 09/10; padrões que o administrador pode ajustar):**
+
+| O quê | Some depois de | Contado de |
+|---|---|---|
+| Nome e e-mail do cliente | **90 dias** | data do feedback |
+| Comentário | **12 meses** | data do feedback |
+| Notificações | 90 dias | data da notificação |
+| Log de atividades | fica (não tem dado de cliente; serve para prestar contas) | — |
+| Usuários desativados | ficam (o log aponta para eles) | — |
+
+**Como roda:** o Render gratuito não tem agendador (o cron é pago) e dorme depois de 15 min parado.
+A API aplica a retenção **ao ligar e no máximo uma vez por dia** enquanto está acordada, guardando
+a última execução na `Configuracao`. Acorda a cada uso (painel ou QR), então roda todo dia com
+movimento; o que vencer num dia parado sai no dia seguinte. Idempotente; registra no log só as
+contagens (`RETENCAO_APLICADA`), nunca o conteúdo. Nas Configurações: prévia ("12 contatos e 3
+comentários vencidos") e "Aplicar agora".
+
+**Pedido do titular (art. 18):** o administrador informa o e-mail e o Echo anonimiza na hora todos os
+feedbacks daquele e-mail (sem diferenciar maiúsculas). Log `DADOS_DO_TITULAR_APAGADOS` com a
+quantidade, sem guardar o e-mail.
+
+**Transparência:** abaixo do campo de e-mail do formulário, "Guardamos seu nome e e-mail por até 90
+dias, só para responder" (prazo vindo da API). Página `/privacidade` curta, com link no formulário e
+no login: que dados, para quê, por quanto tempo, como pedir para apagar (o Sinuelo informa o e-mail
+de contato). No detalhe da ocorrência, "Contato apagado em … pela política de privacidade" em vez de
+um espaço vazio.
+
+**Por dentro:**
+- migration: na `Configuracao`, `retencaoContatoDias` (90), `retencaoComentarioDias` (365),
+  `retencaoNotificacaoDias` (90) e `ultimaRetencaoEm`; no `Feedback`, `contatoApagadoEm` e
+  `comentarioApagadoEm`; ações `RETENCAO_APLICADA` e `DADOS_DO_TITULAR_APAGADOS`
+- API: prazos no `GET/PATCH /api/configuracoes` com limites; prévia e aplicar
+  (`/api/retencao`, administrador); apagar dados do titular por e-mail; prazos públicos para o
+  formulário e a página de privacidade
+- testes: fronteira dos prazos (89/90/91 dias), não toca no recente, idempotência, **números dos
+  painéis iguais antes e depois de anonimizar**, pedido do titular só atinge aquele e-mail, log sem
+  conteúdo
+
+**Ordem, 3 PRs (~1,5 dia):**
+1. ~~API + migration + rotina + testes, com os prazos padrão. Sozinho já protege~~ — **feito
+   (21/10).** Tudo da API desta seção: rotina (`api/src/retencao.ts`), rodada ao ligar e de hora em
+   hora (`server.ts`, no máximo uma por dia, à prova de duas ao mesmo tempo), prévia, aplicar,
+   pedido do titular, prazos nas configurações (`PATCH` aceita só os campos enviados) e públicos
+   (`GET /api/public/privacidade`). 42 testes, inclusive os números dos painéis iguais antes e
+   depois. **Decidido no caminho (21/10):** a rodada automática aparece no log como **"Sistema
+   (automático)"** (o `AuditLog.usuarioId` passou a aceitar vazio, com a chave estrangeira ainda
+   `RESTRICT`) e só registra quando algo saiu; quem aplica pela tela registra sempre. No front: o log
+   mostra o sistema e as ações novas (com filtro "Sistema"); as Configurações deixaram de dizer que a
+   retenção não existe; e o que saiu diz que saiu ("Comentário apagado em…", "o contato foi apagado
+   em…" no detalhe, e sem o selo "Pediu resposta" quando não há mais a quem responder), em vez de
+   "Sem comentário" e "Avaliação anônima", que seriam falsos; o CSV do registro também diz
+   "(Comentário apagado em…)" em vez da célula vazia. **Achado na varredura, de antes da
+   retenção:** injeção de fórmula no CSV. O comentário vem do cliente, sem login, e
+   `=HYPERLINK(...)` virava link clicável no Excel do gerente; agora texto que começa com
+   `= + - @` ganha um apóstrofo (OWASP), e número negativo continua número. **Achado na verificação:** o
+   `mode: "insensitive"` do Prisma vira `ILIKE` sem escapar curingas, e o pedido do titular para
+   `%@%` apagava o contato de todo mundo; agora a comparação é exata (SQL parametrizado), com teste.
+   **Deploy:** as colunas novas são lidas em toda requisição autenticada (o `requireAuth` lê a
+   configuração), então o código novo não pode rodar sem a migration. O build do Render já aplica a
+   migration antes de ligar o código novo, e se ela falhar a versão anterior continua no ar;
+   aplicar antes do merge, como de costume, só tira essa dependência (o código antigo convive com
+   as colunas novas). Também por isso a **CI na branch** (sobe um banco e roda a migration) é a
+   prova de que ela aplica. **Em produção, a primeira rodada** apaga só
+   notificações com mais de 90 dias: a demonstração não tem contato de cliente e os comentários têm
+   menos de um ano
+2. Configurações (prazos, prévia, aplicar, apagar dados de um cliente) + aviso no detalhe
+3. Transparência: texto no formulário e página `/privacidade`
+
+**Antes da entrega:** prazos e texto de privacidade validados pelo Sinuelo (de preferência com quem
+cuida da parte jurídica deles). A parte técnica não substitui essa validação.
+
+---
 ## Antes da apresentação
 
 - **Cold start do Render: ~22 segundos.** Abrir o sistema alguns minutos antes, ou assinar o plano
@@ -234,4 +319,6 @@ apertar, a 4 encolhe.
 
 - Trocar as senhas `echo123` das três contas
 - Limpar os dados de demonstração e cadastrar os usuários e áreas reais
-- Retenção LGPD de fato: hoje a tela diz que existe e não existe
+- Retenção LGPD de fato (seção 6): hoje a tela diz que ainda não existe
+- Validar com o Sinuelo os prazos de retenção e o texto da página de privacidade, e pegar o e-mail de
+  contato para pedidos de apagar dados
