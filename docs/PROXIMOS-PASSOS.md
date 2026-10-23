@@ -301,9 +301,21 @@ um espaço vazio.
    as colunas novas). Também por isso a **CI na branch** (sobe um banco e roda a migration) é a
    prova de que ela aplica. **Em produção, a primeira rodada** apaga só
    notificações com mais de 90 dias: a demonstração não tem contato de cliente e os comentários têm
-   menos de um ano
-2. Configurações (prazos, prévia, aplicar, apagar dados de um cliente) + aviso no detalhe
+   menos de um ano. **No ar em 23/10 (#35):** a primeira rodada foi às 16:08 e não havia nada vencido
+   (nem notificação), por isso não deixou registro no log
+2. ~~Configurações (prazos, prévia, aplicar, apagar dados de um cliente)~~ — **feito (23/10).** Seção
+   "Retenção de dados (LGPD)" nas Configurações (`web/src/app/components/admin/RetencaoDeDados.tsx`):
+   os três prazos em seletores (dentro das faixas da API; um valor salvo fora da lista aparece), com
+   aviso ao encurtar e salvando só o que mudou; quando rodou pela última vez e o que já passou do
+   prazo, com "Apagar agora"; e o pedido de um cliente pelo e-mail. As duas ações apagam sem volta,
+   então pedem confirmação com o foco no "Cancelar" (um Enter distraído não apaga nada). O "aviso no
+   detalhe" já tinha entrado no PR 1
 3. Transparência: texto no formulário e página `/privacidade`
+
+**Curingas (#36, 23/10):** o mesmo `ILIKE` sem escape do pedido do titular existia na busca, no
+filtro de categoria e no nome repetido de área (`%` trazia tudo, "Mesa_1" era recusada por existir
+"Mesa 1"). `semCuringas` (`api/src/consulta.ts`) escapa `\`, `%` e `_`; toda consulta nova com
+`mode: "insensitive"` deve passar por ela.
 
 **Antes da entrega:** prazos e texto de privacidade validados pelo Sinuelo (de preferência com quem
 cuida da parte jurídica deles). A parte técnica não substitui essa validação.
