@@ -4,6 +4,7 @@ import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { registrarAuditoria } from "../auditoria.js";
+import { semCuringas } from "../consulta.js";
 
 // Áreas do restaurante — listagem aberta (alimenta o gerador de QR Code),
 // escrita restrita ao administrador.
@@ -34,7 +35,7 @@ async function nomeJaUsado(venueId: string, nome: string, excetoId?: string) {
   const outra = await prisma.area.findFirst({
     where: {
       venueId,
-      nome: { equals: nome, mode: "insensitive" },
+      nome: { equals: semCuringas(nome), mode: "insensitive" },
       ...(excetoId && { id: { not: excetoId } }),
     },
     select: { id: true },
