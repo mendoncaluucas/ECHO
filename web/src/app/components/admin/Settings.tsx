@@ -16,6 +16,7 @@ import {
 } from '../../services/api';
 import { avisarRapido } from '../../avisoRapido';
 import { CabecalhoDaPagina, Cartao, Esqueleto, Pagina } from '../layout/Pagina';
+import { SecaoRetencao } from './RetencaoDeDados';
 
 const campo =
   'h-11 w-full min-w-0 rounded-xl border border-borda-campo bg-input-background px-3.5 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -35,7 +36,7 @@ export function AdminSettings() {
   const token = tokenDaSessao() ?? '';
   return (
     <Pagina>
-      <CabecalhoDaPagina titulo="Configurações" descricao="As áreas do restaurante e as regras de acesso ao Echo." />
+      <CabecalhoDaPagina titulo="Configurações" descricao="As áreas do restaurante, as regras de acesso ao Echo e por quanto tempo os dados dos clientes ficam." />
       {/* Duas colunas só em tela larga: as áreas são a lista que cresce, e ficam à
           esquerda; o resto é curto. */}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
@@ -43,6 +44,11 @@ export function AdminSettings() {
         <div className="flex min-w-0 flex-col gap-4">
           <SecaoTempoDeSessao token={token} />
           <SecaoAindaNaoDisponivel />
+        </div>
+        {/* Larga, embaixo: tem duas partes lado a lado (prazos; o que passou e o pedido
+            de um cliente), que não cabem na coluna estreita. */}
+        <div className="min-w-0 xl:col-span-2">
+          <SecaoRetencao token={token} />
         </div>
       </div>
     </Pagina>
@@ -400,11 +406,6 @@ function SecaoAindaNaoDisponivel() {
     {
       titulo: 'Avisos por e-mail',
       texto: 'Os alertas de feedback novo chegam no sino do Echo. Por e-mail depende de um serviço de envio.',
-    },
-    {
-      titulo: 'Ajustar a retenção de dados (LGPD)',
-      texto:
-        'A retenção já roda sozinha, uma vez por dia em que o Echo é usado, com os prazos padrão: o nome e o e-mail de quem pede resposta saem 90 dias depois do feedback, e o comentário, 12 meses depois. Ajustar os prazos e atender o pedido de um cliente chegam a esta tela em seguida.',
     },
   ];
   return (
