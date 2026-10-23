@@ -3,7 +3,7 @@ import { Papel, Prisma, StatusOcorrencia, TipoFeedback } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
-import { ERRO_DE_PAGINACAO, lerData, lerPaginacao } from "../consulta.js";
+import { ERRO_DE_PAGINACAO, lerData, lerPaginacao, semCuringas } from "../consulta.js";
 import { registrarAuditoria } from "../auditoria.js";
 
 // Feedbacks para a gestão (protegido) — DONO: Victor
@@ -81,13 +81,13 @@ occurrencesRoutes.get(
       ...((de || ate) && { criadoEm: { ...(de && { gte: de }), ...(ate && { lte: ate }) } }),
       // Categoria é por avaliação: traz quem pontuou aquela categoria.
       ...(categoria && {
-        avaliacoes: { some: { category: { nome: { equals: categoria, mode: "insensitive" } } } },
+        avaliacoes: { some: { category: { nome: { equals: semCuringas(categoria), mode: "insensitive" } } } },
       }),
       // A busca cobre o comentário e o nome da área, que é o que a tela expõe.
       ...(busca && {
         OR: [
-          { comentario: { contains: busca, mode: "insensitive" } },
-          { area: { nome: { contains: busca, mode: "insensitive" } } },
+          { comentario: { contains: semCuringas(busca), mode: "insensitive" } },
+          { area: { nome: { contains: semCuringas(busca), mode: "insensitive" } } },
         ],
       }),
     };

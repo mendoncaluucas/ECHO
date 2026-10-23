@@ -41,3 +41,13 @@ export const ERRO_DE_PAGINACAO = {
   erro: `pagina deve ser inteiro positivo e porPagina um inteiro de 1 a ${POR_PAGINA_MAXIMO}`,
   codigo: "VALIDACAO",
 } as const;
+
+// Texto para comparar com `mode: "insensitive"` do Prisma (equals ou contains). No
+// Postgres ele vira ILIKE, e o Prisma não escapa nada: "_" valia por qualquer letra e
+// "%" por qualquer texto, e uma barra invertida sumia (era o escape). Visto em teste:
+// a área "Mesa_1" era recusada porque já havia "Mesa 1", e a busca "%" trazia tudo.
+// A barra é o escape padrão do ILIKE, então barra, "%" e "_" ganham uma barra antes.
+// Se o Prisma um dia passar a escapar por conta própria, tests/curingas.test.ts acusa.
+export function semCuringas(texto: string) {
+  return texto.replace(/[\\%_]/g, "\\$&");
+}
