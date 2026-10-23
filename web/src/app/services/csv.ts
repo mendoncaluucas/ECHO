@@ -6,7 +6,19 @@ export type Celula = string | number | null | undefined;
 // aspas e quebra de linha — sem isso o arquivo abre torto no Excel.
 function celula(valor: Celula) {
   const texto = valor === null || valor === undefined ? '' : String(valor);
-  return `"${texto.replace(/"/g, '""')}"`;
+  return `"${semFormula(texto).replace(/"/g, '""')}"`;
+}
+
+// Injeção de fórmula: o comentário vem do cliente, sem login, e o Excel trata como
+// fórmula o texto que começa com = + - @ (ou tabulação/retorno), mesmo entre aspas.
+// "=HYPERLINK(...)" num comentário virava um link clicável na planilha do gerente. O
+// apóstrofo na frente faz o Excel mostrar o texto como texto (recomendação da OWASP).
+// Número negativo de verdade ("-0,5" nos relatórios) continua número.
+const PARECE_FORMULA = /^[=+\-@\t\r]/;
+const NUMERO = /^-?\d+([.,]\d+)?$/;
+
+function semFormula(texto: string) {
+  return PARECE_FORMULA.test(texto) && !NUMERO.test(texto) ? `'${texto}` : texto;
 }
 
 // Ponto e vírgula e BOM: é o que o Excel em português espera. Com vírgula ele joga
