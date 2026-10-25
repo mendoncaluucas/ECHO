@@ -18,6 +18,19 @@ describe("GET /api/public/venue/:qrToken", () => {
     );
   });
 
+  it("traz os prazos de retenção, para o formulário dizer por quanto tempo o contato fica", async () => {
+    await criarCenarioCliente();
+
+    const padrao = await request(app).get(`/api/public/venue/${QR_TOKEN}`);
+    expect(padrao.body.privacidade).toEqual({ contatoDias: 90, comentarioDias: 365 });
+
+    await prisma.configuracao.create({
+      data: { id: "sistema", retencaoContatoDias: 60, retencaoComentarioDias: 730 },
+    });
+    const configurado = await request(app).get(`/api/public/venue/${QR_TOKEN}`);
+    expect(configurado.body.privacidade).toEqual({ contatoDias: 60, comentarioDias: 730 });
+  });
+
   it("responde 404 para token inexistente", async () => {
     await criarCenarioCliente();
 

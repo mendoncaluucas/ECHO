@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, QrCode } from 'lucide-react';
 import { Marca } from './layout/Marca';
 import { papelPodeAbrir } from '../navegacao';
@@ -233,6 +233,14 @@ export function Entrar() {
             <QrCode className="mt-0.5 size-[18px] flex-none" aria-hidden="true" />
             <span>É cliente? Aponte a câmera do celular para o QR Code da sua mesa.</span>
           </div>
+
+          <Link
+            to="/privacidade"
+            state={{ de: '/' }}
+            className="self-center text-sm font-semibold text-primary underline underline-offset-2"
+          >
+            Como cuidamos dos dados dos clientes
+          </Link>
         </form>
       </section>
     </main>

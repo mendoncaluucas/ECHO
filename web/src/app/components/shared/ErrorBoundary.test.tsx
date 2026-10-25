@@ -55,8 +55,8 @@ describe('tela de erro', () => {
     expect(screen.getByRole('heading', { name: 'Não foi possível abrir esta tela' })).toBeInTheDocument();
   });
 
-  it('no formulário do cliente: só "Recarregar" (a raiz é o login da equipe)', () => {
-    abrir('quebrou', { endereco: '/feedback?t=MESA12' });
+  it.each(['/feedback?t=MESA12', '/privacidade'])('nas páginas do cliente (%s): só "Recarregar" (a raiz é o login da equipe)', (endereco) => {
+    abrir('quebrou', { endereco });
     expect(screen.queryByRole('link', { name: 'Meu painel' })).not.toBeInTheDocument();
     expect(screen.getByText('Toque em Recarregar para tentar de novo.')).toBeInTheDocument();
   });

@@ -225,7 +225,7 @@ apertar, a 4 encolhe.
 
 ---
 
-## 6. Retenção de dados (LGPD) — em andamento
+## ~~6. Retenção de dados (LGPD)~~ — feito (25/10); falta só validar com o Sinuelo
 
 **O que identifica alguém no Echo:** do cliente, o **nome e o e-mail** de quem pede resposta
 (`contatoNome`, `contatoEmail`) e o **comentário**, que é texto livre e pode trazer nome, telefone,
@@ -310,7 +310,15 @@ um espaço vazio.
    prazo, com "Apagar agora"; e o pedido de um cliente pelo e-mail. As duas ações apagam sem volta,
    então pedem confirmação com o foco no "Cancelar" (um Enter distraído não apaga nada). O "aviso no
    detalhe" já tinha entrado no PR 1
-3. Transparência: texto no formulário e página `/privacidade`
+3. ~~Transparência: texto no formulário e página `/privacidade`~~ — **feito (25/10).** No formulário,
+   abaixo do e-mail: "Ficam guardados por 90 dias e depois são apagados", com o prazo configurado
+   (vem junto com os dados da mesa, sem um segundo pedido no celular do cliente). Página
+   `/privacidade` (`web/src/app/components/customer/Privacidade.tsx`), com link no rodapé do
+   formulário e no login: o que guardamos, para quê, por quanto tempo (prazos da API; sem ela, "um
+   prazo limitado") e como pedir para apagar (com um atendente ou a gerência, que usam a tela das
+   Configurações). O "Voltar" anda no histórico: um link empilharia outra cópia da avaliação, e a
+   seta de voltar dela caía de novo na página (achado no teste). **O texto é provisório** até o
+   Sinuelo validar e passar um e-mail de contato
 
 **Curingas (#36, 23/10):** o mesmo `ILIKE` sem escape do pedido do titular existia na busca, no
 filtro de categoria e no nome repetido de área (`%` trazia tudo, "Mesa_1" era recusada por existir
@@ -331,6 +339,8 @@ cuida da parte jurídica deles). A parte técnica não substitui essa validaçã
 
 - Trocar as senhas `echo123` das três contas
 - Limpar os dados de demonstração e cadastrar os usuários e áreas reais
-- Retenção LGPD de fato (seção 6): hoje a tela diz que ainda não existe
-- Validar com o Sinuelo os prazos de retenção e o texto da página de privacidade, e pegar o e-mail de
-  contato para pedidos de apagar dados
+- ~~Retenção LGPD de fato (seção 6)~~ — feita: rotina, tela e página de privacidade
+- Validar com o Sinuelo os prazos de retenção e o texto da página de privacidade
+  (`web/src/app/components/customer/Privacidade.tsx`), de preferência com quem cuida da parte
+  jurídica deles, e pegar um e-mail de contato para pedidos de apagar dados (hoje a página manda
+  falar com um atendente ou a gerência)

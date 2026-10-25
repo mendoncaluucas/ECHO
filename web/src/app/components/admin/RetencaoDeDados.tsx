@@ -11,6 +11,7 @@ import {
 } from '../../services/api';
 import { avisarRapido } from '../../avisoRapido';
 import { contagemDaRetencao } from '../../descricaoDaAuditoria';
+import { rotuloDePrazo } from '../../rotulos';
 import { Cartao, Esqueleto } from '../layout/Pagina';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../ui/dialog';
 
@@ -56,12 +57,6 @@ const PRAZOS: { campo: Prazo; rotulo: string; ajuda: string; opcoes: number[]; p
   },
 ];
 
-function rotuloDeDias(dias: number) {
-  if (dias === 180) return '6 meses';
-  if (dias === 365) return '1 ano';
-  if (dias % 365 === 0) return `${dias / 365} anos`;
-  return dias === 1 ? '1 dia' : `${dias} dias`;
-}
 
 function quando(iso: string) {
   const d = new Date(iso);
@@ -244,7 +239,7 @@ export function SecaoRetencao({ token }: { token: string }) {
                   >
                     {opcoes.map((dias) => (
                       <option key={dias} value={dias}>
-                        {rotuloDeDias(dias)}
+                        {rotuloDePrazo(dias)}
                         {dias === p.padrao ? ' (padrão)' : ''}
                       </option>
                     ))}

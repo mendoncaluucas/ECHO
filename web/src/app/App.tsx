@@ -18,6 +18,7 @@ import { EVENTO_SESSAO_ENCERRADA, ROTA_DE_LOGIN } from './services/api';
 // (ver telasDaGestao.ts).
 import { FeedbackForm } from './components/customer/FeedbackForm';
 import { Success } from './components/customer/Success';
+import { Privacidade } from './components/customer/Privacidade';
 import { NotFound } from './components/shared/NotFound';
 import {
   AdminDashboard,
@@ -95,6 +96,8 @@ function Rotas() {
         {/* Cliente: só pelo QR Code da mesa. As três etapas vivem em /feedback. */}
         <Route path="/feedback" element={<FeedbackForm />} />
         <Route path="/sucesso" element={<Success />} />
+        {/* Pública: o cliente chega pelo link do formulário, e a equipe pelo do login. */}
+        <Route path="/privacidade" element={<Privacidade />} />
         {/* Telas antigas do fluxo, que viraram etapas do formulário. */}
         <Route path="/boas-vindas" element={<ParaOFormulario />} />
         <Route path="/identificacao" element={<ParaOFormulario />} />

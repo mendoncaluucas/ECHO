@@ -82,6 +82,15 @@ export function comentarioApagado(iso: string) {
   return `Comentário apagado em ${new Date(iso).toLocaleDateString('pt-BR')}, pela política de privacidade`;
 }
 
+// Prazo em dias como a pessoa fala: "90 dias", "6 meses", "1 ano", "2 anos". Usado na
+// retenção de dados (configurações e página de privacidade).
+export function rotuloDePrazo(dias: number) {
+  if (dias === 180) return '6 meses';
+  if (dias === 365) return '1 ano';
+  if (dias % 365 === 0) return `${dias / 365} anos`;
+  return dias === 1 ? '1 dia' : `${dias} dias`;
+}
+
 export function primeiroNome(nome: string | null | undefined) {
   return nome?.trim().split(/\s+/)[0] || 'equipe';
 }

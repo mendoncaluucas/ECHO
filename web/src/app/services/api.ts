@@ -7,10 +7,24 @@ export interface Categoria {
   nome: string;
 }
 
+// Prazos de retenção (LGPD), em dias: por quanto tempo o nome e o e-mail de quem pede
+// resposta e o comentário ficam guardados.
+export interface PrazosDePrivacidade {
+  contatoDias: number;
+  comentarioDias: number;
+}
+
 export interface VenueContext {
   venue: { id: string; nome: string };
   area: { id: string; nome: string };
   categorias: Categoria[];
+  // Opcional: a API de antes da retenção não manda.
+  privacidade?: PrazosDePrivacidade;
+}
+
+// Para a página de privacidade, aberta sem QR Code.
+export function buscarPrazosDePrivacidade(): Promise<PrazosDePrivacidade> {
+  return request(`/public/privacidade`);
 }
 
 export interface FeedbackPayload {

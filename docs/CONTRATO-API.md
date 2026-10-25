@@ -48,16 +48,22 @@
     { "id": "uuid", "nome": "Higiene" },
     { "id": "uuid", "nome": "Atendimento" },
     { "id": "uuid", "nome": "Alimento" }
-  ]
+  ],
+  "privacidade": { "contatoDias": 90, "comentarioDias": 365 }
 }
 ```
+`privacidade` são os prazos de retenção (seção 23), os mesmos do `GET /public/privacidade`: vêm
+aqui para o formulário dizer por quanto tempo o contato fica sem um segundo pedido no celular do
+cliente.
+
 **Erros:** `404` se o token não existir ou estiver inativo.
 
 ---
 
 ## 1.1. `GET /public/privacidade` — prazos de retenção
-**Público.** Por quanto tempo o Echo guarda o que identifica o cliente, para o formulário e a página
-de privacidade dizerem o prazo que vale (e não um texto fixo que ficaria errado ao mudar o prazo).
+**Público.** Por quanto tempo o Echo guarda o que identifica o cliente, para a página de
+privacidade (aberta sem QR Code) dizer o prazo que vale, e não um texto fixo que ficaria errado ao
+mudar o prazo.
 
 **Resposta `200`:** `{ "contatoDias": 90, "comentarioDias": 365 }`. Ver a seção 23.
 

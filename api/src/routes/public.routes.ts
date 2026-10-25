@@ -45,15 +45,24 @@ publicRoutes.get(
         .json({ erro: "QR Code inválido ou inativo", codigo: "QR_NAO_ENCONTRADO" });
     }
 
-    const categorias = await prisma.category.findMany({
-      select: { id: true, nome: true },
-      orderBy: { nome: "asc" },
-    });
+    const [categorias, configuracoes] = await Promise.all([
+      prisma.category.findMany({
+        select: { id: true, nome: true },
+        orderBy: { nome: "asc" },
+      }),
+      lerConfiguracoes(),
+    ]);
 
     return res.json({
       venue: { id: qr.area.venue.id, nome: qr.area.venue.nome },
       area: { id: qr.area.id, nome: qr.area.nome },
       categorias,
+      // Os prazos de retenção (LGPD), para o formulário dizer por quanto tempo o contato
+      // fica sem um segundo pedido no celular do cliente. Os mesmos do GET /privacidade.
+      privacidade: {
+        contatoDias: configuracoes.retencaoContatoDias,
+        comentarioDias: configuracoes.retencaoComentarioDias,
+      },
     });
   })
 );
