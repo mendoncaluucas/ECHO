@@ -84,7 +84,7 @@ erDiagram
 
 | Entidade | Papel | Campos principais |
 |---|---|---|
-| **User** | Usuário de gestão que faz login | `nome`, `email` (único), `senhaHash`, `papel` |
+| **User** | Usuário de gestão que faz login | `nome`, `email` (único), `senhaHash`, `papel`, `avisoPorEmail` (padrão `RECLAMACOES`) |
 | **Venue** | O restaurante | `nome` |
 | **Area** | Mesa / área / setor do restaurante | `nome`, `ativo`, `venueId` — único por `(venueId, nome)` |
 | **QRCode** | QR físico que aponta para uma área | `token` (único), `ativo`, `areaId` |
@@ -98,10 +98,11 @@ erDiagram
 ## Enums
 - **Papel:** `COORDENADOR` · `GERENTE` · `ADMINISTRADOR` *(Cliente não faz login)*
 - **TipoFeedback:** `ELOGIO` · `SUGESTAO` · `RECLAMACAO`
+- **AvisoPorEmail:** `NENHUM` · `RECLAMACOES` · `TODOS` *(quais feedbacks novos chegam por e-mail a cada pessoa)*
 - **AcaoAuditoria:** `LOGIN` · `SENHA_ALTERADA` · `SENHA_REDEFINIDA` · `USUARIO_CRIADO` · `USUARIO_EDITADO` ·
   `USUARIO_DESATIVADO` · `USUARIO_REATIVADO` · `AREA_CRIADA` · `AREA_RENOMEADA` · `AREA_DESATIVADA` ·
   `AREA_REATIVADA` · `QRCODE_GERADO` · `QRCODE_DESATIVADO` · `QRCODE_REATIVADO` · `OCORRENCIA_STATUS` ·
-  `CONFIGURACAO_ALTERADA` · `RETENCAO_APLICADA` · `DADOS_DO_TITULAR_APAGADOS`
+  `CONFIGURACAO_ALTERADA` · `RETENCAO_APLICADA` · `DADOS_DO_TITULAR_APAGADOS` · `AVISO_POR_EMAIL_ALTERADO`
 
 ## Decisões e observações
 - **Anonimato por padrão:** `Feedback.anonimo = true`. `contatoNome` e `contatoEmail` só são gravados quando o cliente pede resposta da equipe (sem e-mail, o feedback é gravado como anônimo). O contato só sai da API no detalhe da ocorrência, para quem vai responder; nunca em listas (LGPD).

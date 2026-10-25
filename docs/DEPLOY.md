@@ -56,6 +56,31 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 > **`WEB_BASE_URL` é a variável mais perigosa deste deploy.** Se faltar, ela cai no padrão
 > `http://localhost:5173` e **todo QR Code gerado em produção aponta para localhost**. QR Code é
 > impresso e colado na mesa — um QR errado não se conserta com redeploy, se conserta reimprimindo.
+> É também o endereço do link "Abrir no Echo" dos avisos por e-mail.
+
+### E-mail (opcional)
+
+Sem estas variáveis o envio fica desligado e o resto funciona igual (o sino continua avisando).
+
+| Variável | Valor |
+|---|---|
+| `RESEND_API_KEY` | chave criada em resend.com → API Keys (permissão "Sending access") |
+| `EMAIL_DESTINO_TESTE` | **na entrega acadêmica:** o e-mail da sua conta no Resend |
+| `EMAIL_REMETENTE` | só com domínio verificado, ex.: `Echo <avisos@seudominio.com.br>` |
+
+> **Sem domínio próprio, o Resend só entrega para o dono da conta.** O remetente padrão
+> (`onboarding@resend.dev`) recusa qualquer outro destinatário com `403`. Por isso o
+> `EMAIL_DESTINO_TESTE`: com ele, **todo** e-mail vai para esse endereço, com o assunto
+> `[Teste · para gerente@sinuelo.com] …` e uma faixa dizendo para quem iria. Também impede que os
+> e-mails do seed (`@sinuelo.com`) recebam alguma coisa. Plano gratuito: 100 e-mails por dia.
+>
+> Ao ligar, a API escreve no log do Render uma linha dizendo como o e-mail está (desligado, em
+> teste, ou de qual remetente), sem a chave.
+
+> **Na entrega ao Sinuelo**, com o serviço de e-mail deles: tirar o `EMAIL_DESTINO_TESTE` e trocar
+> o provedor em `api/src/email.ts` (a interface `ProvedorDeEmail` isola isso). **Atenção:** o plano
+> gratuito do Render **bloqueia a saída SMTP** (portas 25, 465 e 587, desde setembro de 2025). Um
+> serviço por SMTP só funciona no plano pago; por API HTTPS, como o Resend, funciona no gratuito.
 
 ### Primeiro acesso
 
