@@ -240,7 +240,7 @@ dado pessoal.
 
 | O quê | Some depois de | Contado de |
 |---|---|---|
-| Nome e e-mail do cliente | **90 dias** | data do feedback |
+| Nome e e-mail do cliente (e, desde 25/10, o texto das respostas da equipe) | **90 dias** | data do feedback |
 | Comentário | **12 meses** | data do feedback |
 | Notificações | 90 dias | data da notificação |
 | Log de atividades | fica (não tem dado de cliente; serve para prestar contas) | — |
@@ -344,8 +344,19 @@ vai para o `EMAIL_DESTINO_TESTE` (ver `docs/DEPLOY.md`). Dois PRs:
    falha no envio não desfaz nada. O cartão "Ainda não disponível" das Configurações virou um
    aviso de onde fica a escolha. Migration `avisos_por_email` (coluna com padrão: o código antigo
    convive com ela)
-2. **Resposta ao cliente pelo Echo** — a equipe escreve no detalhe da ocorrência e o Echo envia.
-   Este manda dado do cliente ao provedor, então a página de privacidade precisa dizer isso
+2. ~~**Resposta ao cliente pelo Echo**~~ — **feito (25/10).** No detalhe da ocorrência, com o envio
+   ligado: caixa "Sua resposta" que já começa com a saudação (o cliente recebe o que está nela,
+   mais a assinatura e um rodapé com o link da privacidade) e "Enviar resposta"; o `mailto:` fica
+   como "Abrir no meu e-mail". **Decidido pelo Lucas (25/10):** "responder para" é o e-mail de quem
+   escreveu, e enviar **não** muda a situação sozinho. Modelo `Resposta` (várias por ocorrência):
+   o detalhe mostra o que já foi dito e por quem, e a lista troca "Pediu resposta" por
+   "Respondida". A API envia antes de gravar (recusa do provedor não deixa resposta fantasma) e
+   registra `RESPOSTA_ENVIADA` sem o texto. **LGPD:** o texto sai junto com o contato (90 dias ou
+   pedido do cliente), porque é dirigido à pessoa; a página de privacidade agora diz que a resposta
+   sai por um serviço de envio de e-mails. Migration `respostas_ao_cliente` (tabela nova: o código
+   antigo convive com ela)
+3. **Respostas prontas** (pedido do Sinuelo) — modelos que a equipe escolhe nessa caixa e ajusta
+   antes de enviar. Precisa de uma tela para cadastrar os modelos
 
 ---
 ## Antes da apresentação

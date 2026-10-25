@@ -136,7 +136,7 @@ describe("prazos", () => {
 
     const segunda = await aplicarRetencao({ usuarioId: null, agora: new Date(AGORA.getTime() + DIA) });
 
-    expect(segunda).toEqual({ contatos: 0, comentarios: 0, notificacoes: 0 });
+    expect(segunda).toEqual({ contatos: 0, comentarios: 0, notificacoes: 0, respostas: 0 });
     expect(await ler(antigo.id)).toMatchObject({ contatoApagadoEm: AGORA, comentarioApagadoEm: AGORA });
   });
 });
@@ -237,6 +237,7 @@ describe("rodada automática (ao ligar e de hora em hora)", () => {
       contatos: 0,
       comentarios: 0,
       notificacoes: 0,
+      respostas: 0,
     });
   });
 
@@ -279,7 +280,7 @@ describe("rotas da retenção (administrador)", () => {
 
     const res = await request(app).get("/api/retencao/previa").set(comToken(admin.token)).expect(200);
 
-    expect(res.body).toEqual({ contatos: 1, comentarios: 0, notificacoes: 0, ultimaRetencaoEm: null });
+    expect(res.body).toEqual({ contatos: 1, comentarios: 0, notificacoes: 0, respostas: 0, ultimaRetencaoEm: null });
     expect((await ler(antigo.id)).contatoEmail).toBe("a@x.com");
     expect(await prisma.auditLog.count({ where: { acao: "RETENCAO_APLICADA" } })).toBe(0);
   });
@@ -289,7 +290,7 @@ describe("rotas da retenção (administrador)", () => {
 
     const res = await request(app).post("/api/retencao/aplicar").set(comToken(admin.token)).expect(200);
 
-    expect(res.body).toEqual({ contatos: 1, comentarios: 0, notificacoes: 0 });
+    expect(res.body).toEqual({ contatos: 1, comentarios: 0, notificacoes: 0, respostas: 0 });
     expect((await ler(antigo.id)).contatoEmail).toBeNull();
     const previa = await request(app).get("/api/retencao/previa").set(comToken(admin.token));
     expect(previa.body.ultimaRetencaoEm).not.toBeNull();

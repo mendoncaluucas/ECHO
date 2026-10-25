@@ -13,6 +13,9 @@ export interface Email {
   assunto: string;
   texto: string;
   html: string;
+  // Para onde vai a resposta de quem recebe. Sem isto, iria para o remetente, que no
+  // Resend sem domínio é o onboarding@resend.dev, e se perderia.
+  responderPara?: string;
 }
 
 export interface ProvedorDeEmail {
@@ -44,7 +47,14 @@ export function provedorResend(
           method: "POST",
           headers: { Authorization: `Bearer ${chave}`, "Content-Type": "application/json" },
           body: JSON.stringify(
-            lote.map((e) => ({ from: remetente, to: [e.para], subject: e.assunto, text: e.texto, html: e.html }))
+            lote.map((e) => ({
+              from: remetente,
+              to: [e.para],
+              subject: e.assunto,
+              text: e.texto,
+              html: e.html,
+              ...(e.responderPara && { reply_to: [e.responderPara] }),
+            }))
           ),
           signal: AbortSignal.timeout(TEMPO_LIMITE_MS),
         });
@@ -95,11 +105,21 @@ export function emModoDeTeste() {
   return destinoDeTeste() !== null;
 }
 
+// Para as telas: se dá para enviar, e se o envio vai para o endereço de teste.
+export function estadoDoEnvio(): "desligado" | "teste" | "ligado" {
+  if (!emailLigado()) return "desligado";
+  return emModoDeTeste() ? "teste" : "ligado";
+}
+
 export const escaparHtml = (texto: string) =>
   texto.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
+// O "responder para" também sai: em teste, ele seria um e-mail fictício do seed, e
+// responder ao teste mandaria algo para fora. O aviso diz para onde iria.
 function desviarParaTeste(email: Email, destino: string): Email {
-  const aviso = `Teste do Echo: em produção, este e-mail iria para ${email.para}.`;
+  const aviso =
+    `Teste do Echo: em produção, este e-mail iria para ${email.para}.` +
+    (email.responderPara ? ` Quem respondesse falaria com ${email.responderPara}.` : "");
   return {
     para: destino,
     assunto: `[Teste · para ${email.para}] ${email.assunto}`,

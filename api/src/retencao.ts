@@ -6,7 +6,8 @@ import { ID_DA_CONFIGURACAO, lerConfiguracoes, type Configuracoes } from "./conf
 //
 // Anonimiza, não apaga: o feedback fica (tipo, notas, área, data e situação não
 // identificam ninguém e sustentam os painéis e relatórios); some só o que identifica.
-//   - nome e e-mail de quem pediu resposta, depois de `retencaoContatoDias`
+//   - nome e e-mail de quem pediu resposta, depois de `retencaoContatoDias`, junto com o
+//     texto das respostas que a equipe mandou (dirigidas a ele, costumam trazer o nome)
 //   - o comentário (texto livre, pode trazer nome, telefone, placa), depois de
 //     `retencaoComentarioDias`
 //   - as notificações (apontam para o feedback), depois de `retencaoNotificacaoDias`
@@ -24,6 +25,7 @@ export interface ResultadoDaRetencao {
   contatos: number;
   comentarios: number;
   notificacoes: number;
+  respostas: number;
 }
 
 type Prazos = Pick<
@@ -53,18 +55,21 @@ function filtros(agora: Date, prazos: Prazos) {
     },
     comentario: { criadoEm: { lt: limite.comentario }, comentario: { not: null } },
     notificacao: { criadoEm: { lt: limite.notificacao } },
+    // Pela data do feedback, como o contato: o prazo é o mesmo.
+    resposta: { texto: { not: null }, feedback: { criadoEm: { lt: limite.contato } } },
   };
 }
 
 // Quanto sairia agora, sem mudar nada. Para a tela de configurações.
 export async function previaDaRetencao(agora = new Date()): Promise<ResultadoDaRetencao> {
   const f = filtros(agora, await lerConfiguracoes());
-  const [contatos, comentarios, notificacoes] = await Promise.all([
+  const [contatos, comentarios, notificacoes, respostas] = await Promise.all([
     prisma.feedback.count({ where: f.contato }),
     prisma.feedback.count({ where: f.comentario }),
     prisma.notification.count({ where: f.notificacao }),
+    prisma.resposta.count({ where: f.resposta }),
   ]);
-  return { contatos, comentarios, notificacoes };
+  return { contatos, comentarios, notificacoes, respostas };
 }
 
 // Aplica os prazos. `usuarioId` null é a rodada automática (o log mostra "Sistema"),
@@ -90,11 +95,16 @@ export async function aplicarRetencao({
       data: { comentario: null, comentarioApagadoEm: agora },
     });
     const notificacoes = await tx.notification.deleteMany({ where: f.notificacao });
+    const respostas = await tx.resposta.updateMany({
+      where: f.resposta,
+      data: { texto: null, textoApagadoEm: agora },
+    });
 
     const resultado = {
       contatos: contatos.count,
       comentarios: comentarios.count,
       notificacoes: notificacoes.count,
+      respostas: respostas.count,
     };
 
     // A linha só existe depois que alguém salvou algo. Criar ignorando a existente, e
@@ -105,7 +115,8 @@ export async function aplicarRetencao({
       data: { ultimaRetencaoEm: agora },
     });
 
-    const algoSaiu = resultado.contatos + resultado.comentarios + resultado.notificacoes > 0;
+    const algoSaiu =
+      resultado.contatos + resultado.comentarios + resultado.notificacoes + resultado.respostas > 0;
     if (usuarioId !== null || algoSaiu) {
       await registrarAuditoria(tx, {
         acao: "RETENCAO_APLICADA",
@@ -174,7 +185,7 @@ export async function aplicarRetencaoSeDevido(agora = new Date()): Promise<Resul
 }
 
 // Pedido do titular (LGPD, art. 18): anonimiza na hora todos os feedbacks daquele
-// e-mail, contato e comentário, sem esperar prazo. Sem diferenciar maiúsculas: o
+// e-mail, contato, comentário e o texto das respostas, sem esperar prazo. Sem diferenciar maiúsculas: o
 // cliente pode ter digitado "Ana@Email.com". O log guarda só a quantidade; o e-mail
 // não fica em lugar nenhum.
 export async function apagarDadosDoTitular({
@@ -215,6 +226,10 @@ export async function apagarDadosDoTitular({
     await tx.feedback.updateMany({
       where: { id: { in: ids(false) } },
       data: { contatoNome: null, contatoEmail: null, contatoApagadoEm: agora },
+    });
+    await tx.resposta.updateMany({
+      where: { feedbackId: { in: feedbacks.map((f) => f.id) }, texto: { not: null } },
+      data: { texto: null, textoApagadoEm: agora },
     });
 
     await registrarAuditoria(tx, {

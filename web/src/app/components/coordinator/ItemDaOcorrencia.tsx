@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Mail } from 'lucide-react';
+import { Mail, MailCheck } from 'lucide-react';
 import type { Ocorrencia } from '../../services/api';
 import { comentarioApagado, corDoTipo, haQuanto, rotuloDoStatus, rotuloDoTipo, seloDoStatus } from '../../rotulos';
 
@@ -19,8 +19,14 @@ export function ItemDaOcorrencia({ ocorrencia: o }: { ocorrencia: Ocorrencia }) 
             {rotuloDoStatus(o.status)}
           </span>
           {/* Só quem deixou e-mail é gravado como identificado: espera retorno. Com o
-              contato já apagado (retenção), não há a quem responder. */}
-          {!o.anonimo && !o.contatoApagadoEm && (
+              contato já apagado (retenção), não há a quem responder. Respondida pelo
+              Echo, o selo diz isso: "Pediu resposta" é o que ainda falta fazer. */}
+          {o.respondida ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#eef0ec] px-2 py-0.5 text-xs font-bold text-[#3a3f4a]">
+              <MailCheck className="size-3" aria-hidden="true" />
+              Respondida
+            </span>
+          ) : !o.anonimo && !o.contatoApagadoEm && (
             <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-bold text-accent-foreground">
               <Mail className="size-3" aria-hidden="true" />
               Pediu resposta

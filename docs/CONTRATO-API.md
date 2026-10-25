@@ -172,7 +172,8 @@ mudar o prazo.
       "avaliacoes": [
         { "categoria": "Atendimento", "estrelas": 2 },
         { "categoria": "Alimento", "estrelas": 4 }
-      ]
+      ],
+      "respondida": false
     }
   ],
   "total": 30,
@@ -192,7 +193,8 @@ mudar o prazo.
 `401` `TOKEN_INVALIDO` · `403` `SEM_PERMISSAO`.
 
 > Ordenado do mais recente para o mais antigo. `area` vem `null` quando o feedback veio de um QR genérico.
-> O `contatoEmail` **não** é devolvido nesta rota (dado pessoal — LGPD).
+> O `contatoEmail` **não** é devolvido nesta rota (dado pessoal — LGPD). `respondida` diz se a equipe
+> já respondeu pelo Echo (seção 6.1), sem trazer o texto.
 
 ---
 
@@ -215,9 +217,24 @@ o `contato`.
   "avaliacoes": [{ "categoria": "Atendimento", "estrelas": 2 }],
   "contatoApagadoEm": null,
   "comentarioApagadoEm": null,
-  "contato": { "nome": "Ana Souza", "email": "ana@exemplo.com" }
+  "respondida": true,
+  "contato": { "nome": "Ana Souza", "email": "ana@exemplo.com" },
+  "respostas": [
+    {
+      "id": "uuid",
+      "texto": "Olá, Ana!\n\nPedimos desculpas pela demora.",
+      "textoApagadoEm": null,
+      "enviadaEm": "2026-10-25T19:10:00.000Z",
+      "autor": { "nome": "Coordenadora Sinuelo" }
+    }
+  ],
+  "envioDeEmail": "teste"
 }
 ```
+
+> `respostas`: o que a equipe já respondeu pelo Echo, da mais antiga à mais recente (seção 6.1).
+> `envioDeEmail`: `desligado` (sem provedor: a tela oferece só o `mailto:`), `teste` (vai para o
+> `EMAIL_DESTINO_TESTE`) ou `ligado`.
 
 > **Retenção (LGPD, seção 23).** Passado o prazo, ou a pedido do cliente, o contato e o comentário
 > são apagados e o feedback fica. `contatoApagadoEm` e `comentarioApagadoEm` dizem quando, para a
@@ -247,6 +264,29 @@ o `contato`.
 > no body não tem efeito. `tratadoEm` recebe o horário da alteração.
 
 **Erros:** `400` `VALIDACAO` (status fora do enum) · `401` (sem token) · `404` `OCORRENCIA_NAO_ENCONTRADA`.
+
+---
+
+## 6.1. `POST /occurrences/:id/respostas` — responder ao cliente por e-mail
+**Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Corpo: `{ "texto": "Olá, Ana! …" }`,
+de 1 a **2000** caracteres (sem os espaços das pontas; `\r\n` vira `\n`).
+
+O e-mail vai para o `contatoEmail` do cliente com o texto como foi escrito, mais a assinatura
+("— Fulano, da equipe do Restaurante Sinuelo") e um rodapé dizendo por que a pessoa recebe e o
+link da página de privacidade. **Responder para** é o e-mail de quem escreveu: se o cliente
+responder, a conversa segue direto com essa pessoa. Em teste (`EMAIL_DESTINO_TESTE`), vai para o
+endereço de teste e **sem** o "responder para" (seria um e-mail fictício do seed).
+
+**Resposta `201`:** a resposta gravada, no formato de um item de `respostas` (seção 5).
+
+> **Envia primeiro, grava depois.** Se o provedor recusar, nada é gravado e a resposta é `502`: uma
+> resposta registrada como enviada sem ter saído enganaria a equipe. A situação da ocorrência não
+> muda sozinha; quem respondeu escolhe na tratativa. Registra `RESPOSTA_ENVIADA` no log, sem o
+> texto nem o e-mail.
+
+**Erros:** `400` `VALIDACAO` · `401` · `404` `OCORRENCIA_NAO_ENCONTRADA` · `409` `SEM_CONTATO`
+(anônimo, ou o contato já saiu pela retenção) · `502` `EMAIL_NAO_ENVIADO` (o provedor recusou ou
+não respondeu) · `503` `EMAIL_DESLIGADO` (a API está sem provedor).
 
 ---
 
@@ -661,6 +701,7 @@ ao mais antigo. Somente leitura: nenhuma rota edita ou apaga registro do log.
 | `CONFIGURACAO_ALTERADA` | uma configuração do sistema mudou (um registro por campo) | `campo`, `de`, `para` |
 | `RETENCAO_APLICADA` | a retenção rodou: pela tela (sempre) ou sozinha (só se algo saiu, com `usuario` `null`) | `contatos`, `comentarios`, `notificacoes` (quantos saíram) e `prazos` da vez |
 | `DADOS_DO_TITULAR_APAGADOS` | o administrador atendeu o pedido de um cliente | `feedbacks` (quantos); o e-mail não é guardado |
+| `RESPOSTA_ENVIADA` | alguém da equipe respondeu ao cliente pelo Echo | `area`; o texto e o e-mail não são guardados aqui |
 | `AVISO_POR_EMAIL_ALTERADO` | alguém mudou os próprios avisos por e-mail (`entidade` `User`, a própria pessoa) | `de`, `para` (`NENHUM` \| `RECLAMACOES` \| `TODOS`) |
 
 > **Gravado na mesma transação da ação.** Ou os dois entram, ou nenhum: um log que às vezes falta
@@ -825,8 +866,9 @@ ficam como estão. Todos inteiros.
 
 ## 23. Retenção de dados (LGPD)
 **Anonimiza, não apaga o feedback.** Passado o prazo, sai o que identifica o cliente: nome e e-mail
-de quem pediu resposta (`retencaoContatoDias`) e o comentário, texto livre
-(`retencaoComentarioDias`), além das notificações (`retencaoNotificacaoDias`). Tipo, notas, área,
+de quem pediu resposta (`retencaoContatoDias`), junto com o **texto das respostas** que a equipe
+mandou (dirigidas a ele, costumam trazer o nome; o registro de que houve resposta fica), e o
+comentário, texto livre (`retencaoComentarioDias`), além das notificações (`retencaoNotificacaoDias`). Tipo, notas, área,
 data e situação ficam: os painéis e relatórios não mudam (há teste travando isso). Os prazos
 contam da data do feedback (ou da notificação).
 
@@ -837,15 +879,15 @@ só as contagens, nunca o conteúdo apagado.
 
 ### 23.1. `GET /api/retencao/previa` — o que sairia agora
 **Protegido** (`ADMINISTRADOR`). Não muda nada. Resposta `200`:
-`{ "contatos": 12, "comentarios": 3, "notificacoes": 40, "ultimaRetencaoEm": "…" | null }`.
+`{ "contatos": 12, "comentarios": 3, "notificacoes": 40, "respostas": 2, "ultimaRetencaoEm": "…" | null }`.
 
 ### 23.2. `POST /api/retencao/aplicar` — aplicar agora
 **Protegido** (`ADMINISTRADOR`). Sem corpo. Resposta `200`: `{ "contatos": 12, "comentarios": 3,
-"notificacoes": 40 }` (quantos saíram). Sempre registra `RETENCAO_APLICADA` com quem aplicou.
+"notificacoes": 40, "respostas": 2 }` (quantos saíram). Sempre registra `RETENCAO_APLICADA` com quem aplicou.
 
 ### 23.3. `POST /api/retencao/titular` — pedido do cliente (LGPD, art. 18)
 **Protegido** (`ADMINISTRADOR`). Corpo: `{ "email": "ana@exemplo.com" }`. Apaga na hora o
-contato e o comentário de **todos** os feedbacks daquele e-mail, sem diferenciar maiúsculas e sem
+contato, o comentário e o texto das respostas de **todos** os feedbacks daquele e-mail, sem diferenciar maiúsculas e sem
 esperar prazo. Resposta `200`: `{ "feedbacks": 2 }` (pode ser `0`). Registra
 `DADOS_DO_TITULAR_APAGADOS` só com a quantidade: o e-mail não fica em lugar nenhum.
 
@@ -860,5 +902,5 @@ Rotas inexistentes retornam `404` com `{ "erro": "Rota não encontrada", "codigo
 ---
 
 ## Fora do escopo deste contrato (MVP 2+)
-Respostas prontas na tratativa, retorno ao cliente por e-mail, série histórica **por dia** (o relatório agrega por mês), PDF gerado no servidor (hoje sai pela impressão do navegador), notificação por push do navegador e a **tela administrativa** de QR Codes (listar,
+Respostas prontas na tratativa, série histórica **por dia** (o relatório agrega por mês), PDF gerado no servidor (hoje sai pela impressão do navegador), notificação por push do navegador e a **tela administrativa** de QR Codes (listar,
 desativar e reimprimir os já emitidos).
