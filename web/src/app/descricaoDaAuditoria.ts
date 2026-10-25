@@ -22,6 +22,14 @@ export const ROTULO_ACAO: Record<AcaoAuditoria, string> = {
   CONFIGURACAO_ALTERADA: 'Configuração alterada',
   RETENCAO_APLICADA: 'Retenção de dados',
   DADOS_DO_TITULAR_APAGADOS: 'Dados de cliente apagados',
+  AVISO_POR_EMAIL_ALTERADO: 'Avisos por e-mail',
+};
+
+// As opções do aviso por e-mail, para a frase do log.
+const AVISO_POR_EMAIL: Record<string, string> = {
+  NENHUM: 'nenhum',
+  RECLAMACOES: 'só reclamações',
+  TODOS: 'todos os feedbacks',
 };
 
 // Quem fez. Sem usuário é o próprio Echo, sozinho: hoje só a retenção automática.
@@ -163,6 +171,10 @@ export function descrever(registro: RegistroDeAuditoria): string {
       return n === 0
         ? 'Pedido de cliente para apagar os dados: nenhuma avaliação com aquele e-mail'
         : `Apagou, a pedido do cliente, o contato e o comentário de ${quantos(d, 'feedbacks', 'avaliação', 'avaliações')}`;
+    }
+    case 'AVISO_POR_EMAIL_ALTERADO': {
+      const opcao = (chave: string) => AVISO_POR_EMAIL[String(d?.[chave])] ?? ler(d, chave);
+      return `Mudou os próprios avisos por e-mail: ${opcao('de')} → ${opcao('para')}`;
     }
     default:
       // Ação nova no backend que o front ainda não conhece: mostra o código cru

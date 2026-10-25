@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Check, Loader2, Pencil, Plus, X } from 'lucide-react';
 import {
   atualizarArea,
@@ -43,7 +43,7 @@ export function AdminSettings() {
         <SecaoDeAreas token={token} />
         <div className="flex min-w-0 flex-col gap-4">
           <SecaoTempoDeSessao token={token} />
-          <SecaoAindaNaoDisponivel />
+          <SecaoAvisosPorEmail />
         </div>
         {/* Larga, embaixo: tem duas partes lado a lado (prazos; o que passou e o pedido
             de um cliente), que não cabem na coluna estreita. */}
@@ -397,27 +397,20 @@ function SecaoTempoDeSessao({ token }: { token: string }) {
   );
 }
 
-// ---------- O que ainda não existe ----------
+// ---------- Avisos por e-mail ----------
 
-// Dizer o que falta e de que depende é mais honesto do que um controle que finge
-// salvar, e deixa claro para a equipe o que vem depois.
-function SecaoAindaNaoDisponivel() {
-  const itens = [
-    {
-      titulo: 'Avisos por e-mail',
-      texto: 'Os alertas de feedback novo chegam no sino do Echo. Por e-mail depende de um serviço de envio.',
-    },
-  ];
+// Não é configuração do sistema: cada pessoa escolhe o que recebe, na tela de
+// notificações. Aqui só diz onde fica, para o administrador não procurar.
+function SecaoAvisosPorEmail() {
   return (
-    <Cartao titulo="Ainda não disponível" descricao="Previsto, mas depende de algo fora desta tela.">
-      <ul className="flex flex-col gap-3">
-        {itens.map((item) => (
-          <li key={item.titulo} className="rounded-xl bg-[#f6f6f2] px-3.5 py-3">
-            <p className="text-sm font-bold">{item.titulo}</p>
-            <p className="mt-0.5 text-sm text-muted-foreground">{item.texto}</p>
-          </li>
-        ))}
-      </ul>
+    <Cartao titulo="Avisos por e-mail" descricao="Cada pessoa da equipe escolhe o que recebe por e-mail.">
+      <p className="text-sm text-[#3a3f4a]">
+        O padrão é receber só as reclamações. Para mudar o seu, vá em{' '}
+        <Link to="/notificacoes" className="font-bold text-primary underline underline-offset-2">
+          Notificações
+        </Link>
+        .
+      </p>
     </Cartao>
   );
 }

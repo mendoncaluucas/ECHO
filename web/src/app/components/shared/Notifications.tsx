@@ -12,6 +12,7 @@ import {
 import { corDoTipo, haQuanto, rotuloDoStatus, rotuloDoTipo, seloDoStatus } from '../../rotulos';
 import { avisarRapido } from '../../avisoRapido';
 import { AvisoDeErro, CabecalhoDaPagina, Cartao, Esqueleto, EstadoVazio, Pagina } from '../layout/Pagina';
+import { AvisosPorEmail } from './AvisosPorEmail';
 
 const POR_PAGINA = 20;
 
@@ -256,6 +257,11 @@ export function Notifications() {
           )}
         </div>
       )}
+
+      {/* Embaixo: é uma escolha que se faz uma vez, e a lista é o que se abre para ver. */}
+      <div className="mt-6">
+        <AvisosPorEmail token={token} />
+      </div>
     </Pagina>
   );
 }
