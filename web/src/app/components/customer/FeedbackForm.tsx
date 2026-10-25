@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Droplet,
@@ -23,6 +23,7 @@ import {
   type TipoFeedback,
   type VenueContext,
 } from '../../services/api';
+import { rotuloDePrazo } from '../../rotulos';
 
 // Avaliação do cliente, aberta pelo QR Code da mesa. Três etapas na mesma tela:
 // notas → conte mais → retorno. A etapa vai no endereço (?etapa=2) para o "voltar"
@@ -190,6 +191,7 @@ function TelaDeAviso({
 
 export function FeedbackForm() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const qrToken = searchParams.get('t') ?? '';
   const etapaDaUrl = Number(searchParams.get('etapa'));
@@ -645,7 +647,11 @@ export function FeedbackForm() {
                     >
                       {emailTocado && emailInvalido
                         ? 'Confira o e-mail: ele precisa ter o formato nome@exemplo.com.'
-                        : 'Seu nome e e-mail só aparecem para a equipe que for responder, e só para isso.'}
+                        : 'Seu nome e e-mail só aparecem para a equipe que for responder, e só para isso.' +
+                          // Retenção (LGPD): o prazo que vale, vindo da API junto com a mesa.
+                          (contexto.privacidade
+                            ? ` Ficam guardados por ${rotuloDePrazo(contexto.privacidade.contatoDias)} e depois são apagados.`
+                            : '')}
                     </span>
                   </div>
                 </div>
@@ -694,7 +700,16 @@ export function FeedbackForm() {
           <p className="text-center text-[13px] text-muted-foreground">
             {etapa === 1 && !temNota
               ? 'Avalie ao menos uma categoria para continuar.'
-              : 'Anônimo por padrão. Seus dados só são pedidos se você quiser resposta.'}
+              : 'Anônimo por padrão. Seus dados só são pedidos se você quiser resposta.'}{' '}
+            {/* Desde a primeira etapa: quem quer saber antes de começar acha o link. Volta à
+                mesma etapa: o endereço guarda a etapa e o rascunho fica salvo. */}
+            <Link
+              to="/privacidade"
+              state={{ de: location.pathname + location.search }}
+              className="font-semibold text-primary underline underline-offset-2"
+            >
+              Como cuidamos dos seus dados
+            </Link>
           </p>
         </footer>
       </div>

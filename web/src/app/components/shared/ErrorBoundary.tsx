@@ -49,7 +49,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     // A raiz é o login da equipe: para o cliente na mesa, "Início" levaria a uma tela
     // que não é para ele. No fluxo do cliente fica só o "Recarregar".
-    const ehDoCliente = ['/feedback', '/identificacao', '/sucesso', '/boas-vindas'].some((rota) =>
+    const ehDoCliente = ['/feedback', '/identificacao', '/sucesso', '/boas-vindas', '/privacidade'].some((rota) =>
       window.location.pathname.startsWith(rota)
     );
     const falhaAoBaixar = ehFalhaAoBaixarATela(erro);
