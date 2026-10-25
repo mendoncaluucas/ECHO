@@ -79,7 +79,8 @@ na interface prometendo essas funções.
   nome e e-mail; a equipe responde pelo próprio e-mail, a partir do detalhe da ocorrência. Envio
   automático pelo sistema (provedor, template, falha) segue fora
 - ~~**Notificações** para a gestão~~ — **feito**, dentro do sistema. Regra definida pelo Lucas: todo
-  feedback novo notifica, de qualquer tipo. Falta o envio por e-mail/push, que depende de provedor
+  feedback novo notifica, de qualquer tipo. **Por e-mail (25/10):** pelo Resend, cada pessoa
+  escolhe nenhum, só reclamações ou todos. Push do navegador segue fora
 
 > Vieram do cliente real durante a validação do protótipo. Entregar o sistema sem eles é entregar
 > menos do que foi combinado.

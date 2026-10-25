@@ -510,7 +510,8 @@ export type AcaoAuditoria =
   | 'OCORRENCIA_STATUS'
   | 'CONFIGURACAO_ALTERADA'
   | 'RETENCAO_APLICADA'
-  | 'DADOS_DO_TITULAR_APAGADOS';
+  | 'DADOS_DO_TITULAR_APAGADOS'
+  | 'AVISO_POR_EMAIL_ALTERADO';
 
 export interface RegistroDeAuditoria {
   id: string;
@@ -609,6 +610,30 @@ export function marcarTodasComoLidas(token: string): Promise<{ atualizadas: numb
   return request(`/notifications/marcar-todas-lidas`, {
     method: 'POST',
     headers: comAutorizacao(token),
+  });
+}
+
+// Quais feedbacks novos chegam também por e-mail. Escolha de cada pessoa.
+export type AvisoPorEmail = 'NENHUM' | 'RECLAMACOES' | 'TODOS';
+
+export interface PreferenciasDeAviso {
+  avisoPorEmail: AvisoPorEmail;
+  email: string;
+  // false: o servidor não está configurado para enviar e-mail.
+  envioLigado: boolean;
+  // true: todo e-mail vai para um endereço de teste, não para o da pessoa.
+  modoDeTeste: boolean;
+}
+
+export function buscarPreferenciasDeAviso(token: string): Promise<PreferenciasDeAviso> {
+  return request(`/notifications/preferencias`, { headers: comAutorizacao(token) });
+}
+
+export function salvarPreferenciaDeAviso(avisoPorEmail: AvisoPorEmail, token: string): Promise<PreferenciasDeAviso> {
+  return request(`/notifications/preferencias`, {
+    method: 'PATCH',
+    headers: comAutorizacao(token),
+    body: JSON.stringify({ avisoPorEmail }),
   });
 }
 

@@ -106,6 +106,10 @@ mudar o prazo.
 
 > **Todo feedback aceito notifica a gestão**, de qualquer tipo, para cada usuário ativo. A
 > notificação nasce no mesmo comando que grava o feedback. Ver `GET /api/notifications` (seção 17).
+>
+> **E-mail, para quem escolheu** (seção 20.1): depois de gravar, a API manda o aviso por e-mail
+> **sem esperar** o provedor responder. O `201` não depende do e-mail, e uma falha no envio não
+> desfaz o feedback nem a notificação: fica no log do servidor, sem destinatário nem conteúdo.
 
 ---
 
@@ -657,6 +661,7 @@ ao mais antigo. Somente leitura: nenhuma rota edita ou apaga registro do log.
 | `CONFIGURACAO_ALTERADA` | uma configuração do sistema mudou (um registro por campo) | `campo`, `de`, `para` |
 | `RETENCAO_APLICADA` | a retenção rodou: pela tela (sempre) ou sozinha (só se algo saiu, com `usuario` `null`) | `contatos`, `comentarios`, `notificacoes` (quantos saíram) e `prazos` da vez |
 | `DADOS_DO_TITULAR_APAGADOS` | o administrador atendeu o pedido de um cliente | `feedbacks` (quantos); o e-mail não é guardado |
+| `AVISO_POR_EMAIL_ALTERADO` | alguém mudou os próprios avisos por e-mail (`entidade` `User`, a própria pessoa) | `de`, `para` (`NENHUM` \| `RECLAMACOES` \| `TODOS`) |
 
 > **Gravado na mesma transação da ação.** Ou os dois entram, ou nenhum: um log que às vezes falta
 > não serve para auditar.
@@ -680,8 +685,8 @@ ao mais antigo. Somente leitura: nenhuma rota edita ou apaga registro do log.
 
 > **Regra de negócio:** todo feedback novo notifica, de qualquer tipo — elogio, sugestão ou
 > reclamação — sem limiar de nota. Cada pessoa da gestão **ativa** recebe a sua notificação, com o
-> próprio "lida": o coordenador abrir o alerta não apaga o do gerente. Entrega só dentro do sistema;
-> e-mail e push do navegador dependem de provedor e ficam para depois.
+> próprio "lida": o coordenador abrir o alerta não apaga o do gerente. Por e-mail, só o que cada
+> pessoa escolheu (seção 20.1); push do navegador fica para depois.
 
 **Parâmetros de consulta:** `pagina` / `porPagina` (como no `GET /occurrences`) e `lida`
 (`true` | `false`), todos opcionais.
@@ -741,6 +746,34 @@ nada.
 **Protegido** (qualquer papel). Marca como lidas todas as não lidas **de quem pediu**.
 
 **Resposta `200`:** `{ "atualizadas": 3 }`.
+
+---
+
+## 20.1. `GET /api/notifications/preferencias` — avisos por e-mail de quem está logado
+**Protegido** (qualquer papel). **Resposta `200`:**
+```json
+{ "avisoPorEmail": "RECLAMACOES", "email": "gerente@sinuelo.com", "envioLigado": true, "modoDeTeste": true }
+```
+- `avisoPorEmail`: `NENHUM` | `RECLAMACOES` (padrão) | `TODOS` — quais feedbacks novos chegam
+  também por e-mail, além do sino
+- `envioLigado`: `false` quando a API não tem provedor configurado (sem `RESEND_API_KEY`). A tela
+  diz isso em vez de oferecer uma escolha que não faz nada
+- `modoDeTeste`: `true` com `EMAIL_DESTINO_TESTE`, quando todo e-mail vai para esse endereço (ver
+  `docs/DEPLOY.md`). O endereço em si não sai daqui
+
+---
+
+## 20.2. `PATCH /api/notifications/preferencias` — mudar os próprios avisos
+**Protegido** (qualquer papel). Corpo: `{ "avisoPorEmail": "TODOS" }`. Muda só a de quem pediu.
+
+**Resposta `200`:** o mesmo do `GET`. Mudar entra no log (`AVISO_POR_EMAIL_ALTERADO`); salvar o
+mesmo valor, não.
+
+**Erros:** `400` `VALIDACAO` (valor fora das três opções) · `401`.
+
+> **O que o e-mail leva:** tipo, área, data e hora (de Brasília), as notas e o link da ocorrência.
+> **Não leva o comentário nem o contato do cliente** (LGPD): numa caixa de e-mail, a retenção do
+> Echo não alcança. Quem foi desativado não recebe.
 
 ---
 
@@ -827,5 +860,5 @@ Rotas inexistentes retornam `404` com `{ "erro": "Rota não encontrada", "codigo
 ---
 
 ## Fora do escopo deste contrato (MVP 2+)
-Respostas prontas na tratativa, retorno ao cliente por e-mail, série histórica **por dia** (o relatório agrega por mês), PDF gerado no servidor (hoje sai pela impressão do navegador), notificação por e-mail ou push do navegador e a **tela administrativa** de QR Codes (listar,
+Respostas prontas na tratativa, retorno ao cliente por e-mail, série histórica **por dia** (o relatório agrega por mês), PDF gerado no servidor (hoje sai pela impressão do navegador), notificação por push do navegador e a **tela administrativa** de QR Codes (listar,
 desativar e reimprimir os já emitidos).

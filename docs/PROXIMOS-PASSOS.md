@@ -47,8 +47,7 @@ Todo feedback novo, de qualquer tipo, notifica cada pessoa da gestão ativa — 
 cabeçalho com contador que consulta a cada minuto com a aba visível. `seed-demo` gera notificações,
 com as dos últimos 3 dias não lidas.
 
-A entrega por **e-mail ou push do navegador** segue fora: depende de provedor. A seção de
-preferências das configurações agora diz isso, em vez de dizer que notificação não existe.
+**Por e-mail (25/10), ver a seção 7.** Push do navegador segue fora.
 
 **Depois do merge:** rodar o `seed-demo` em produção, senão o sino aparece zerado na apresentação.
 
@@ -329,6 +328,26 @@ filtro de categoria e no nome repetido de área (`%` trazia tudo, "Mesa_1" era r
 cuida da parte jurídica deles). A parte técnica não substitui essa validação.
 
 ---
+
+## 7. E-mail pelo Resend (entrega acadêmica)
+
+Decidido pelo Lucas em 25/10: **Resend agora**, para a entrega acadêmica; na entrega ao Sinuelo, o
+serviço de e-mail deles. Sem domínio próprio, então o Resend só entrega ao dono da conta, e tudo
+vai para o `EMAIL_DESTINO_TESTE` (ver `docs/DEPLOY.md`). Dois PRs:
+
+1. ~~**Aviso à equipe por feedback novo**~~ — **feito (25/10).** Envio em `api/src/email.ts`,
+   atrás da interface `ProvedorDeEmail` (Resend por HTTPS, em lote; trocar de provedor é trocar
+   essa peça). Sem `RESEND_API_KEY`, desligado. Cada pessoa escolhe na tela de **Notificações**:
+   nenhum, **só reclamações (padrão)** ou todos; a escolha entra no log. O e-mail leva tipo, área,
+   hora de Brasília, notas e o link "Abrir no Echo", **sem o comentário nem o contato do cliente**
+   (numa caixa de e-mail a retenção não alcança). O `POST /public/feedback` não espera o e-mail, e
+   falha no envio não desfaz nada. O cartão "Ainda não disponível" das Configurações virou um
+   aviso de onde fica a escolha. Migration `avisos_por_email` (coluna com padrão: o código antigo
+   convive com ela)
+2. **Resposta ao cliente pelo Echo** — a equipe escreve no detalhe da ocorrência e o Echo envia.
+   Este manda dado do cliente ao provedor, então a página de privacidade precisa dizer isso
+
+---
 ## Antes da apresentação
 
 - **Cold start do Render: ~22 segundos.** Abrir o sistema alguns minutos antes, ou assinar o plano
@@ -339,6 +358,8 @@ cuida da parte jurídica deles). A parte técnica não substitui essa validaçã
 
 - Trocar as senhas `echo123` das três contas
 - Limpar os dados de demonstração e cadastrar os usuários e áreas reais
+- E-mail: trocar o Resend pelo serviço do Sinuelo e tirar o `EMAIL_DESTINO_TESTE` (seção 7). Se o
+  serviço deles for SMTP, o Render precisa do plano pago (o gratuito bloqueia SMTP)
 - ~~Retenção LGPD de fato (seção 6)~~ — feita: rotina, tela e página de privacidade
 - Validar com o Sinuelo os prazos de retenção e o texto da página de privacidade
   (`web/src/app/components/customer/Privacidade.tsx`), de preferência com quem cuida da parte

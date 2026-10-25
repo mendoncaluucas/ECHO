@@ -3,6 +3,7 @@ import { TipoFeedback } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { lerConfiguracoes } from "../configuracao.js";
+import { dispararAvisoPorEmail } from "../avisos.js";
 
 export const publicRoutes = Router();
 
@@ -191,6 +192,10 @@ publicRoutes.post(
       },
       select: { id: true, criadoEm: true },
     });
+
+    // Por e-mail, para quem escolheu receber. Sem esperar: o cliente não espera o
+    // provedor, e uma falha no envio não desfaz o feedback.
+    dispararAvisoPorEmail(feedback.id);
 
     return res.status(201).json(feedback);
   })
