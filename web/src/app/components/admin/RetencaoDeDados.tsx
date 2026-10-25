@@ -37,7 +37,7 @@ const PRAZOS: { campo: Prazo; rotulo: string; ajuda: string; opcoes: number[]; p
   {
     campo: 'retencaoContatoDias',
     rotulo: 'Nome e e-mail de quem pede resposta',
-    ajuda: 'Tempo para a equipe responder o cliente. Contado da data do feedback.',
+    ajuda: 'Tempo para a equipe responder o cliente. O texto das respostas enviadas sai junto. Contado da data do feedback.',
     opcoes: [30, 60, 90, 180, 365],
     padrao: 90,
   },

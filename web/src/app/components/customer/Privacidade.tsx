@@ -101,7 +101,8 @@ export function Privacidade() {
             relatórios: só ao abrir a sua avaliação, para responder.
           </p>
           <p>
-            Os dados ficam guardados em serviços de hospedagem na internet, contratados para o Echo funcionar.
+            Os dados ficam guardados em serviços de hospedagem na internet, contratados para o Echo funcionar. A
+            resposta da equipe sai por um serviço de envio de e-mails, que recebe o seu endereço só para entregá-la.
           </p>
         </Secao>
 
@@ -109,7 +110,8 @@ export function Privacidade() {
           {prazos ? (
             <ul className="flex list-disc flex-col gap-1 pl-5">
               <li>
-                Nome e e-mail: <strong>{rotuloDePrazo(prazos.contatoDias)}</strong> depois da avaliação.
+                Nome, e-mail e a resposta da equipe: <strong>{rotuloDePrazo(prazos.contatoDias)}</strong> depois da
+                avaliação.
               </li>
               <li>
                 Comentário: <strong>{rotuloDePrazo(prazos.comentarioDias)}</strong> depois da avaliação.
@@ -133,8 +135,8 @@ export function Privacidade() {
         <Secao titulo="Para apagar seus dados antes">
           <p>
             É um direito seu (Lei Geral de Proteção de Dados). Peça a um atendente ou à gerência do restaurante, dizendo
-            o e-mail que você usou. Quando o pedido chega a quem administra o Echo no restaurante, o nome, o e-mail e o
-            comentário de todas as suas avaliações são apagados na hora.
+            o e-mail que você usou. Quando o pedido chega a quem administra o Echo no restaurante, o nome, o e-mail, o
+            comentário e as respostas da equipe de todas as suas avaliações são apagados na hora.
           </p>
         </Secao>
       </div>

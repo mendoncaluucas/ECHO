@@ -144,6 +144,29 @@ export interface Ocorrencia {
   // Só no detalhe (GET /occurrences/:id), e só de quem pediu retorno. Listas nunca
   // trazem o contato (LGPD).
   contato?: { nome: string | null; email: string } | null;
+  // Se a equipe já respondeu pelo Echo. Opcional: a API de antes das respostas não manda.
+  respondida?: boolean;
+  // Só no detalhe: as respostas enviadas, em ordem, e se dá para enviar por aqui.
+  respostas?: RespostaAoCliente[];
+  envioDeEmail?: 'desligado' | 'teste' | 'ligado';
+}
+
+export interface RespostaAoCliente {
+  id: string;
+  // null: o texto saiu pela retenção (LGPD), junto com o contato.
+  texto: string | null;
+  textoApagadoEm: string | null;
+  enviadaEm: string;
+  autor: { nome: string };
+}
+
+// Responde ao cliente por e-mail. A API envia antes de gravar: se voltar erro, não saiu.
+export function enviarResposta(id: string, texto: string, token: string): Promise<RespostaAoCliente> {
+  return request(`/occurrences/${encodeURIComponent(id)}/respostas`, {
+    method: 'POST',
+    headers: comAutorizacao(token),
+    body: JSON.stringify({ texto }),
+  });
 }
 
 export interface FiltrosDeOcorrencia {
@@ -467,6 +490,8 @@ export interface ResultadoDaRetencao {
   contatos: number;
   comentarios: number;
   notificacoes: number;
+  // Texto das respostas da equipe. Opcional: a API de antes das respostas não manda.
+  respostas?: number;
 }
 
 // O que sairia se a retenção rodasse agora, com os prazos salvos.
@@ -511,7 +536,8 @@ export type AcaoAuditoria =
   | 'CONFIGURACAO_ALTERADA'
   | 'RETENCAO_APLICADA'
   | 'DADOS_DO_TITULAR_APAGADOS'
-  | 'AVISO_POR_EMAIL_ALTERADO';
+  | 'AVISO_POR_EMAIL_ALTERADO'
+  | 'RESPOSTA_ENVIADA';
 
 export interface RegistroDeAuditoria {
   id: string;

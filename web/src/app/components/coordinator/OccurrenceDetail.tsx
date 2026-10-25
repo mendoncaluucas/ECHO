@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, Copy, Loader2, Mail, SearchX, Send, Star, UserCheck } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Loader2, Mail, MailCheck, SearchX, Send, Star, UserCheck } from 'lucide-react';
 import {
   atualizarStatusOcorrencia,
   buscarOcorrencia,
+  enviarResposta,
   tokenDaSessao,
   type Ocorrencia,
+  type RespostaAoCliente,
   type StatusOcorrencia,
 } from '../../services/api';
 import {
@@ -59,16 +61,30 @@ function Estrelas({ quantidade }: { quantidade: number }) {
   );
 }
 
+// Limite da API para o texto de uma resposta.
+const MAX_RESPOSTA = 2000;
+
 // Quem pediu resposta deixou nome e e-mail. Só o detalhe recebe o contato da API
 // (nunca as listas), porque é daqui que alguém vai responder.
+//
+// Com o envio de e-mail ligado na API, a resposta sai pelo Echo, que guarda o que foi
+// dito. Sem ele, fica o "Responder por e-mail", que abre o programa de e-mail da pessoa.
 function ContatoDoCliente({
+  ocorrenciaId,
   contato,
   area,
   criadoEm,
+  envioDeEmail,
+  token,
+  aoEnviar,
 }: {
+  ocorrenciaId: string;
   contato: { nome: string | null; email: string };
   area: string | null;
   criadoEm: string;
+  envioDeEmail: 'desligado' | 'teste' | 'ligado';
+  token: string;
+  aoEnviar: (resposta: RespostaAoCliente) => void;
 }) {
   const [copiado, setCopiado] = useState(false);
 
@@ -77,6 +93,34 @@ function ContatoDoCliente({
     `Olá${contato.nome ? `, ${contato.nome}` : ''}!\n\n` +
     `Recebemos a avaliação que você deixou em ${new Date(criadoEm).toLocaleDateString('pt-BR')}` +
     `${area ? ` (${area})` : ''}.\n\n`;
+
+  // A caixa já começa com a saudação: é o mesmo começo do mailto, e o cliente recebe
+  // exatamente o que está na caixa (mais a assinatura).
+  const [texto, setTexto] = useState(corpo);
+  const [enviando, setEnviando] = useState(false);
+  const [erroAoEnviar, setErroAoEnviar] = useState<string | null>(null);
+  const idDaCaixa = useId();
+  const idDaAjuda = useId();
+  const peloEcho = envioDeEmail !== 'desligado';
+  // Só a saudação não é resposta: o botão espera alguém escrever.
+  const escreveu = texto.trim().length > 0 && texto.trim() !== corpo.trim();
+
+  const enviar = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!escreveu || enviando) return;
+    setEnviando(true);
+    setErroAoEnviar(null);
+    try {
+      const resposta = await enviarResposta(ocorrenciaId, texto, token);
+      aoEnviar(resposta);
+      setTexto(corpo);
+      avisarRapido(`Resposta enviada para ${contato.email}`);
+    } catch (erro) {
+      setErroAoEnviar(erro instanceof Error && erro.message ? erro.message : 'Não foi possível enviar. Tente de novo.');
+    } finally {
+      setEnviando(false);
+    }
+  };
   // O endereço vai codificado (menos o @): um e-mail antigo com "?cc=..." viraria cópia
   // para outra pessoa na resposta. A API já recusa esses endereços; isto cobre o que
   // tiver sido gravado antes.
@@ -104,13 +148,56 @@ function ContatoDoCliente({
       {/* E-mail na própria linha: ao lado do nome, no celular, quebrava no meio ("example.c / om"). */}
       {contato.nome && <p className="mt-2 font-semibold">{contato.nome}</p>}
       <p className={`${contato.nome ? '' : 'mt-2 '}[overflow-wrap:anywhere]`}>{contato.email}</p>
-      <div className="mt-3 flex flex-wrap gap-2">
+
+      {peloEcho && (
+        <form onSubmit={enviar} className="mt-4">
+          <label htmlFor={idDaCaixa} className="text-sm font-bold">
+            Sua resposta
+          </label>
+          <textarea
+            id={idDaCaixa}
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            maxLength={MAX_RESPOSTA}
+            rows={6}
+            aria-describedby={idDaAjuda}
+            className="mt-1.5 block w-full resize-y rounded-xl border border-borda-campo bg-card px-3.5 py-3 text-base leading-relaxed"
+          />
+          <p id={idDaAjuda} className="mt-1.5 text-sm text-muted-foreground">
+            {envioDeEmail === 'teste'
+              ? 'Em teste: a resposta vai para o endereço de demonstração, não para o cliente.'
+              : 'Vai com o seu nome. Se o cliente responder, chega no seu e-mail.'}{' '}
+            <span className="tabular-nums">
+              {texto.length} de {MAX_RESPOSTA}
+            </span>
+          </p>
+          {erroAoEnviar && (
+            <p role="alert" className="mt-3 rounded-xl bg-perigo-fundo px-3.5 py-3 text-sm font-semibold text-perigo">
+              {erroAoEnviar}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={!escreveu || enviando}
+            className="mt-3 inline-flex h-11 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors hover:bg-[#0a5242] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {enviando ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
+            {enviando ? 'Enviando…' : 'Enviar resposta'}
+          </button>
+        </form>
+      )}
+
+      <div className={`flex flex-wrap gap-2 ${peloEcho ? 'mt-4 border-t border-[#cfe5dc] pt-4' : 'mt-3'}`}>
         <a
           href={link}
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-[#0a5242] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className={
+            peloEcho
+              ? 'inline-flex h-10 items-center gap-2 rounded-lg border border-[#cfe5dc] bg-card px-4 text-sm font-semibold text-accent-foreground transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+              : 'inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-[#0a5242] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+          }
         >
           <Send className="size-4" aria-hidden="true" />
-          Responder por e-mail
+          {peloEcho ? 'Abrir no meu e-mail' : 'Responder por e-mail'}
         </a>
         <button
           type="button"
@@ -122,6 +209,36 @@ function ContatoDoCliente({
         </button>
       </div>
     </section>
+  );
+}
+
+// O que a equipe já respondeu pelo Echo, para ninguém responder duas vezes nem
+// contradizer o colega. O texto pode ter saído pela retenção; quem e quando ficam.
+function RespostasEnviadas({ respostas }: { respostas: RespostaAoCliente[] }) {
+  return (
+    <Cartao titulo={respostas.length === 1 ? 'Resposta enviada' : 'Respostas enviadas'}>
+      <ol className="flex flex-col gap-4">
+        {respostas.map((r) => (
+          <li key={r.id} className="min-w-0">
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <MailCheck className="size-4 flex-none" aria-hidden="true" />
+              <span>
+                <strong className="text-foreground">{r.autor.nome}</strong> ·{' '}
+                <time dateTime={r.enviadaEm}>{dataEHora(r.enviadaEm)}</time>
+              </span>
+            </p>
+            {r.texto !== null ? (
+              <p className="mt-1.5 leading-relaxed break-words whitespace-pre-line">{r.texto}</p>
+            ) : (
+              <p className="mt-1.5 text-sm text-muted-foreground italic">
+                Texto apagado em {new Date(r.textoApagadoEm ?? r.enviadaEm).toLocaleDateString('pt-BR')}, pela
+                política de privacidade.
+              </p>
+            )}
+          </li>
+        ))}
+      </ol>
+    </Cartao>
   );
 }
 
@@ -306,9 +423,25 @@ export function OccurrenceDetail() {
           )}
         </Cartao>
 
-        <div className="order-last min-w-0 xl:order-none xl:col-start-1">
+        <div className="order-last flex min-w-0 flex-col gap-4 xl:order-none xl:col-start-1">
           {o.contato ? (
-            <ContatoDoCliente contato={o.contato} area={o.area?.nome ?? null} criadoEm={o.criadoEm} />
+            <ContatoDoCliente
+              // Outra ocorrência, outra caixa. Hoje a troca já passa pelo "carregando",
+              // que desmonta a caixa; a chave garante isso se o carregamento mudar (o
+              // rascunho e a saudação de uma passariam para a seguinte).
+              key={o.id}
+              ocorrenciaId={o.id}
+              contato={o.contato}
+              area={o.area?.nome ?? null}
+              criadoEm={o.criadoEm}
+              envioDeEmail={o.envioDeEmail ?? 'desligado'}
+              token={token}
+              aoEnviar={(resposta) =>
+                setOcorrencia((atual) =>
+                  atual && { ...atual, respondida: true, respostas: [...(atual.respostas ?? []), resposta] }
+                )
+              }
+            />
           ) : !o.anonimo && o.contatoApagadoEm ? (
             // Pediu resposta, mas o contato já saiu (retenção): dizer "anônima" seria falso.
             <p className="px-1 text-sm text-muted-foreground">
@@ -320,6 +453,7 @@ export function OccurrenceDetail() {
               Avaliação anônima: o cliente não deixou contato para resposta.
             </p>
           )}
+          {o.respostas && o.respostas.length > 0 && <RespostasEnviadas respostas={o.respostas} />}
         </div>
 
         <div className="min-w-0 xl:sticky xl:top-6 xl:col-start-2 xl:row-span-3 xl:row-start-1">

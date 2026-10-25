@@ -23,6 +23,7 @@ export const ROTULO_ACAO: Record<AcaoAuditoria, string> = {
   RETENCAO_APLICADA: 'Retenção de dados',
   DADOS_DO_TITULAR_APAGADOS: 'Dados de cliente apagados',
   AVISO_POR_EMAIL_ALTERADO: 'Avisos por e-mail',
+  RESPOSTA_ENVIADA: 'Resposta ao cliente',
 };
 
 // As opções do aviso por e-mail, para a frase do log.
@@ -65,6 +66,7 @@ export function contagemDaRetencao(contagem: object | null) {
   return lista([
     quantos(r, 'contatos', 'contato', 'contatos'),
     quantos(r, 'comentarios', 'comentário', 'comentários'),
+    quantos(r, 'respostas', 'resposta da equipe', 'respostas da equipe'),
     quantos(r, 'notificacoes', 'notificação', 'notificações'),
   ]);
 }
@@ -171,6 +173,10 @@ export function descrever(registro: RegistroDeAuditoria): string {
       return n === 0
         ? 'Pedido de cliente para apagar os dados: nenhuma avaliação com aquele e-mail'
         : `Apagou, a pedido do cliente, o contato e o comentário de ${quantos(d, 'feedbacks', 'avaliação', 'avaliações')}`;
+    }
+    case 'RESPOSTA_ENVIADA': {
+      const area = ler(d, 'area');
+      return `Respondeu por e-mail ao cliente de uma ocorrência${area !== '—' ? ` (${area})` : ''}`;
     }
     case 'AVISO_POR_EMAIL_ALTERADO': {
       const opcao = (chave: string) => AVISO_POR_EMAIL[String(d?.[chave])] ?? ler(d, chave);
