@@ -5,6 +5,8 @@ import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { ERRO_DE_PAGINACAO, lerData, lerPaginacao, semCuringas } from "../consulta.js";
 import { registrarAuditoria } from "../auditoria.js";
+import { emailLigado, enviarEmails, estadoDoEnvio } from "../email.js";
+import { MAX_RESPOSTA, montarResposta } from "../respostas.js";
 
 // Feedbacks para a gestão (protegido) — DONO: Victor
 export const occurrencesRoutes = Router();
@@ -30,20 +32,35 @@ const camposDaOcorrencia = {
     orderBy: { category: { nome: "asc" } },
     select: { estrelas: true, category: { select: { nome: true } } },
   },
+  // Só a contagem, para a lista dizer "Respondida" sem trazer o texto.
+  _count: { select: { respostas: true } },
+} as const;
+
+// As respostas da equipe ao cliente, só no detalhe. O texto pode já ter saído pela
+// retenção (textoApagadoEm); quem respondeu e quando ficam.
+const camposDaResposta = {
+  id: true,
+  texto: true,
+  textoApagadoEm: true,
+  enviadaEm: true,
+  autor: { select: { nome: true } },
 } as const;
 
 type OcorrenciaBruta = {
   avaliacoes: { estrelas: number; category: { nome: string } }[];
+  _count: { respostas: number };
 };
 
-// Achata a avaliação para o formato do contrato: { categoria, estrelas }.
-function formatar<T extends OcorrenciaBruta>(ocorrencia: T) {
+// Achata a avaliação para o formato do contrato: { categoria, estrelas }, e troca a
+// contagem de respostas por `respondida`.
+function formatar<T extends OcorrenciaBruta>({ _count, ...ocorrencia }: T) {
   return {
     ...ocorrencia,
     avaliacoes: ocorrencia.avaliacoes.map((avaliacao) => ({
       categoria: avaliacao.category.nome,
       estrelas: avaliacao.estrelas,
     })),
+    respondida: _count.respostas > 0,
   };
 }
 
@@ -127,7 +144,12 @@ occurrencesRoutes.get(
   asyncHandler(async (req, res) => {
     const ocorrencia = await prisma.feedback.findUnique({
       where: { id: req.params.id },
-      select: { ...camposDaOcorrencia, contatoNome: true, contatoEmail: true },
+      select: {
+        ...camposDaOcorrencia,
+        contatoNome: true,
+        contatoEmail: true,
+        respostas: { orderBy: { enviadaEm: "asc" }, select: camposDaResposta },
+      },
     });
 
     if (!ocorrencia) {
@@ -142,7 +164,102 @@ occurrencesRoutes.get(
       // null para anônimo: o front não precisa saber por que não há contato.
       contato:
         !resto.anonimo && contatoEmail ? { nome: contatoNome, email: contatoEmail } : null,
+      // Para a tela oferecer (ou não) a resposta pelo Echo, e dizer quando está em teste.
+      envioDeEmail: estadoDoEnvio(),
     });
+  })
+);
+
+// POST /:id/respostas — responde ao cliente por e-mail. Ver docs/CONTRATO-API.md
+//
+// Envia primeiro e grava depois: gravar antes deixaria registrada como enviada uma
+// resposta que o provedor recusou. A pessoa espera o envio (ao contrário do aviso à
+// equipe), porque precisa saber se chegou a sair.
+occurrencesRoutes.post(
+  "/:id/respostas",
+  requireAuth(PAPEIS_DA_GESTAO),
+  asyncHandler(async (req, res) => {
+    const bruto = req.body?.texto;
+    // O textarea pode mandar \r\n; o e-mail e o que fica guardado usam \n.
+    const texto = typeof bruto === "string" ? bruto.replace(/\r\n?/g, "\n").trim() : "";
+    if (texto.length === 0 || texto.length > MAX_RESPOSTA) {
+      return res.status(400).json({
+        erro: `texto obrigatório, com no máximo ${MAX_RESPOSTA} caracteres`,
+        codigo: "VALIDACAO",
+      });
+    }
+
+    const feedback = await prisma.feedback.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true,
+        anonimo: true,
+        contatoEmail: true,
+        criadoEm: true,
+        venue: { select: { nome: true } },
+        area: { select: { nome: true } },
+      },
+    });
+    if (!feedback) {
+      return res
+        .status(404)
+        .json({ erro: "Ocorrência não encontrada", codigo: "OCORRENCIA_NAO_ENCONTRADA" });
+    }
+    // Anônimo, ou o contato já saiu pela retenção: não há a quem responder.
+    if (feedback.anonimo || !feedback.contatoEmail) {
+      return res
+        .status(409)
+        .json({ erro: "O cliente não deixou contato para resposta.", codigo: "SEM_CONTATO" });
+    }
+    if (!emailLigado()) {
+      return res.status(503).json({
+        erro: "O envio de e-mail não está ligado neste servidor.",
+        codigo: "EMAIL_DESLIGADO",
+      });
+    }
+
+    const usuarioId = req.usuario!.sub;
+    const autor = await prisma.user.findUniqueOrThrow({
+      where: { id: usuarioId },
+      select: { nome: true, email: true },
+    });
+
+    try {
+      await enviarEmails([
+        montarResposta({
+          texto,
+          para: feedback.contatoEmail,
+          autor,
+          restaurante: feedback.venue.nome,
+          avaliadoEm: feedback.criadoEm,
+        }),
+      ]);
+    } catch (erro) {
+      // Só a mensagem do provedor no log; o texto e o e-mail do cliente, não.
+      console.error("Resposta ao cliente não enviada:", erro instanceof Error ? erro.message : erro);
+      return res.status(502).json({
+        erro: "O e-mail não foi enviado. Tente de novo em instantes.",
+        codigo: "EMAIL_NAO_ENVIADO",
+      });
+    }
+
+    const resposta = await prisma.$transaction(async (tx) => {
+      const criada = await tx.resposta.create({
+        data: { feedbackId: feedback.id, autorId: usuarioId, texto },
+        select: camposDaResposta,
+      });
+      // Sem o texto nem o e-mail: o log guarda que houve resposta, não o conteúdo.
+      await registrarAuditoria(tx, {
+        acao: "RESPOSTA_ENVIADA",
+        usuarioId,
+        entidade: "Feedback",
+        entidadeId: feedback.id,
+        detalhes: { area: feedback.area?.nome ?? null },
+      });
+      return criada;
+    });
+
+    return res.status(201).json(resposta);
   })
 );
 

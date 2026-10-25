@@ -63,6 +63,7 @@ model User {
   tratativas   Feedback[]
   auditoria    AuditLog[]
   notificacoes Notification[]
+  respostas    Resposta[]
 }
 
 // ---------- Estabelecimento e QR ----------
@@ -137,9 +138,28 @@ model Feedback {
   tratadoEm    DateTime?
 
   notificacoes Notification[]
+  respostas    Resposta[]
 
   @@index([venueId, criadoEm])
   @@index([status])
+}
+
+// Resposta da equipe ao cliente, enviada por e-mail pelo Echo. Guardada para a equipe
+// ver o que já foi dito (e não responder duas vezes). Ver src/respostas.ts.
+model Resposta {
+  id             String    @id @default(uuid())
+  feedback       Feedback  @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  feedbackId     String
+  // Quem escreveu. Restrict, como no log: usuário não se apaga, se desativa.
+  autor          User      @relation(fields: [autorId], references: [id], onDelete: Restrict)
+  autorId        String
+  // Retenção (LGPD): a resposta é dirigida a alguém (costuma começar pelo nome dele),
+  // então o texto sai junto com o contato. O registro de que houve resposta fica.
+  texto          String?
+  textoApagadoEm DateTime?
+  enviadaEm      DateTime  @default(now())
+
+  @@index([feedbackId, enviadaEm])
 }
 
 model FeedbackRating {
@@ -215,6 +235,7 @@ enum AcaoAuditoria {
   RETENCAO_APLICADA
   DADOS_DO_TITULAR_APAGADOS
   AVISO_POR_EMAIL_ALTERADO
+  RESPOSTA_ENVIADA
 }
 
 // Quem fez o quê, sobre qual registro e quando. Só cresce: nenhuma rota edita ou
