@@ -1,10 +1,12 @@
 import { app } from "./app.js";
 import { aplicarRetencaoSeDevido } from "./retencao.js";
+import { resumoDoEmail } from "./email.js";
 
 const PORT = Number(process.env.PORT) || 3333;
 
 app.listen(PORT, () => {
   console.log(`Echo API rodando em http://localhost:${PORT}`);
+  console.log(resumoDoEmail());
 });
 
 // Retenção de dados (LGPD): ao ligar e, enquanto a API estiver de pé, de hora em hora.

@@ -36,6 +36,13 @@ enum StatusOcorrencia {
   RESOLVIDO
 }
 
+// Quais feedbacks novos chegam também por e-mail, além do sino. Escolha de cada pessoa.
+enum AvisoPorEmail {
+  NENHUM
+  RECLAMACOES
+  TODOS
+}
+
 // ---------- Gestão / autenticação ----------
 
 model User {
@@ -49,6 +56,9 @@ model User {
   ativo     Boolean  @default(true)
   setor     String?
   criadoEm  DateTime @default(now())
+  // Padrão "só reclamações": é o que pede ação rápida, e elogio por e-mail o dia
+  // inteiro vira ruído que ensina a ignorar o aviso. Ver src/avisos.ts.
+  avisoPorEmail AvisoPorEmail @default(RECLAMACOES)
 
   tratativas   Feedback[]
   auditoria    AuditLog[]
@@ -204,6 +214,7 @@ enum AcaoAuditoria {
   CONFIGURACAO_ALTERADA
   RETENCAO_APLICADA
   DADOS_DO_TITULAR_APAGADOS
+  AVISO_POR_EMAIL_ALTERADO
 }
 
 // Quem fez o quê, sobre qual registro e quando. Só cresce: nenhuma rota edita ou

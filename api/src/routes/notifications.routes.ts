@@ -1,9 +1,11 @@
 import { Router } from "express";
-import { Prisma } from "@prisma/client";
+import { AvisoPorEmail, Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { ERRO_DE_PAGINACAO, lerPaginacao } from "../consulta.js";
+import { registrarAuditoria } from "../auditoria.js";
+import { emailLigado, emModoDeTeste } from "../email.js";
 
 // Notificações da gestão — cada usuário vê e marca só as próprias. DONO: Lucas
 // Quem cria é o POST /public/feedback, uma por destinatário.
@@ -105,6 +107,68 @@ notificationsRoutes.get(
       where: { usuarioId: req.usuario!.sub, lida: false },
     });
     return res.json({ naoLidas });
+  })
+);
+
+// Avisos por e-mail de quem está logado. Ver docs/CONTRATO-API.md
+// Declaradas antes do PATCH /:id: senão "preferencias" seria lido como o id de uma
+// notificação.
+async function lerPreferencias(usuarioId: string) {
+  const usuario = await prisma.user.findUniqueOrThrow({
+    where: { id: usuarioId },
+    select: { avisoPorEmail: true, email: true },
+  });
+  return {
+    avisoPorEmail: usuario.avisoPorEmail,
+    email: usuario.email,
+    // A tela diz quando o servidor não envia, em vez de oferecer uma escolha que não
+    // faz nada; e quando está em teste, que o e-mail não chega no endereço da pessoa.
+    envioLigado: emailLigado(),
+    modoDeTeste: emModoDeTeste(),
+  };
+}
+
+notificationsRoutes.get(
+  "/preferencias",
+  requireAuth([]),
+  asyncHandler(async (req, res) => res.json(await lerPreferencias(req.usuario!.sub)))
+);
+
+// PATCH /preferencias — { avisoPorEmail }. Mudar entra no log (é configuração), ao
+// contrário de marcar como lida.
+notificationsRoutes.patch(
+  "/preferencias",
+  requireAuth([]),
+  asyncHandler(async (req, res) => {
+    const { avisoPorEmail } = req.body ?? {};
+    const opcoes = Object.values(AvisoPorEmail) as string[];
+    if (typeof avisoPorEmail !== "string" || !opcoes.includes(avisoPorEmail)) {
+      return res.status(400).json({
+        erro: `avisoPorEmail deve ser ${opcoes.join(", ")}`,
+        codigo: "VALIDACAO",
+      });
+    }
+    const novo = avisoPorEmail as AvisoPorEmail;
+
+    const usuarioId = req.usuario!.sub;
+    await prisma.$transaction(async (tx) => {
+      const antes = await tx.user.findUniqueOrThrow({
+        where: { id: usuarioId },
+        select: { avisoPorEmail: true },
+      });
+      // Salvar o mesmo valor não é mudança: não vai para o log.
+      if (antes.avisoPorEmail === novo) return;
+      await tx.user.update({ where: { id: usuarioId }, data: { avisoPorEmail: novo } });
+      await registrarAuditoria(tx, {
+        acao: "AVISO_POR_EMAIL_ALTERADO",
+        usuarioId,
+        entidade: "User",
+        entidadeId: usuarioId,
+        detalhes: { de: antes.avisoPorEmail, para: novo },
+      });
+    });
+
+    return res.json(await lerPreferencias(usuarioId));
   })
 );
 
