@@ -74,7 +74,8 @@ na interface prometendo essas funções.
 
 ## Fase 3 — O que o Sinuelo pediu na validação
 
-- **Respostas prontas** na tratativa — modelo próprio, CRUD e seleção na tela de detalhe
+- ~~**Respostas prontas** na tratativa~~ — **feito (25/10):** o administrador cadastra nas
+  Configurações; quem responde escolhe no detalhe da ocorrência e ajusta antes de enviar
 - ~~**Retorno ao cliente por e-mail**~~ — **atendido sem provedor (07/10):** quem pede resposta deixa
   nome e e-mail; a equipe responde pelo próprio e-mail, a partir do detalhe da ocorrência. **Pelo
   Echo (25/10):** a equipe escreve no detalhe e o Echo envia pelo Resend, guardando o que foi dito

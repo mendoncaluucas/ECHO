@@ -458,6 +458,42 @@ da gestão. O cliente recebe as categorias pelo `GET /api/public/venue/:qrToken`
 
 ---
 
+## 9.4. `GET /api/respostas-prontas` — modelos de resposta ao cliente
+**Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Modelos que a equipe escolhe ao responder
+o cliente (seção 6.1) e ajusta antes de enviar. Ativos primeiro, em ordem de título; os inativos vêm
+também (as configurações precisam deles para reativar), e a tela da ocorrência mostra só os ativos.
+
+**Resposta `200`:**
+```json
+{ "itens": [ { "id": "uuid", "titulo": "Pedido de desculpas", "texto": "Sentimos muito…", "ativo": true, "atualizadoEm": "…" } ] }
+```
+
+> A resposta enviada guarda o texto final, sem apontar para o modelo: editar o modelo depois não
+> reescreve o que já foi dito ao cliente.
+
+**Erros:** `401` · `403` `SEM_PERMISSAO`.
+
+## 9.5. `POST /api/respostas-prontas` — cadastrar
+**Protegido** (`ADMINISTRADOR`). Corpo: `{ "titulo": "…", "texto": "…" }`. `titulo` até **80**
+caracteres; `texto` até **1500** (abaixo dos 2000 da resposta, que ainda leva a saudação). Os dois
+sem os espaços das pontas; `\r\n` vira `\n`. Resposta `201`: o modelo. Registra
+`RESPOSTA_PRONTA_CRIADA`.
+
+**Erros:** `400` `VALIDACAO` · `401` · `403` · `409` `CONFLITO` (título já usado, sem diferenciar
+maiúsculas).
+
+## 9.6. `PATCH /api/respostas-prontas/:id` — editar, desativar ou reativar
+**Protegido** (`ADMINISTRADOR`). Corpo com `titulo`, `texto` e/ou `ativo`; só o que vier muda.
+Resposta `200`: o modelo. Não há apagar: desativado, sai da lista de quem responde.
+
+> No log, editar (`RESPOSTA_PRONTA_EDITADA`) e desativar/reativar são eventos separados, como nos
+> usuários. Reenviar os mesmos valores não registra. O texto do modelo não vai para o log.
+
+**Erros:** `400` `VALIDACAO` · `401` · `403` · `404` `RESPOSTA_PRONTA_NAO_ENCONTRADA` · `409`
+`CONFLITO`.
+
+---
+
 ## 10. `GET /api/metrics` — números do dashboard
 **Protegido** (`COORDENADOR`, `GERENTE`, `ADMINISTRADOR`). Devolve os agregados do período, já calculados no servidor — o front não faz conta.
 
@@ -702,6 +738,9 @@ ao mais antigo. Somente leitura: nenhuma rota edita ou apaga registro do log.
 | `RETENCAO_APLICADA` | a retenção rodou: pela tela (sempre) ou sozinha (só se algo saiu, com `usuario` `null`) | `contatos`, `comentarios`, `notificacoes` (quantos saíram) e `prazos` da vez |
 | `DADOS_DO_TITULAR_APAGADOS` | o administrador atendeu o pedido de um cliente | `feedbacks` (quantos); o e-mail não é guardado |
 | `RESPOSTA_ENVIADA` | alguém da equipe respondeu ao cliente pelo Echo | `area`; o texto e o e-mail não são guardados aqui |
+| `RESPOSTA_PRONTA_CRIADA` | | `titulo` |
+| `RESPOSTA_PRONTA_EDITADA` | o título ou o texto de um modelo mudou | `titulo`, `tituloAnterior` (se renomeou), `textoMudou`; o texto não |
+| `RESPOSTA_PRONTA_DESATIVADA` / `RESPOSTA_PRONTA_REATIVADA` | | `titulo` |
 | `AVISO_POR_EMAIL_ALTERADO` | alguém mudou os próprios avisos por e-mail (`entidade` `User`, a própria pessoa) | `de`, `para` (`NENHUM` \| `RECLAMACOES` \| `TODOS`) |
 
 > **Gravado na mesma transação da ação.** Ou os dois entram, ou nenhum: um log que às vezes falta
@@ -902,5 +941,5 @@ Rotas inexistentes retornam `404` com `{ "erro": "Rota não encontrada", "codigo
 ---
 
 ## Fora do escopo deste contrato (MVP 2+)
-Respostas prontas na tratativa, série histórica **por dia** (o relatório agrega por mês), PDF gerado no servidor (hoje sai pela impressão do navegador), notificação por push do navegador e a **tela administrativa** de QR Codes (listar,
+Série histórica **por dia** (o relatório agrega por mês), PDF gerado no servidor (hoje sai pela impressão do navegador), notificação por push do navegador e a **tela administrativa** de QR Codes (listar,
 desativar e reimprimir os já emitidos).
