@@ -20,6 +20,7 @@ import { notificationsRoutes } from "./routes/notifications.routes.js";
 import { configuracoesRoutes } from "./routes/configuracoes.routes.js";
 import { categoriasRoutes } from "./routes/categorias.routes.js";
 import { retencaoRoutes } from "./routes/retencao.routes.js";
+import { respostasProntasRoutes } from "./routes/respostas-prontas.routes.js";
 import { notFoundHandler, errorHandler } from "./middlewares/errorHandler.js";
 
 // A aplicação é montada aqui e exportada sem escutar porta, para que os testes
@@ -47,6 +48,7 @@ app.use("/api/notifications", notificationsRoutes);
 app.use("/api/configuracoes", configuracoesRoutes);
 app.use("/api/categorias", categoriasRoutes);
 app.use("/api/retencao", retencaoRoutes);
+app.use("/api/respostas-prontas", respostasProntasRoutes);
 
 // 404 e error handler — sempre por último.
 app.use(notFoundHandler);

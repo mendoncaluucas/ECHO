@@ -17,6 +17,29 @@ const USUARIOS = [
 ];
 
 const CATEGORIAS = ["Higiene", "Atendimento", "Alimento"];
+
+// Respostas prontas para começar. O restaurante ajusta nas Configurações; rodar o seed
+// de novo não desfaz o que ele editou (o upsert só cria o que falta).
+const RESPOSTAS_PRONTAS = [
+  {
+    titulo: "Pedido de desculpas",
+    texto:
+      "Sentimos muito pela experiência. Já conversamos com a equipe sobre o que aconteceu " +
+      "para não se repetir, e esperamos receber você de novo em breve.",
+  },
+  {
+    titulo: "Agradecimento por elogio",
+    texto:
+      "Muito obrigado pelo elogio! Repassamos para toda a equipe, que ficou muito feliz. " +
+      "Volte sempre.",
+  },
+  {
+    titulo: "Sugestão anotada",
+    texto:
+      "Obrigado pela sugestão. Ela foi anotada e vai ser avaliada pela gerência. " +
+      "Opiniões como a sua ajudam a melhorar a casa.",
+  },
+];
 const AREAS = ["Mesa 12", "Salão"];
 
 async function main() {
@@ -60,9 +83,14 @@ async function main() {
     create: { token: QR_TOKEN_DEMO, areaId: areaDoQr.id },
   });
 
+  for (const modelo of RESPOSTAS_PRONTAS) {
+    await prisma.respostaPronta.upsert({ where: { titulo: modelo.titulo }, update: {}, create: modelo });
+  }
+
   console.log(
     `Seed concluído: ${USUARIOS.length} usuários (senha "${SENHA_PADRAO}"), ` +
-      `${CATEGORIAS.length} categorias, ${AREAS.length} áreas e o QR "${QR_TOKEN_DEMO}".`
+      `${CATEGORIAS.length} categorias, ${AREAS.length} áreas, o QR "${QR_TOKEN_DEMO}" ` +
+      `e ${RESPOSTAS_PRONTAS.length} respostas prontas.`
   );
 }
 
