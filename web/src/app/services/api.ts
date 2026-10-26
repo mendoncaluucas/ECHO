@@ -169,6 +169,40 @@ export function enviarResposta(id: string, texto: string, token: string): Promis
   });
 }
 
+// Modelo de resposta que a equipe escolhe ao responder o cliente. Só o administrador
+// cadastra; toda a gestão lê.
+export interface RespostaPronta {
+  id: string;
+  titulo: string;
+  texto: string;
+  ativo: boolean;
+  atualizadoEm: string;
+}
+
+export function listarRespostasProntas(token: string): Promise<{ itens: RespostaPronta[] }> {
+  return request(`/respostas-prontas`, { headers: comAutorizacao(token) });
+}
+
+export function criarRespostaPronta(dados: { titulo: string; texto: string }, token: string): Promise<RespostaPronta> {
+  return request(`/respostas-prontas`, {
+    method: 'POST',
+    headers: comAutorizacao(token),
+    body: JSON.stringify(dados),
+  });
+}
+
+export function atualizarRespostaPronta(
+  id: string,
+  dados: Partial<Pick<RespostaPronta, 'titulo' | 'texto' | 'ativo'>>,
+  token: string
+): Promise<RespostaPronta> {
+  return request(`/respostas-prontas/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: comAutorizacao(token),
+    body: JSON.stringify(dados),
+  });
+}
+
 export interface FiltrosDeOcorrencia {
   pagina?: number;
   porPagina?: number;
@@ -537,7 +571,11 @@ export type AcaoAuditoria =
   | 'RETENCAO_APLICADA'
   | 'DADOS_DO_TITULAR_APAGADOS'
   | 'AVISO_POR_EMAIL_ALTERADO'
-  | 'RESPOSTA_ENVIADA';
+  | 'RESPOSTA_ENVIADA'
+  | 'RESPOSTA_PRONTA_CRIADA'
+  | 'RESPOSTA_PRONTA_EDITADA'
+  | 'RESPOSTA_PRONTA_DESATIVADA'
+  | 'RESPOSTA_PRONTA_REATIVADA';
 
 export interface RegistroDeAuditoria {
   id: string;

@@ -1,13 +1,15 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Copy, Loader2, Mail, MailCheck, SearchX, Send, Star, UserCheck } from 'lucide-react';
 import {
   atualizarStatusOcorrencia,
   buscarOcorrencia,
   enviarResposta,
+  listarRespostasProntas,
   tokenDaSessao,
   type Ocorrencia,
   type RespostaAoCliente,
+  type RespostaPronta,
   type StatusOcorrencia,
 } from '../../services/api';
 import {
@@ -101,13 +103,42 @@ function ContatoDoCliente({
   const [erroAoEnviar, setErroAoEnviar] = useState<string | null>(null);
   const idDaCaixa = useId();
   const idDaAjuda = useId();
+  const idDoModelo = useId();
+  const caixa = useRef<HTMLTextAreaElement>(null);
   const peloEcho = envioDeEmail !== 'desligado';
   // Só a saudação não é resposta: o botão espera alguém escrever.
-  const escreveu = texto.trim().length > 0 && texto.trim() !== corpo.trim();
+  const temTextoProprio = (valor: string) => valor.trim().length > 0 && valor.trim() !== corpo.trim();
+  const escreveu = temTextoProprio(texto);
+  // Um modelo somado ao que já foi escrito pode passar do limite (o maxLength só barra
+  // a digitação): o contador fica vermelho e o envio espera encurtar.
+  const longoDemais = texto.length > MAX_RESPOSTA;
+
+  // Respostas prontas ativas, para escolher e ajustar. Sem elas (falha ou nenhuma
+  // cadastrada), a caixa funciona igual, só sem o seletor.
+  const [modelos, setModelos] = useState<RespostaPronta[]>([]);
+  useEffect(() => {
+    if (!peloEcho) return;
+    let ativo = true;
+    listarRespostasProntas(token)
+      .then((res) => ativo && setModelos(res.itens.filter((m) => m.ativo)))
+      .catch(() => {});
+    return () => {
+      ativo = false;
+    };
+  }, [peloEcho, token]);
+
+  // Caixa só com a saudação: o modelo entra depois dela. Já com texto: vai para o fim,
+  // sem apagar o que a pessoa escreveu.
+  const usarModelo = (id: string) => {
+    const modelo = modelos.find((m) => m.id === id);
+    if (!modelo) return;
+    setTexto((atual) => (temTextoProprio(atual) ? `${atual.trimEnd()}\n\n${modelo.texto}` : `${corpo}${modelo.texto}`));
+    caixa.current?.focus();
+  };
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault();
-    if (!escreveu || enviando) return;
+    if (!escreveu || longoDemais || enviando) return;
     setEnviando(true);
     setErroAoEnviar(null);
     try {
@@ -151,10 +182,33 @@ function ContatoDoCliente({
 
       {peloEcho && (
         <form onSubmit={enviar} className="mt-4">
+          {modelos.length > 0 && (
+            <div className="mb-3">
+              <label htmlFor={idDoModelo} className="text-sm font-bold">
+                Usar uma resposta pronta
+              </label>
+              {/* Funciona como ação: escolher aplica e o seletor volta ao começo, para a
+                  mesma resposta poder ser usada de novo. */}
+              <select
+                id={idDoModelo}
+                value=""
+                onChange={(e) => usarModelo(e.target.value)}
+                className="mt-1.5 block h-11 w-full min-w-0 rounded-xl border border-borda-campo bg-card px-3 text-base"
+              >
+                <option value="">Escolha para pôr na caixa…</option>
+                {modelos.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.titulo}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <label htmlFor={idDaCaixa} className="text-sm font-bold">
             Sua resposta
           </label>
           <textarea
+            ref={caixa}
             id={idDaCaixa}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
@@ -167,8 +221,9 @@ function ContatoDoCliente({
             {envioDeEmail === 'teste'
               ? 'Em teste: a resposta vai para o endereço de demonstração, não para o cliente.'
               : 'Vai com o seu nome. Se o cliente responder, chega no seu e-mail.'}{' '}
-            <span className="tabular-nums">
+            <span className={`tabular-nums ${longoDemais ? 'font-bold text-perigo' : ''}`}>
               {texto.length} de {MAX_RESPOSTA}
+              {longoDemais && ': encurte para enviar'}
             </span>
           </p>
           {erroAoEnviar && (
@@ -178,7 +233,7 @@ function ContatoDoCliente({
           )}
           <button
             type="submit"
-            disabled={!escreveu || enviando}
+            disabled={!escreveu || longoDemais || enviando}
             className="mt-3 inline-flex h-11 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors hover:bg-[#0a5242] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {enviando ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
