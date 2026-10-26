@@ -24,6 +24,10 @@ export const ROTULO_ACAO: Record<AcaoAuditoria, string> = {
   DADOS_DO_TITULAR_APAGADOS: 'Dados de cliente apagados',
   AVISO_POR_EMAIL_ALTERADO: 'Avisos por e-mail',
   RESPOSTA_ENVIADA: 'Resposta ao cliente',
+  RESPOSTA_PRONTA_CRIADA: 'Resposta pronta criada',
+  RESPOSTA_PRONTA_EDITADA: 'Resposta pronta editada',
+  RESPOSTA_PRONTA_DESATIVADA: 'Resposta pronta desativada',
+  RESPOSTA_PRONTA_REATIVADA: 'Resposta pronta reativada',
 };
 
 // As opções do aviso por e-mail, para a frase do log.
@@ -178,6 +182,20 @@ export function descrever(registro: RegistroDeAuditoria): string {
       const area = ler(d, 'area');
       return `Respondeu por e-mail ao cliente de uma ocorrência${area !== '—' ? ` (${area})` : ''}`;
     }
+    case 'RESPOSTA_PRONTA_CRIADA':
+      return `Criou a resposta pronta "${ler(d, 'titulo')}"`;
+    case 'RESPOSTA_PRONTA_EDITADA': {
+      const anterior = d?.tituloAnterior;
+      const renomeou = typeof anterior === 'string' && anterior !== '';
+      const mudouTexto = d?.textoMudou === true;
+      if (renomeou && mudouTexto) return `Renomeou a resposta pronta "${anterior}" para "${ler(d, 'titulo')}" e mudou o texto`;
+      if (renomeou) return `Renomeou a resposta pronta "${anterior}" para "${ler(d, 'titulo')}"`;
+      return `Mudou o texto da resposta pronta "${ler(d, 'titulo')}"`;
+    }
+    case 'RESPOSTA_PRONTA_DESATIVADA':
+      return `Desativou a resposta pronta "${ler(d, 'titulo')}"`;
+    case 'RESPOSTA_PRONTA_REATIVADA':
+      return `Reativou a resposta pronta "${ler(d, 'titulo')}"`;
     case 'AVISO_POR_EMAIL_ALTERADO': {
       const opcao = (chave: string) => AVISO_POR_EMAIL[String(d?.[chave])] ?? ler(d, chave);
       return `Mudou os próprios avisos por e-mail: ${opcao('de')} → ${opcao('para')}`;

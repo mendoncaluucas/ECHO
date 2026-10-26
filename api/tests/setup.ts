@@ -8,7 +8,7 @@ beforeEach(async () => {
   // E-mail desligado por padrão; quem testa o envio liga um provedor falso.
   usarProvedorDeEmail(null);
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "Configuracao", "Notification","AuditLog","FeedbackRating", "Feedback", "QRCode", "Area", "Venue", "Category", "User" RESTART IDENTITY CASCADE'
+    'TRUNCATE TABLE "RespostaPronta", "Configuracao", "Notification","AuditLog","FeedbackRating", "Feedback", "QRCode", "Area", "Venue", "Category", "User" RESTART IDENTITY CASCADE'
   );
 });
 

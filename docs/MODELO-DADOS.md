@@ -93,6 +93,7 @@ erDiagram
 | **FeedbackRating** | Nota por categoria de um feedback | `estrelas` (1–5), `feedbackId`, `categoryId` |
 | **Notification** | Alerta de feedback novo para uma pessoa da gestão | `usuarioId`, `feedbackId`, `lida`, `criadoEm` — único por `(usuarioId, feedbackId)` |
 | **Resposta** | Resposta da equipe ao cliente, enviada por e-mail pelo Echo | `feedbackId`, `autorId`, `texto?` (sai com o contato, pela retenção), `textoApagadoEm?`, `enviadaEm` |
+| **RespostaPronta** | Modelo que a equipe escolhe ao responder o cliente | `titulo` (único), `texto`, `ativo`, `criadoEm`, `atualizadoEm` |
 | **AuditLog** | Quem fez o quê, sobre qual registro e quando | `acao`, `usuarioId?` (vazio: o próprio sistema), `entidade`, `entidadeId`, `detalhes` (JSON), `criadoEm` |
 | **Configuracao** | Configurações do sistema, numa linha única (`id = "sistema"`) | `duracaoSessaoHoras` (padrão 8), `retencaoContatoDias` (90), `retencaoComentarioDias` (365), `retencaoNotificacaoDias` (90), `ultimaRetencaoEm?`, `atualizadoEm` |
 
@@ -103,7 +104,8 @@ erDiagram
 - **AcaoAuditoria:** `LOGIN` · `SENHA_ALTERADA` · `SENHA_REDEFINIDA` · `USUARIO_CRIADO` · `USUARIO_EDITADO` ·
   `USUARIO_DESATIVADO` · `USUARIO_REATIVADO` · `AREA_CRIADA` · `AREA_RENOMEADA` · `AREA_DESATIVADA` ·
   `AREA_REATIVADA` · `QRCODE_GERADO` · `QRCODE_DESATIVADO` · `QRCODE_REATIVADO` · `OCORRENCIA_STATUS` ·
-  `CONFIGURACAO_ALTERADA` · `RETENCAO_APLICADA` · `DADOS_DO_TITULAR_APAGADOS` · `AVISO_POR_EMAIL_ALTERADO` · `RESPOSTA_ENVIADA`
+  `CONFIGURACAO_ALTERADA` · `RETENCAO_APLICADA` · `DADOS_DO_TITULAR_APAGADOS` · `AVISO_POR_EMAIL_ALTERADO` · `RESPOSTA_ENVIADA` ·
+  `RESPOSTA_PRONTA_CRIADA` · `RESPOSTA_PRONTA_EDITADA` · `RESPOSTA_PRONTA_DESATIVADA` · `RESPOSTA_PRONTA_REATIVADA`
 
 ## Decisões e observações
 - **Anonimato por padrão:** `Feedback.anonimo = true`. `contatoNome` e `contatoEmail` só são gravados quando o cliente pede resposta da equipe (sem e-mail, o feedback é gravado como anônimo). O contato só sai da API no detalhe da ocorrência, para quem vai responder; nunca em listas (LGPD).

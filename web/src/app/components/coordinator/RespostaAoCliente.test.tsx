@@ -7,7 +7,7 @@ import { ItemDaOcorrencia } from './ItemDaOcorrencia';
 import { EVENTO_AVISO_RAPIDO } from '../../avisoRapido';
 import { contagemDaRetencao, descrever } from '../../descricaoDaAuditoria';
 import { apiFalsa, entrarComo } from '../../../test/apiFalsa';
-import type { Ocorrencia, RegistroDeAuditoria, RespostaAoCliente } from '../../services/api';
+import type { Ocorrencia, RegistroDeAuditoria, RespostaAoCliente, RespostaPronta } from '../../services/api';
 
 // Resposta ao cliente pelo Echo: a equipe escreve no detalhe, o Echo envia por e-mail e
 // guarda o que foi dito.
@@ -47,8 +47,12 @@ function IrPara({ id }: { id: string }) {
   return <button onClick={() => navigate(`/coordenador/ocorrencia/${id}`)}>ir para {id}</button>;
 }
 
-async function abrir(o: Partial<Ocorrencia> = {}) {
+// `modelos`: as respostas prontas que a API devolve ('sem-rede' simula a falha). Sem
+// elas a rota não é simulada, e a tela segue sem o seletor.
+async function abrir(o: Partial<Ocorrencia> = {}, modelos?: RespostaPronta[] | 'sem-rede') {
   const api = apiFalsa().quando('GET /occurrences/oc-1', { corpo: { ...BASE, ...o } });
+  if (modelos === 'sem-rede') api.quando('GET /respostas-prontas', 'sem-rede');
+  else if (modelos) api.quando('GET /respostas-prontas', { corpo: { itens: modelos } });
   entrarComo('COORDENADOR');
   const usuario = userEvent.setup();
   render(
@@ -176,6 +180,56 @@ describe('responder pelo Echo', () => {
     await screen.findByText('rui@cliente.com');
     expect((caixa() as HTMLTextAreaElement).value).toMatch(/^Olá, Rui!/);
     expect((caixa() as HTMLTextAreaElement).value).not.toContain('Rascunho');
+  });
+});
+
+describe('com respostas prontas', () => {
+  const MODELOS: RespostaPronta[] = [
+    { id: 'm1', titulo: 'Pedido de desculpas', texto: 'Sentimos muito pela demora.', ativo: true, atualizadoEm: '' },
+    { id: 'm2', titulo: 'Desativada', texto: 'Não deve aparecer.', ativo: false, atualizadoEm: '' },
+  ];
+  const seletor = () => screen.getByLabelText('Usar uma resposta pronta') as HTMLSelectElement;
+
+  it('o seletor mostra só as ativas; escolher põe o texto depois da saudação e volta o seletor ao começo', async () => {
+    const { usuario } = await abrir({}, MODELOS);
+
+    const opcoes = within(await screen.findByLabelText('Usar uma resposta pronta')).getAllByRole('option');
+    expect(opcoes.map((o) => o.textContent)).toEqual(['Escolha para pôr na caixa…', 'Pedido de desculpas']);
+
+    await usuario.selectOptions(seletor(), 'm1');
+
+    expect((caixa() as HTMLTextAreaElement).value).toBe(`${SAUDACAO}\n\nSentimos muito pela demora.`);
+    expect(caixa()).toHaveFocus();
+    expect(seletor().value).toBe('');
+    expect(botaoEnviar()).toBeEnabled();
+  });
+
+  it('com algo já escrito, o modelo vai para o fim sem apagar nada', async () => {
+    const { usuario } = await abrir({}, MODELOS);
+    await usuario.type(caixa(), 'Obrigado por avisar.');
+
+    await usuario.selectOptions(await screen.findByLabelText('Usar uma resposta pronta'), 'm1');
+
+    expect((caixa() as HTMLTextAreaElement).value).toBe(
+      `${SAUDACAO}\n\nObrigado por avisar.\n\nSentimos muito pela demora.`
+    );
+  });
+
+  it('se o modelo fizer passar de 2000 caracteres, o envio espera encurtar', async () => {
+    const longo = { ...MODELOS[0], texto: 'x'.repeat(1500) };
+    const { usuario } = await abrir({}, [longo]);
+    await usuario.selectOptions(await screen.findByLabelText('Usar uma resposta pronta'), 'm1');
+    await usuario.selectOptions(seletor(), 'm1');
+
+    expect((caixa() as HTMLTextAreaElement).value.length).toBeGreaterThan(2000);
+    expect(screen.getByText(/de 2000: encurte para enviar/)).toBeInTheDocument();
+    expect(botaoEnviar()).toBeDisabled();
+  });
+
+  it('sem respostas prontas (ou sem a lista), a caixa funciona sem o seletor', async () => {
+    await abrir({}, 'sem-rede');
+    expect(screen.queryByLabelText('Usar uma resposta pronta')).not.toBeInTheDocument();
+    expect(caixa()).toBeInTheDocument();
   });
 });
 

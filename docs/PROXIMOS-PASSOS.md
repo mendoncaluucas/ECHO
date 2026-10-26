@@ -355,8 +355,14 @@ vai para o `EMAIL_DESTINO_TESTE` (ver `docs/DEPLOY.md`). Dois PRs:
    pedido do cliente), porque é dirigido à pessoa; a página de privacidade agora diz que a resposta
    sai por um serviço de envio de e-mails. Migration `respostas_ao_cliente` (tabela nova: o código
    antigo convive com ela)
-3. **Respostas prontas** (pedido do Sinuelo) — modelos que a equipe escolhe nessa caixa e ajusta
-   antes de enviar. Precisa de uma tela para cadastrar os modelos
+3. ~~**Respostas prontas**~~ (pedido do Sinuelo) — **feito (25/10).** **Decidido pelo Lucas
+   (25/10):** só o administrador cadastra, numa seção das Configurações (criar, editar,
+   desativar; sem apagar); coordenador e gerente usam. No detalhe da ocorrência, "Usar uma
+   resposta pronta" acima da caixa: com só a saudação, o modelo entra depois dela; com algo já
+   escrito, vai para o fim sem apagar nada. Se passar de 2000 caracteres, o contador fica
+   vermelho e o envio espera encurtar. A resposta enviada guarda o texto final, sem apontar para
+   o modelo. O seed cria três para começar ("Pedido de desculpas", "Agradecimento por elogio",
+   "Sugestão anotada"), sem desfazer o que o restaurante editar. Migration `respostas_prontas`
 
 ---
 ## Antes da apresentação

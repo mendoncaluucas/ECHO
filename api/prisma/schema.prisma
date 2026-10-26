@@ -162,6 +162,21 @@ model Resposta {
   @@index([feedbackId, enviadaEm])
 }
 
+// Modelo de resposta que a equipe escolhe ao responder o cliente e ajusta antes de
+// enviar (pedido do Sinuelo na validação). Só o administrador cadastra. A resposta
+// enviada guarda o texto final, sem apontar para o modelo: editar o modelo depois não
+// reescreve o que já foi dito.
+model RespostaPronta {
+  id           String   @id @default(uuid())
+  // Único pelo texto exato; a API também recusa a mesma palavra em outra grafia.
+  titulo       String   @unique
+  texto        String
+  // Desativar em vez de apagar, como áreas e usuários: o log aponta para o modelo.
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+}
+
 model FeedbackRating {
   id         String   @id @default(uuid())
   feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
@@ -236,6 +251,10 @@ enum AcaoAuditoria {
   DADOS_DO_TITULAR_APAGADOS
   AVISO_POR_EMAIL_ALTERADO
   RESPOSTA_ENVIADA
+  RESPOSTA_PRONTA_CRIADA
+  RESPOSTA_PRONTA_EDITADA
+  RESPOSTA_PRONTA_DESATIVADA
+  RESPOSTA_PRONTA_REATIVADA
 }
 
 // Quem fez o quê, sobre qual registro e quando. Só cresce: nenhuma rota edita ou
