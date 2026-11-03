@@ -6,7 +6,7 @@ import { requireAuth } from "../middlewares/auth.js";
 import { assinarToken } from "../jwt.js";
 import { registrarAuditoria } from "../auditoria.js";
 import { senhaValida, TAMANHO_MINIMO_DA_SENHA } from "./users.routes.js";
-import { limiteDoLoginPorEmail, limiteDoLoginPorIp } from "../limites.js";
+import { limiteDaTrocaDeSenha, limiteDoLoginPorEmail, limiteDoLoginPorIp } from "../limites.js";
 
 // Autenticação da gestão — DONO: Victor
 export const authRoutes = Router();
@@ -53,7 +53,7 @@ authRoutes.post(
     });
 
     return res.json({
-      token: assinarToken({ sub: usuario.id, papel: usuario.papel }),
+      token: assinarToken({ sub: usuario.id, papel: usuario.papel }, usuario.versaoDaSessao),
       usuario: { id: usuario.id, nome: usuario.nome, papel: usuario.papel },
     });
   })
@@ -62,9 +62,14 @@ authRoutes.post(
 // PATCH /senha — o usuário troca a própria senha. Qualquer papel autenticado.
 // Fica aqui, e não em /users, porque não é administração de terceiros: é a credencial
 // de quem está logado, e por isso exige a senha atual.
+//
+// Derruba as outras sessões da pessoa (versaoDaSessao + 1) e devolve um token novo para
+// esta continuar. Com limite de senhas atuais erradas: sem ele, quem roubasse um token
+// testaria senhas por aqui, por fora do limite do login.
 authRoutes.patch(
   "/senha",
   requireAuth([]),
+  limiteDaTrocaDeSenha,
   asyncHandler(async (req, res) => {
     const { senhaAtual, novaSenha } = req.body ?? {};
 
@@ -85,17 +90,31 @@ authRoutes.patch(
         .json({ erro: "Senha atual incorreta", codigo: "CREDENCIAIS_INVALIDAS" });
     }
 
+    // Depois de conferir a atual: antes, a resposta diria que a senha digitada é a certa.
+    if (novaSenha === senhaAtual) {
+      return res
+        .status(400)
+        .json({ erro: "A nova senha precisa ser diferente da atual", codigo: "VALIDACAO" });
+    }
+
     const senhaHash = await bcrypt.hash(novaSenha, 10);
-    await prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: usuario.id }, data: { senhaHash } });
+    const atualizado = await prisma.$transaction(async (tx) => {
+      const salvo = await tx.user.update({
+        where: { id: usuario.id },
+        data: { senhaHash, versaoDaSessao: { increment: 1 } },
+        select: { id: true, papel: true, versaoDaSessao: true },
+      });
       await registrarAuditoria(tx, {
         acao: "SENHA_ALTERADA",
         usuarioId: usuario.id,
         entidade: "User",
         entidadeId: usuario.id,
       });
+      return salvo;
     });
 
-    return res.status(204).send();
+    return res.json({
+      token: assinarToken({ sub: atualizado.id, papel: atualizado.papel }, atualizado.versaoDaSessao),
+    });
   })
 );

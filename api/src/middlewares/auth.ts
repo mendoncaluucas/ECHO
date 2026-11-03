@@ -45,7 +45,7 @@ export function requireAuth(papeisPermitidos: Papel[]) {
       const [atual, configuracoes] = await Promise.all([
         prisma.user.findUnique({
           where: { id: payload.sub },
-          select: { papel: true, ativo: true },
+          select: { papel: true, ativo: true, versaoDaSessao: true },
         }),
         lerConfiguracoes(),
       ]);
@@ -54,6 +54,14 @@ export function requireAuth(papeisPermitidos: Papel[]) {
         return res
           .status(401)
           .json({ erro: "Sessão encerrada", codigo: "TOKEN_INVALIDO" });
+      }
+
+      // A senha mudou depois deste login (trocada pela pessoa ou redefinida pelo
+      // administrador): quem entrou com a senha antiga, ou com o token roubado, sai.
+      if (payload.versaoDaSessao !== atual.versaoDaSessao) {
+        return res
+          .status(401)
+          .json({ erro: "Sessão encerrada: a senha foi trocada", codigo: "TOKEN_INVALIDO" });
       }
 
       // A duração da sessão é a configurada agora, não a da hora do login: o token

@@ -335,7 +335,9 @@ describe("PATCH /api/auth/senha", () => {
       .set(comToken(token))
       .send({ senhaAtual: SENHA_TESTE, novaSenha: SENHA_NOVA });
 
-    expect(res.status).toBe(204);
+    // 200 com um token novo: esta sessão continua, as outras caem (sessoes.test.ts).
+    expect(res.status).toBe(200);
+    expect(typeof res.body.token).toBe("string");
 
     const login = await request(app)
       .post("/api/auth/login")

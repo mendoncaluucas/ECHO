@@ -59,6 +59,11 @@ model User {
   // Padrão "só reclamações": é o que pede ação rápida, e elogio por e-mail o dia
   // inteiro vira ruído que ensina a ignorar o aviso. Ver src/avisos.ts.
   avisoPorEmail AvisoPorEmail @default(RECLAMACOES)
+  // Vai dentro de cada token (`v`); trocar ou redefinir a senha soma 1, e todo token
+  // com o número antigo deixa de valer: as outras sessões abertas caem. Ver
+  // middlewares/auth.ts. Um contador, e não a hora da troca: o token só guarda a hora
+  // em segundos, e um token tirado no mesmo segundo da troca escaparia.
+  versaoDaSessao Int @default(0)
 
   tratativas   Feedback[]
   auditoria    AuditLog[]

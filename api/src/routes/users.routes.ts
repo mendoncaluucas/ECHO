@@ -183,7 +183,14 @@ usersRoutes.patch(
     const atualizado = await prisma.$transaction(async (tx) => {
       const usuario = await tx.user.update({
         where: { id: alvo },
-        data: { ...dados, ...(ativo !== undefined && { ativo }) },
+        data: {
+          ...dados,
+          ...(ativo !== undefined && { ativo }),
+          // Desativar já tira a pessoa na hora (o requireAuth confere `ativo`), mas os
+          // tokens dela voltariam a valer se fosse reativada no mesmo dia. Mudar a versão
+          // faz a desativação encerrar as sessões de vez: reativada, ela entra de novo.
+          ...(mudouSituacao && ativo === false && { versaoDaSessao: { increment: 1 } }),
+        },
         select: camposDoUsuario,
       });
 
@@ -217,11 +224,24 @@ usersRoutes.patch(
 
 // PATCH /:id/senha — administrador define uma nova senha para outro usuário.
 // Não exige a senha atual de propósito: o caso de uso é justamente quem esqueceu a dela.
+// Derruba todas as sessões da pessoa (versaoDaSessao + 1): quem estava com a senha
+// antiga, ou com um token roubado, sai.
+//
+// A própria senha, não: o administrador troca a dele em PATCH /auth/senha, que pede a
+// atual. Por aqui, quem roubasse a sessão de um administrador trocaria a senha dele sem
+// saber qual é, e o dono ficaria do lado de fora.
 usersRoutes.patch(
   "/:id/senha",
   requireAuth([Papel.ADMINISTRADOR]),
   asyncHandler(async (req, res) => {
     const { novaSenha } = req.body ?? {};
+
+    if (req.params.id === req.usuario!.sub) {
+      return res.status(400).json({
+        erro: "Para trocar a sua própria senha, use Trocar minha senha (ela pede a senha atual)",
+        codigo: "PROPRIA_SENHA",
+      });
+    }
 
     if (!senhaValida(novaSenha)) {
       return res.status(400).json({
@@ -242,7 +262,10 @@ usersRoutes.patch(
 
     const senhaHash = await bcrypt.hash(novaSenha, SALT_ROUNDS);
     await prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: alvo.id }, data: { senhaHash } });
+      await tx.user.update({
+        where: { id: alvo.id },
+        data: { senhaHash, versaoDaSessao: { increment: 1 } },
+      });
       await registrarAuditoria(tx, {
         acao: "SENHA_REDEFINIDA",
         usuarioId: req.usuario!.sub,
