@@ -6,6 +6,7 @@ import { requireAuth } from "../middlewares/auth.js";
 import { assinarToken } from "../jwt.js";
 import { registrarAuditoria } from "../auditoria.js";
 import { senhaValida, TAMANHO_MINIMO_DA_SENHA } from "./users.routes.js";
+import { limiteDoLoginPorEmail, limiteDoLoginPorIp } from "../limites.js";
 
 // Autenticação da gestão — DONO: Victor
 export const authRoutes = Router();
@@ -15,8 +16,11 @@ export const authRoutes = Router();
 const HASH_FICTICIO = bcrypt.hashSync("senha-que-nunca-confere", 10);
 
 // POST /login — autentica a gestão e devolve o JWT. Ver docs/CONTRATO-API.md
+// Com limite de tentativas por IP e por e-mail (src/limites.ts).
 authRoutes.post(
   "/login",
+  limiteDoLoginPorIp,
+  limiteDoLoginPorEmail,
   asyncHandler(async (req, res) => {
     const { email, senha } = req.body ?? {};
 
@@ -40,7 +44,7 @@ authRoutes.post(
 
     // Só o login bem-sucedido entra no log. A tentativa falha não tem autor
     // identificável, e gravar o e-mail digitado guardaria endereço de quem nem tem
-    // conta — sem limite de tentativas, qualquer um encheria a tabela.
+    // conta: qualquer um encheria a tabela trocando de IP.
     await registrarAuditoria(prisma, {
       acao: "LOGIN",
       usuarioId: usuario.id,
