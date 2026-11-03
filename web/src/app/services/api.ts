@@ -65,14 +65,27 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     // trata aqui, uma vez, em vez de cada tela redirecionar por conta própria. Só os
     // códigos de sessão: o 401 de senha atual errada (CREDENCIAIS_INVALIDAS) não pode
     // deslogar ninguém.
-    const comToken = Boolean(
-      (options?.headers as Record<string, string> | undefined)?.Authorization
-    );
-    if (
+    //
+    // Só se o token recusado ainda for o da sessão. Ao trocar a senha, a API invalida o
+    // token antigo e devolve outro. Um pedido feito com o antigo depois disso (já a
+    // caminho durante a troca, ou de uma tela aberta em outra aba, que leu o token
+    // antes) não é sessão vencida: refaz uma vez com o token atual. Sem risco de fazer
+    // duas vezes: o 401 de sessão sai do requireAuth, antes de a rota fazer qualquer coisa.
+    const autorizacao = (options?.headers as Record<string, string> | undefined)?.Authorization;
+    const tokenUsado = autorizacao?.replace(/^Bearer /, '');
+    const tokenAtual = tokenDaSessao();
+    const deSessao =
       res.status === 401 &&
-      comToken &&
-      (data?.codigo === 'TOKEN_INVALIDO' || data?.codigo === 'NAO_AUTENTICADO')
-    ) {
+      Boolean(tokenUsado) &&
+      (data?.codigo === 'TOKEN_INVALIDO' || data?.codigo === 'NAO_AUTENTICADO');
+    if (deSessao && tokenAtual && tokenUsado !== tokenAtual) {
+      return request<T>(path, {
+        ...options,
+        headers: { ...(options?.headers as Record<string, string>), Authorization: `Bearer ${tokenAtual}` },
+      });
+    }
+    // Sem sessão nenhuma (saiu em outra aba) também leva ao login.
+    if (deSessao && (tokenAtual === null || tokenUsado === tokenAtual)) {
       encerrarSessao();
       deixarAvisoParaOLogin('Sua sessão terminou. Entre de novo para continuar.');
       window.dispatchEvent(new Event(EVENTO_SESSAO_ENCERRADA));
@@ -488,6 +501,22 @@ export function redefinirSenha(
   });
 }
 
+// A pessoa troca a própria senha. A API derruba as outras sessões dela (outro celular,
+// outro computador) e devolve um token novo para esta continuar: gravar com
+// trocarTokenDaSessao, porque o antigo deixou de valer. A API de antes de 03/11
+// respondia 204 sem corpo (o `request` devolve null).
+export function trocarMinhaSenha(
+  senhaAtual: string,
+  novaSenha: string,
+  token: string
+): Promise<{ token: string } | null> {
+  return request(`/auth/senha`, {
+    method: 'PATCH',
+    headers: comAutorizacao(token),
+    body: JSON.stringify({ senhaAtual, novaSenha }),
+  });
+}
+
 // ---------- Configurações do sistema ----------
 
 export interface Configuracoes {
@@ -858,6 +887,24 @@ export function atualizarUsuarioDaSessao(dados: Pick<Usuario, 'nome'>) {
     return;
   }
   window.dispatchEvent(new Event(EVENTO_SESSAO_ATUALIZADA));
+}
+
+// A senha foi trocada: o token antigo deixou de valer na API, que devolveu um novo.
+// Grava no mesmo lugar onde a sessão está, sem mexer no usuário nem no "Manter
+// conectado". As outras abas leem a sessão a cada pedido e seguem com o novo.
+export function trocarTokenDaSessao(token: string) {
+  const sessao = sessaoAtual();
+  if (!sessao) return;
+  try {
+    if (localStorage.getItem('echo_token')) {
+      localStorage.setItem('echo_token', token);
+    } else {
+      gravarCookieDaSessao({ token, usuario: sessao.usuario });
+    }
+  } catch {
+    // Armazenamento bloqueado: o próximo pedido vai com o token antigo, recebe 401 e
+    // leva ao login, onde a senha nova entra.
+  }
 }
 
 // Há quanto tempo a sessão atual foi aberta, em horas, lida do `iat` do token. Só

@@ -85,6 +85,7 @@ const telas = {
   AdminSettings: telaSobDemanda(() => import('./components/admin/Settings'), 'AdminSettings', '/admin/configuracoes'),
   QRGenerator: telaSobDemanda(() => import('./components/shared/QRGenerator'), 'QRGenerator', '/qr-generator'),
   AuditLog: telaSobDemanda(() => import('./components/shared/AuditLog'), 'AuditLog', '/audit-log'),
+  TrocarSenha: telaSobDemanda(() => import('./components/shared/TrocarSenha'), 'TrocarSenha', '/minha-senha'),
 };
 
 export const LayoutGestaoSobDemanda = telas.LayoutGestao.Componente as ComponentType<{ usuario: Usuario }>;
@@ -99,6 +100,7 @@ export const UserManagement = telas.UserManagement.Componente;
 export const AdminSettings = telas.AdminSettings.Componente;
 export const QRGenerator = telas.QRGenerator.Componente;
 export const AuditLog = telas.AuditLog.Componente;
+export const TrocarSenha = telas.TrocarSenha.Componente;
 
 const TELAS_INICIAIS = new Set(Object.values(TELA_INICIAL_POR_PAPEL));
 const jaPedidas = new Set<string>();

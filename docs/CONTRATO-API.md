@@ -27,7 +27,8 @@
   | `PEDIDO_INVALIDO` | 4xx | Corpo que não dá para ler por outro motivo: charset desconhecido (415), pedido interrompido no meio |
   | `CREDENCIAIS_INVALIDAS` | 401 | E-mail ou senha incorretos no login |
   | `NAO_AUTENTICADO` | 401 | Header `Authorization` ausente ou fora do formato `Bearer <token>` |
-  | `TOKEN_INVALIDO` | 401 | Token adulterado, assinado com outro segredo ou expirado; sessão mais velha que o tempo configurado; usuário desativado |
+  | `TOKEN_INVALIDO` | 401 | Token adulterado, assinado com outro segredo ou expirado; sessão mais velha que o tempo configurado; usuário desativado; senha trocada ou redefinida depois do login |
+  | `PROPRIA_SENHA` | 400 | O administrador tentou redefinir a própria senha pela tela de usuários (seção 14) |
   | `SEM_PERMISSAO` | 403 | Autenticado, mas o papel não está na lista da rota |
   | `QR_NAO_ENCONTRADO` | 404 | `qrToken` inexistente ou inativo |
   | `AREA_NAO_ENCONTRADA` | 404 | `areaId` inexistente |
@@ -709,6 +710,8 @@ Intervalo de no máximo **24 meses**, para uma requisição não conseguir varre
 > **Usuário é desativado, nunca apagado.** As tratativas já registradas apontam para ele e precisam
 > continuar mostrando quem agiu. Usuário inativo não consegue fazer login — e o `POST /auth/login`
 > responde a mesma coisa de senha errada, para não revelar que a conta existe e foi desligada.
+> Desativar também **encerra as sessões de vez** (03/11): reativada no mesmo dia, a pessoa entra de
+> novo, e os tokens de antes não voltam a valer (ver seção 15).
 
 > **Duas travas contra o administrador se trancar fora:** ele não pode desativar a própria conta
 > nem remover o próprio papel de `ADMINISTRADOR`. Não existiria caminho de volta pela interface.
@@ -722,7 +725,14 @@ Intervalo de no máximo **24 meses**, para uma requisição não conseguir varre
 
 Não exige a senha atual de propósito: o caso de uso é justamente quem esqueceu a dela.
 
-**Resposta `204`** (sem corpo). **Erros:** `400` · `401` · `403` · `404`.
+**Derruba todas as sessões da pessoa** (03/11): quem estava logado com a senha antiga, ou com um
+token roubado, recebe `401 TOKEN_INVALIDO` no próximo pedido. A sessão do administrador continua.
+
+**A própria senha, não:** `400 PROPRIA_SENHA`. O administrador troca a dele na seção 15, que pede a
+senha atual; por aqui, quem roubasse a sessão de um administrador trocaria a senha dele sem saber
+qual é, e o dono ficaria do lado de fora.
+
+**Resposta `204`** (sem corpo). **Erros:** `400` `VALIDACAO` / `PROPRIA_SENHA` · `401` · `403` · `404`.
 
 ---
 
@@ -730,11 +740,25 @@ Não exige a senha atual de propósito: o caso de uso é justamente quem esquece
 **Protegido** (qualquer papel autenticado). Corpo: `{ "senhaAtual": "...", "novaSenha": "..." }`.
 
 Exige a senha atual, por ser a credencial de quem está logado — diferente do endpoint acima,
-que é administração de terceiros.
+que é administração de terceiros. A nova tem de ter ao menos 8 caracteres e ser diferente da
+atual. No front, é a tela **"Trocar minha senha"** (`/minha-senha`), no pé do menu.
 
-**Resposta `204`** (sem corpo).
+**Resposta `200`** (até 03/11 era `204`): `{ "token": "jwt..." }`. Trocar a senha **derruba as
+outras sessões da pessoa** (outro celular, outro computador, e o próprio token usado no pedido);
+esta continua com o token que volta aqui, que o front grava no lugar do antigo.
 
-**Erros:** `400` `VALIDACAO` · `401` `CREDENCIAIS_INVALIDAS` (senha atual incorreta ou sem token).
+> **Como as sessões caem:** cada usuário tem um contador (`versaoDaSessao`) que vai dentro do
+> token (`v`). Trocar ou redefinir a senha soma 1, e o `requireAuth`, que já lê o usuário a cada
+> pedido, recusa o token com o número antigo. Um contador, e não a hora da troca: o token guarda a
+> hora em segundos, e um tirado no mesmo segundo da troca escaparia. Token de antes desta mudança
+> (sem `v`) conta como versão 0: o deploy não derrubou ninguém.
+
+**Limite:** 5 senhas atuais erradas a cada 15 min por pessoa (trocar com sucesso não conta). Sem
+ele, quem roubasse um token testaria senhas por aqui, por fora do limite do login.
+
+**Erros:** `400` `VALIDACAO` (incluindo a nova igual à atual, conferido só depois da atual: antes,
+a resposta diria que a senha digitada é a certa) · `401` `CREDENCIAIS_INVALIDAS` (senha atual
+incorreta) ou `NAO_AUTENTICADO` / `TOKEN_INVALIDO` (sem sessão) · `429` `MUITAS_REQUISICOES`.
 
 ---
 

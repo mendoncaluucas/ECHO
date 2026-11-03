@@ -106,6 +106,17 @@ export const limiteDoLoginPorEmail = criarLimite({
   },
 });
 
+// Troca da própria senha, por pessoa: 5 erros em 15 minutos. A rota pede a senha atual,
+// e sem limite quem roubasse um token a descobriria por ali, por fora do limite do
+// login. Trocar com sucesso não conta. Depois do requireAuth, que preenche req.usuario.
+export const limiteDaTrocaDeSenha = criarLimite({
+  janelaMs: QUINZE_MINUTOS,
+  maximo: 5,
+  mensagem: (espera) => `Muitas tentativas de trocar a senha. Tente de novo em ${espera}.`,
+  soFalhas: true,
+  chave: (req) => (req.usuario ? `usuario:${req.usuario.sub}` : null),
+});
+
 // Feedback do cliente, por IP: 20 a cada 10 minutos. Generoso de propósito: no Wi-Fi do
 // restaurante, todas as mesas saem pelo mesmo IP. Cada feedback grava no banco, toca o
 // sino de toda a equipe e pode virar e-mail.

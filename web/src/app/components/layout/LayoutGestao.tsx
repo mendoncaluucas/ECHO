@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, LogOut, Menu } from 'lucide-react';
+import { Bell, KeyRound, LogOut, Menu } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { ErrorBoundary } from '../shared/ErrorBoundary';
 import { Marca } from './Marca';
@@ -102,23 +102,34 @@ function MenuLateral({
         ))}
       </nav>
 
-      <div className="mt-auto flex items-center gap-3 rounded-xl bg-[#f4f4f0] p-3">
-        <span className="flex size-9 flex-none items-center justify-center rounded-full bg-[#d7e9e2] text-sm font-extrabold text-accent-foreground">
-          {iniciais(usuario.nome)}
-        </span>
-        <span className="flex min-w-0 flex-col">
-          <span className="truncate text-sm font-bold">{usuario.nome}</span>
-          <span className="text-xs text-muted-foreground">{ROTULO_DO_PAPEL[usuario.papel]}</span>
-        </span>
-        <button
-          type="button"
-          onClick={aoSair}
-          aria-label="Sair"
-          title="Sair"
-          className="ml-auto flex size-9 flex-none items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-[#e8e8e3] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+      <div className="mt-auto flex flex-col gap-2 rounded-xl bg-[#f4f4f0] p-3">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 flex-none items-center justify-center rounded-full bg-[#d7e9e2] text-sm font-extrabold text-accent-foreground">
+            {iniciais(usuario.nome)}
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-sm font-bold">{usuario.nome}</span>
+            <span className="text-xs text-muted-foreground">{ROTULO_DO_PAPEL[usuario.papel]}</span>
+          </span>
+          <button
+            type="button"
+            onClick={aoSair}
+            aria-label="Sair"
+            title="Sair"
+            className="ml-auto flex size-9 flex-none items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-[#e8e8e3] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            <LogOut className="size-[18px]" />
+          </button>
+        </div>
+        {/* Numa linha própria, e não como mais um ícone ao lado do "Sair": ali o nome
+            ficava com 55 px e "Coordenadora Sinuelo" virava "Coor…". */}
+        <Link
+          to="/minha-senha"
+          className="flex items-center gap-2 rounded-[10px] px-2 py-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:bg-[#e8e8e3] hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
         >
-          <LogOut className="size-[18px]" />
-        </button>
+          <KeyRound className="size-4" aria-hidden="true" />
+          Trocar minha senha
+        </Link>
       </div>
     </div>
   );

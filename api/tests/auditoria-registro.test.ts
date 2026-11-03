@@ -51,7 +51,7 @@ describe("auditoria: login e senhas", () => {
       .patch("/api/auth/senha")
       .set(comToken(token))
       .send({ senhaAtual: SENHA_TESTE, novaSenha: "nova-senha-123" })
-      .expect(204);
+      .expect(200);
 
     const [registro] = await registrosDe("SENHA_ALTERADA");
     expect(registro.usuarioId).toBe(usuario.id);

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { KeyRound, Loader2, Pencil, Plus, Search, UserCheck, UserX, Users, X } from 'lucide-react';
 import {
   atualizarUsuario,
@@ -291,15 +291,29 @@ export function UserManagement() {
                     >
                       <Pencil className="size-4" aria-hidden="true" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => abrir({ tipo: 'senha', usuario: u })}
-                      aria-label={`Redefinir a senha de ${u.nome}`}
-                      title="Redefinir senha"
-                      className={botaoDeIcone}
-                    >
-                      <KeyRound className="size-4" aria-hidden="true" />
-                    </button>
+                    {/* A própria senha se troca em "Trocar minha senha", que pede a atual: a
+                        API recusa redefinir a própria por aqui (quem roubasse a sessão do
+                        administrador trocaria a senha dele sem saber qual é). */}
+                    {souEu ? (
+                      <Link
+                        to="/minha-senha"
+                        aria-label="Trocar minha senha"
+                        title="Trocar minha senha"
+                        className={botaoDeIcone}
+                      >
+                        <KeyRound className="size-4" aria-hidden="true" />
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => abrir({ tipo: 'senha', usuario: u })}
+                        aria-label={`Redefinir a senha de ${u.nome}`}
+                        title="Redefinir senha"
+                        className={botaoDeIcone}
+                      >
+                        <KeyRound className="size-4" aria-hidden="true" />
+                      </button>
+                    )}
                     {/* A própria conta não tem a ação: o backend recusa, e oferecer um
                         botão que sempre dá erro é pior que não ter. O espaço fica, para
                         a coluna de selos não desalinhar nessa linha. */}

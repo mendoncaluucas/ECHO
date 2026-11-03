@@ -97,6 +97,8 @@ export function menuDo(papel: Papel): SecaoDoMenu[] {
 // Telas que não estão no menu mas pertencem à gestão.
 const OUTRAS_ROTAS: { prefixo: string; papeis: Papel[]; rotulo: string }[] = [
   { prefixo: '/coordenador/ocorrencia/', papeis: GESTAO, rotulo: 'Ocorrência' },
+  // Aberta pelo botão ao lado do nome, no pé do menu.
+  { prefixo: '/minha-senha', papeis: GESTAO, rotulo: 'Trocar minha senha' },
 ];
 
 function itemDaRota(caminho: string) {

@@ -6,6 +6,8 @@ import {
   listarOcorrencias,
   login,
   sessaoAtual,
+  tokenDaSessao,
+  trocarTokenDaSessao,
 } from './api';
 import { apiFalsa, entrarComo } from '../../test/apiFalsa';
 
@@ -62,7 +64,7 @@ describe('sessão vencida no meio do uso', () => {
       apiFalsa().quando('GET /occurrences', { status: 401, corpo: { erro: 'Sessão inválida.', codigo } });
       const { ouvinte, parar } = ouvirSessaoEncerrada();
 
-      await expect(listarOcorrencias('tok')).rejects.toMatchObject({ status: 401 });
+      await expect(listarOcorrencias(tokenDaSessao()!)).rejects.toMatchObject({ status: 401 });
 
       expect(sessaoAtual()).toBeNull();
       expect(lerAvisoDoLogin()).toBe('Sua sessão terminou. Entre de novo para continuar.');
@@ -70,6 +72,75 @@ describe('sessão vencida no meio do uso', () => {
       parar();
     }
   );
+
+  it('401 de um token que já foi trocado (outra aba, pedido a caminho na troca de senha): refaz com o atual, sem deslogar', async () => {
+    entrarComo('GERENTE');
+    const antigo = tokenDaSessao()!;
+    trocarTokenDaSessao('token-novo-da-troca');
+    const api = apiFalsa().quando('GET /occurrences', (p) =>
+      p.autorizacao === 'Bearer token-novo-da-troca'
+        ? { corpo: { itens: [], total: 3 } }
+        : { status: 401, corpo: { erro: 'Sessão encerrada: a senha foi trocada', codigo: 'TOKEN_INVALIDO' } }
+    );
+    const { ouvinte, parar } = ouvirSessaoEncerrada();
+
+    await expect(listarOcorrencias(antigo)).resolves.toMatchObject({ total: 3 });
+
+    expect(api.pedidosPara('GET', '/occurrences').map((p) => p.autorizacao)).toEqual([
+      `Bearer ${antigo}`,
+      'Bearer token-novo-da-troca',
+    ]);
+    expect(tokenDaSessao()).toBe('token-novo-da-troca');
+    expect(ouvinte).not.toHaveBeenCalled();
+    parar();
+  });
+
+  it('se o token atual também for recusado, aí sim a sessão terminou (e não refaz sem fim)', async () => {
+    entrarComo('GERENTE');
+    const antigo = tokenDaSessao()!;
+    trocarTokenDaSessao('token-novo-da-troca');
+    const api = apiFalsa().quando('GET /occurrences', {
+      status: 401,
+      corpo: { erro: 'Sessão encerrada', codigo: 'TOKEN_INVALIDO' },
+    });
+    const { ouvinte, parar } = ouvirSessaoEncerrada();
+
+    await expect(listarOcorrencias(antigo)).rejects.toMatchObject({ status: 401 });
+
+    expect(api.pedidosPara('GET', '/occurrences')).toHaveLength(2);
+    expect(sessaoAtual()).toBeNull();
+    expect(ouvinte).toHaveBeenCalledOnce();
+    parar();
+  });
+
+  it('401 de sessão sem sessão nenhuma no navegador (saiu em outra aba): leva ao login, sem refazer', async () => {
+    const api = apiFalsa().quando('GET /occurrences', {
+      status: 401,
+      corpo: { erro: 'Sessão encerrada', codigo: 'TOKEN_INVALIDO' },
+    });
+    const { ouvinte, parar } = ouvirSessaoEncerrada();
+
+    await expect(listarOcorrencias('token-de-uma-sessao-que-saiu')).rejects.toMatchObject({ status: 401 });
+
+    expect(api.pedidosPara('GET', '/occurrences')).toHaveLength(1);
+    expect(ouvinte).toHaveBeenCalledOnce();
+    parar();
+  });
+
+  it.each([false, true])('trocar o token mantém o usuário e o lugar da sessão (manter conectado: %s)', (manter) => {
+    entrarComo('COORDENADOR', manter);
+    const usuario = sessaoAtual()!.usuario;
+
+    trocarTokenDaSessao('token-novo');
+
+    expect(sessaoAtual()).toEqual({ token: 'token-novo', usuario });
+    expect(Boolean(localStorage.getItem('echo_token'))).toBe(manter);
+  });
+
+  it('sem sessão, trocar o token não cria uma', () => {
+    trocarTokenDaSessao('token-novo');
+    expect(sessaoAtual()).toBeNull();
+  });
 
   it('outro 401 com token (ex.: senha atual errada) não derruba a sessão', async () => {
     entrarComo('GERENTE');
@@ -79,7 +150,7 @@ describe('sessão vencida no meio do uso', () => {
     });
     const { ouvinte, parar } = ouvirSessaoEncerrada();
 
-    await expect(listarOcorrencias('tok')).rejects.toMatchObject({ status: 401 });
+    await expect(listarOcorrencias(tokenDaSessao()!)).rejects.toMatchObject({ status: 401 });
 
     expect(sessaoAtual()).not.toBeNull();
     expect(ouvinte).not.toHaveBeenCalled();

@@ -24,6 +24,7 @@ import {
   AdminDashboard,
   AdminSettings,
   AuditLog,
+  TrocarSenha,
   IssueRegistry,
   ManagerDashboard,
   Notifications,
@@ -116,6 +117,10 @@ function Rotas() {
           <Route
             path="/notificacoes"
             element={<ExigePapel papeis={GESTAO}><Notifications /></ExigePapel>}
+          />
+          <Route
+            path="/minha-senha"
+            element={<ExigePapel papeis={GESTAO}><TrocarSenha /></ExigePapel>}
           />
 
           <Route
