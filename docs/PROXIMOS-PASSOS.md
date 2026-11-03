@@ -465,7 +465,23 @@ padrão (a suíte faz centenas de logins) e cada limite tem teste próprio que o
    - JSON malformado → `400 JSON_INVALIDO`; corpo grande demais → `413`; sem ir para o log como
      "Erro não tratado"
    - `helmet` (cabeçalhos de segurança) e sem o `X-Powered-By`
-4. **Sessões e senha**
+4. ~~**Sessões e senha**~~ — **feito (03/11)**, com migration (`versaoDaSessao`). Em vez da
+   hora (`sessoesValidasDesde`), um **contador** dentro do token: o token guarda a hora em
+   segundos, e um tirado no mesmo segundo da troca escaparia. A troca devolve um token novo para
+   a sessão de quem trocou continuar. No caminho, entraram ainda:
+   - limite de 5 senhas atuais erradas por 15 min na troca (o token roubado testaria senhas por
+     ali, por fora do limite do login)
+   - o administrador não redefine mais a **própria** senha em Usuários (`400 PROPRIA_SENHA`; o
+     ícone da chave leva a "Trocar minha senha", que pede a atual)
+   - desativar também muda a versão: antes, reativada no mesmo dia, a pessoa voltava a ter os
+     tokens de antes valendo (inclusive um roubado)
+   - o front só desloga num 401 se o token recusado ainda for o da sessão; se não for (pedido a
+     caminho durante a troca, tela de outra aba que leu o token antes), refaz uma vez com o
+     atual. Sem isso, trocar a senha deslogava as outras abas do mesmo navegador
+   - **Para o Lucas:** com a tela, cada conta de produção que ainda use `echo123` (a do README
+     público) troca a própria senha, e as sessões abertas com a antiga caem junto
+
+   O plano original:
    - trocar ou redefinir a senha derruba as outras sessões daquela pessoa: campo
      `sessoesValidasDesde` no `User`, comparado com o horário do token no `requireAuth` (que já lê o
      usuário a cada requisição, então não custa uma consulta a mais). Migration
