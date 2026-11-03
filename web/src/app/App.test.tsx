@@ -139,6 +139,33 @@ describe('login', () => {
     expect(sessaoAtual()).toBeNull();
   });
 
+  it('muitas tentativas (429): a mensagem da API, que diz quanto esperar, e nenhuma sessão', async () => {
+    apiFalsa().quando('POST /auth/login', {
+      status: 429,
+      corpo: {
+        erro: 'Muitas tentativas de entrar. Tente de novo em 15 minutos.',
+        codigo: 'MUITAS_REQUISICOES',
+        tenteEmSegundos: 900,
+      },
+    });
+    const usuario = abrirApp('/');
+    await preencherLogin(usuario);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Muitas tentativas de entrar. Tente de novo em 15 minutos.'
+    );
+    expect(screen.getByRole('alert')).not.toHaveTextContent('E-mail ou senha incorretos.');
+    expect(sessaoAtual()).toBeNull();
+  });
+
+  it('429 sem a mensagem da API (de um proxy no caminho): nada de "Erro 429" na tela', async () => {
+    apiFalsa().quando('POST /auth/login', { status: 429, corpo: null });
+    const usuario = abrirApp('/');
+    await preencherLogin(usuario);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível conectar ao servidor.');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Erro 429');
+  });
+
   it('API fora do ar: diz que é a conexão, para ninguém desconfiar da senha', async () => {
     apiFalsa().quando('POST /auth/login', 'sem-rede');
     const usuario = abrirApp('/');

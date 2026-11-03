@@ -71,13 +71,17 @@ export function Entrar() {
         de && caminho && papelPodeAbrir(usuario.papel, caminho) ? de : telaInicialDe(usuario.papel);
       navigate(destino, { replace: true });
     } catch (falha) {
-      const { status, codigo } = falha as { status?: number; codigo?: string };
+      const { status, codigo, message } = falha as { status?: number; codigo?: string; message?: string };
       // 401 é credencial errada; qualquer outra coisa (API fora, rede) merece mensagem
-      // própria, senão a pessoa procura o problema na senha.
+      // própria, senão a pessoa procura o problema na senha. No limite de tentativas, a da
+      // API, que diz quanto esperar. Pelo código, não pelo 429: um 429 que não venha da API
+      // (de um proxy no caminho) não tem corpo, e a mensagem seria "Erro 429".
       setErro(
         status === 401
           ? 'E-mail ou senha incorretos.'
-          : codigo === 'SESSAO_NAO_GRAVADA'
+          : codigo === 'MUITAS_REQUISICOES' && message
+            ? message
+            : codigo === 'SESSAO_NAO_GRAVADA'
             ? 'O navegador não deixou guardar o login. Libere os cookies deste site e tente de novo.'
             : 'Não foi possível conectar ao servidor. Tente de novo em alguns instantes.'
       );

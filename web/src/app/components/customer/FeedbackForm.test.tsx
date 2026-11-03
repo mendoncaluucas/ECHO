@@ -236,6 +236,26 @@ describe('avaliação do cliente', () => {
     await titulo('Como foi a sua experiência?');
   });
 
+  it('muitos acessos da mesma rede (429) ao abrir: diz quanto esperar, não "verifique a internet"', async () => {
+    const api = apiFalsa().quando('GET /public/venue/MESA12', {
+      status: 429,
+      corpo: {
+        erro: 'Muitos acessos seguidos desta rede. Tente de novo em 1 minuto.',
+        codigo: 'MUITAS_REQUISICOES',
+        tenteEmSegundos: 42,
+      },
+    });
+    const { usuario } = abrir();
+    await titulo('Não conseguimos abrir a avaliação');
+    expect(screen.getByText('Muitos acessos seguidos desta rede. Tente de novo em 1 minuto.')).toBeInTheDocument();
+    expect(screen.queryByText(/Verifique a internet/)).not.toBeInTheDocument();
+
+    // Passado o tempo, "Tentar de novo" abre o formulário.
+    api.quando('GET /public/venue/MESA12', { corpo: MESA });
+    await usuario.click(botao('Tentar de novo'));
+    await titulo('Como foi a sua experiência?');
+  });
+
   it('servidor acordando: depois de 4 s a tela explica a espera', async () => {
     vi.useFakeTimers();
     try {
@@ -252,10 +272,20 @@ describe('avaliação do cliente', () => {
   });
 
   it.each([
-    [500, 'Não foi possível enviar agora. Suas respostas estão guardadas: tente de novo.'],
-    [404, 'Este QR Code não está mais ativo. Peça ajuda a um atendente.'],
-  ])('falha no envio (%i): mensagem certa e o cliente continua na etapa 3', async (status, mensagem) => {
-    apiDaMesa().quando('POST /public/feedback', { status, corpo: { erro: 'falhou' } });
+    [500, 'falhou', 'Não foi possível enviar agora. Suas respostas estão guardadas: tente de novo.'],
+    [404, 'falhou', 'Este QR Code não está mais ativo. Peça ajuda a um atendente.'],
+    [
+      429,
+      'Muitas avaliações enviadas desta rede em pouco tempo. Tente de novo em 7 minutos.',
+      'Muitas avaliações enviadas desta rede em pouco tempo. Tente de novo em 7 minutos. Suas respostas estão guardadas.',
+    ],
+    // 429 que não vem do limite da API (um proxy no caminho): sem a mensagem dela, a genérica.
+    [429, undefined, 'Não foi possível enviar agora. Suas respostas estão guardadas: tente de novo.'],
+  ])('falha no envio (%i): mensagem certa e o cliente continua na etapa 3', async (status, erro, mensagem) => {
+    apiDaMesa().quando('POST /public/feedback', {
+      status,
+      corpo: erro === undefined ? null : { erro, codigo: status === 429 ? 'MUITAS_REQUISICOES' : undefined },
+    });
     const { usuario } = abrir();
     await titulo('Como foi a sua experiência?');
     await darNota(usuario, 'Alimento', 4);
