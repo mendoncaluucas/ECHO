@@ -16,12 +16,15 @@
   ```json
   { "erro": "mensagem legível", "codigo": "VALIDACAO" }
   ```
-- **Status usados:** `200` ok · `201` criado · `400` validação · `401` não autenticado · `403` sem permissão · `404` não encontrado · `429` muitos pedidos
+- **Status usados:** `200` ok · `201` criado · `400` validação · `401` não autenticado · `403` sem permissão · `404` não encontrado · `413` corpo grande demais · `429` muitos pedidos
 - **Códigos de erro (`codigo`):**
 
   | `codigo` | Status | Quando acontece |
   |---|---|---|
   | `VALIDACAO` | 400 | Campo obrigatório ausente ou valor inválido |
+  | `JSON_INVALIDO` | 400 | Corpo com `Content-Type: application/json` que não é um JSON válido (ou é só um texto ou número solto) |
+  | `CORPO_GRANDE_DEMAIS` | 413 | Corpo acima de 100 kB |
+  | `PEDIDO_INVALIDO` | 4xx | Corpo que não dá para ler por outro motivo: charset desconhecido (415), pedido interrompido no meio |
   | `CREDENCIAIS_INVALIDAS` | 401 | E-mail ou senha incorretos no login |
   | `NAO_AUTENTICADO` | 401 | Header `Authorization` ausente ou fora do formato `Bearer <token>` |
   | `TOKEN_INVALIDO` | 401 | Token adulterado, assinado com outro segredo ou expirado; sessão mais velha que o tempo configurado; usuário desativado |
@@ -987,6 +990,15 @@ esperar prazo. Resposta `200`: `{ "feedbacks": 2 }` (pode ser `0`). Registra
 
 ## Convenção de erro adicional
 Rotas inexistentes retornam `404` com `{ "erro": "Rota não encontrada", "codigo": "ROTA_NAO_ENCONTRADA" }`. Erros inesperados retornam `500` com `codigo: "ERRO_INTERNO"`.
+Corpo que nem chega a ser lido (`JSON_INVALIDO`, `CORPO_GRANDE_DEMAIS`, `PEDIDO_INVALIDO`) é erro
+de quem pediu: responde 4xx e não vai para o log do servidor (até 03/11 era `500`, com o erro
+inteiro no log).
+
+**Cabeçalhos (03/11):** toda resposta sai sem `X-Powered-By` e com os cabeçalhos de segurança do
+`helmet`, com dois ajustes para uma API que só fala JSON e imagem: CSP `default-src 'none';
+frame-ancestors 'none'`, e `Cross-Origin-Resource-Policy: cross-origin`, porque a tela de QR
+Codes carrega a imagem com `<img>` a partir de outro endereço (com o padrão `same-origin`, o
+navegador recusa a imagem).
 
 ---
 

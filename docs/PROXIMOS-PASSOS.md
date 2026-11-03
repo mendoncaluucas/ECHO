@@ -456,7 +456,12 @@ padrão (a suíte faz centenas de logins) e cada limite tem teste próprio que o
    - `POST /occurrences/:id/respostas`: 20 por hora **por pessoa** (conta invadida não vira
      disparador de e-mail)
    - mensagens de 429 no login, no formulário do cliente e na resposta ao cliente
-3. **Erros e cabeçalhos da API**
+3. ~~**Erros e cabeçalhos da API**~~ — **feito (03/11)**, sem migration e sem mudança no front.
+   `helmet` fixado em 8.3.0 (de julho, sem dependências). No caminho: o padrão do helmet
+   (`Cross-Origin-Resource-Policy: same-origin`) faria o navegador recusar a imagem do QR na tela
+   de QR Codes, que vem da API por `<img>`; conferido no navegador (com o padrão, "FALHOU"; com
+   `cross-origin`, carrega). Erro de leitura do corpo só vira 4xx quando o próprio leitor diz
+   que a culpa é do pedido (`expose`); o resto continua 500 e no log
    - JSON malformado → `400 JSON_INVALIDO`; corpo grande demais → `413`; sem ir para o log como
      "Erro não tratado"
    - `helmet` (cabeçalhos de segurança) e sem o `X-Powered-By`
