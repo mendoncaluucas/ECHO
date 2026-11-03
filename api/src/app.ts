@@ -27,6 +27,28 @@ import { notFoundHandler, errorHandler } from "./middlewares/errorHandler.js";
 // possam consumi-la direto (Supertest) sem subir um servidor.
 export const app = express();
 
+// Quantos proxies há entre o cliente e a API (TRUST_PROXY). No Render há pelo menos um,
+// e o IP do cliente chega no X-Forwarded-For; sem isto, todo pedido parece vir do
+// proxy, e o limite de requisições (src/limites.ts) cairia sobre todos juntos. Número,
+// e não "true": o proxy do Render acrescenta ao X-Forwarded-For o que o cliente
+// mandou, e "true" deixaria qualquer um escolher o próprio IP. Sem a variável (na
+// máquina de quem desenvolve), não confia em proxy nenhum. Ver docs/DEPLOY.md
+//
+// Valor inválido não derruba a API (ao contrário do JWT_SECRET): no Render, mudar a
+// variável reinicia o serviço, e um "true" digitado deixaria o Echo inteiro fora do ar
+// por causa de um limite. Fica o erro no log e segue sem confiar em proxy.
+export function lerTrustProxy(): number {
+  const valor = process.env.TRUST_PROXY?.trim();
+  if (!valor) return 0;
+  const saltos = Number(valor);
+  if (!Number.isInteger(saltos) || saltos < 0 || saltos > 5) {
+    console.error(`TRUST_PROXY ignorado: deve ser um número de 0 a 5 (veio "${valor}"). Seguindo com 0.`);
+    return 0;
+  }
+  return saltos;
+}
+app.set("trust proxy", lerTrustProxy());
+
 // CORS restrito a CORS_ORIGIN (lista separada por vírgula); sem a variável, libera todas as origens.
 const corsOrigin = process.env.CORS_ORIGIN;
 app.use(cors(corsOrigin ? { origin: corsOrigin.split(",") } : undefined));

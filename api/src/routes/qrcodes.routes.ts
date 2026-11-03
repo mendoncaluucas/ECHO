@@ -6,9 +6,11 @@ import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { registrarAuditoria } from "../auditoria.js";
+import { limiteDaImagemDoQr } from "../limites.js";
 
 // QR Codes — geração e desativação restritas ao administrador, listagem à gestão.
-// A imagem segue aberta: só serve token ativo, e o token já está impresso na mesa.
+// A imagem segue aberta: só serve token ativo, e o token já está impresso na mesa. Por
+// ser aberta e cara de gerar, tem limite por IP e cache (ver a rota, no fim).
 export const qrcodesRoutes = Router();
 
 const PAPEIS_DA_GESTAO = [Papel.COORDENADOR, Papel.GERENTE, Papel.ADMINISTRADOR];
@@ -207,15 +209,72 @@ qrcodesRoutes.patch(
 
 const TAMANHO_PADRAO = 400;
 const TAMANHO_MINIMO = 200;
-const TAMANHO_MAXIMO = 2048;
+// Era 2048. Gerar a imagem ocupa o processador da API inteira enquanto roda (PNG de
+// 2048 px: ~270 ms), e o front nunca pede mais que 1024; impressão usa o SVG.
+const TAMANHO_MAXIMO = 1024;
+// O tamanho pedido sobe para o múltiplo de 128 seguinte (até 1024): no máximo 7 PNGs
+// por código. Aceitando qualquer número, bastava variar o tamanho para escapar do
+// cache: 50 tamanhos diferentes ainda deixavam o /health em 1,7 s (medido).
+const PASSO_DO_TAMANHO = 128;
+const arredondarTamanho = (tamanho: number) =>
+  Math.min(TAMANHO_MAXIMO, Math.ceil(tamanho / PASSO_DO_TAMANHO) * PASSO_DO_TAMANHO);
+
+// Cache das imagens já geradas: o mesmo QR não é gerado duas vezes. Medido antes dele:
+// 50 downloads de 2048 px ao mesmo tempo deixavam um pedido qualquer (o /health) em
+// 4,3 s, a API inteira lenta para todos.
+//
+// Guarda a promessa, e não só o resultado: 50 pedidos iguais ao mesmo tempo geram a
+// imagem uma vez e esperam juntos. Na ordem de uso (a mais antiga sai primeiro) e com
+// teto, para variar o tamanho não encher a memória: ~200 imagens de até 1024 px dão
+// poucos MB.
+type ImagemDoQr = { tipo: string; corpo: Buffer | string };
+const MAXIMO_NO_CACHE = 200;
+const cacheDeImagens = new Map<string, Promise<ImagemDoQr>>();
+
+export function limparCacheDeImagens() {
+  cacheDeImagens.clear();
+}
+
+function imagemDoQr(token: string, formato: "png" | "svg", tamanho: number): Promise<ImagemDoQr> {
+  // O SVG não tem tamanho: um só por código.
+  const chave = formato === "svg" ? `${token}|svg` : `${token}|png|${tamanho}`;
+  const guardada = cacheDeImagens.get(chave);
+  if (guardada) {
+    // Usada agora: vai para o fim da fila de saída.
+    cacheDeImagens.delete(chave);
+    cacheDeImagens.set(chave, guardada);
+    return guardada;
+  }
+
+  const url = urlDoFormulario(token);
+  const gerando: Promise<ImagemDoQr> =
+    formato === "svg"
+      ? QRCode.toString(url, { ...OPCOES_DO_QR, type: "svg" }).then((corpo) => ({ tipo: "image/svg+xml", corpo }))
+      : QRCode.toBuffer(url, { ...OPCOES_DO_QR, width: tamanho }).then((corpo) => ({ tipo: "png", corpo }));
+  // Falhou: não fica no cache, para o próximo pedido tentar de novo. Só sai se ainda for
+  // ela: se já foi empurrada para fora e outra igual entrou no lugar, a nova fica.
+  gerando.catch(() => {
+    if (cacheDeImagens.get(chave) === gerando) cacheDeImagens.delete(chave);
+  });
+
+  cacheDeImagens.set(chave, gerando);
+  if (cacheDeImagens.size > MAXIMO_NO_CACHE) {
+    cacheDeImagens.delete(cacheDeImagens.keys().next().value!);
+  }
+  return gerando;
+}
 
 // GET /:token/imagem — o QR para exibir ou imprimir. Ver docs/CONTRATO-API.md
 //
 // `?formato=svg` sai vetorial: nítido em qualquer tamanho, que é o que a tela de
 // apresentação e o cartão impresso usam. O PNG (padrão) aceita `?tamanho=` para quem
 // precisa de arquivo de imagem.
+//
+// Pública e cara de gerar: limite por IP (src/limites.ts) antes de tudo, contando
+// também os pedidos inválidos, e cache das imagens geradas.
 qrcodesRoutes.get(
   "/:token/imagem",
+  limiteDaImagemDoQr,
   asyncHandler(async (req, res) => {
     const { token } = req.params;
     const formato = req.query.formato ?? "png";
@@ -232,6 +291,7 @@ qrcodesRoutes.get(
       });
     }
 
+    // A cada pedido, mesmo com a imagem no cache: o QR desativado é recusado na hora.
     const qr = await prisma.qRCode.findUnique({ where: { token } });
     if (!qr || !qr.ativo) {
       return res
@@ -239,14 +299,10 @@ qrcodesRoutes.get(
         .json({ erro: "QR Code não encontrado", codigo: "QR_NAO_ENCONTRADO" });
     }
 
-    const url = urlDoFormulario(qr.token);
-
-    if (formato === "svg") {
-      const svg = await QRCode.toString(url, { ...OPCOES_DO_QR, type: "svg" });
-      return res.type("image/svg+xml").send(svg);
-    }
-
-    const png = await QRCode.toBuffer(url, { ...OPCOES_DO_QR, width: tamanho });
-    return res.type("png").send(png);
+    const imagem = await imagemDoQr(qr.token, formato, arredondarTamanho(tamanho));
+    // O navegador reaproveita por 5 min sem pedir de novo. "private": é da tela de quem
+    // pediu, não de um cache compartilhado no caminho.
+    res.set("Cache-Control", "private, max-age=300");
+    return res.type(imagem.tipo).send(imagem.corpo);
   })
 );
