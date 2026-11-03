@@ -204,6 +204,9 @@ export function FeedbackForm() {
   const [contexto, setContexto] = useState<VenueContext | null>(null);
   const [acordando, setAcordando] = useState(false);
   const [tentativa, setTentativa] = useState(0);
+  // A API recusou por muitos acessos desta rede (429): a mensagem dela, que diz quanto
+  // esperar, no lugar de "verifique a internet", que mandaria procurar o problema errado.
+  const [limiteAtingido, setLimiteAtingido] = useState<string | null>(null);
 
   const [rascunho, setRascunho] = useState<Rascunho>(() => lerRascunho(qrToken));
   const [enviando, setEnviando] = useState(false);
@@ -226,8 +229,11 @@ export function FeedbackForm() {
         setContexto(res);
         setEstado('pronto');
       })
-      .catch((e: Error & { status?: number }) => {
-        if (ativo) setEstado(e.status === 404 ? 'invalido' : 'semConexao');
+      .catch((e: Error & { status?: number; codigo?: string }) => {
+        if (!ativo) return;
+        // Pelo código, não pelo 429: um 429 de fora da API viria sem mensagem ("Erro 429").
+        setLimiteAtingido(e.codigo === 'MUITAS_REQUISICOES' ? e.message : null);
+        setEstado(e.status === 404 ? 'invalido' : 'semConexao');
       })
       .finally(() => window.clearTimeout(relogio));
 
@@ -326,13 +332,15 @@ export function FeedbackForm() {
         state: { qrToken, comRetorno: rascunho.querRetorno },
       });
     } catch (e) {
-      const falha = e as Error & { status?: number };
+      const falha = e as Error & { status?: number; codigo?: string };
       setErroDoEnvio(
         falha.status === 404
           ? 'Este QR Code não está mais ativo. Peça ajuda a um atendente.'
           : falha.status === 400
             ? falha.message
-            : 'Não foi possível enviar agora. Suas respostas estão guardadas: tente de novo.'
+            : falha.codigo === 'MUITAS_REQUISICOES'
+              ? `${falha.message} Suas respostas estão guardadas.`
+              : 'Não foi possível enviar agora. Suas respostas estão guardadas: tente de novo.'
       );
     } finally {
       setEnviando(false);
@@ -354,7 +362,7 @@ export function FeedbackForm() {
       <TelaDeAviso
         icone={<RotateCw className="size-8" aria-hidden="true" />}
         titulo="Não conseguimos abrir a avaliação"
-        texto="A conexão falhou. Verifique a internet do celular e tente de novo."
+        texto={limiteAtingido ?? 'A conexão falhou. Verifique a internet do celular e tente de novo.'}
         acao={
           <button type="button" onClick={() => setTentativa((n) => n + 1)} className={botaoPrincipal}>
             Tentar de novo

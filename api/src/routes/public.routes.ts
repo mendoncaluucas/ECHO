@@ -4,6 +4,7 @@ import { prisma } from "../prisma.js";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import { lerConfiguracoes } from "../configuracao.js";
 import { dispararAvisoPorEmail } from "../avisos.js";
+import { limiteDoFeedback, limiteDoFormulario } from "../limites.js";
 
 export const publicRoutes = Router();
 
@@ -30,6 +31,7 @@ publicRoutes.get(
 // GET /venue/:qrToken — contexto do formulário a partir do QR. Ver docs/CONTRATO-API.md
 publicRoutes.get(
   "/venue/:qrToken",
+  limiteDoFormulario,
   asyncHandler(async (req, res) => {
     const { qrToken } = req.params;
 
@@ -71,6 +73,7 @@ publicRoutes.get(
 // POST /feedback — registra o feedback do cliente. Ver docs/CONTRATO-API.md
 publicRoutes.post(
   "/feedback",
+  limiteDoFeedback,
   asyncHandler(async (req, res) => {
     const { qrToken, tipo, comentario, anonimo, contatoNome, contatoEmail, avaliacoes } =
       req.body ?? {};

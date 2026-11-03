@@ -47,10 +47,11 @@ colocá-las no start faria rodar a cada despertar.
 | `TRUST_PROXY` | `1` (quantos proxies há antes da API; ver abaixo como conferir) |
 
 > **`TRUST_PROXY` e o limite de requisições.** No Render, a API recebe os pedidos de um proxy, e
-> o IP do cliente vem no cabeçalho `X-Forwarded-For`. O limite por IP (hoje, 60 imagens de QR por
-> minuto) depende de ler o IP certo:
+> o IP do cliente vem no cabeçalho `X-Forwarded-For`. Os limites por IP (imagem do QR, abrir e
+> enviar o formulário, login; ver `docs/CONTRATO-API.md`, Convenções) dependem de ler o IP certo:
 > - **sem a variável (ou baixa demais):** todo pedido parece vir do proxy, e o limite cai sobre
->   todos juntos. No log do Render aparece `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`
+>   todos juntos: 10 tentativas de login a cada 15 min e 20 feedbacks a cada 10 min **para o
+>   restaurante inteiro**. No log do Render aparece `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`
 > - **alta demais:** a API passa a acreditar no que o próprio cliente escreve no cabeçalho, e
 >   qualquer um troca de "IP" para escapar do limite
 >

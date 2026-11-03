@@ -7,6 +7,7 @@ import { ERRO_DE_PAGINACAO, lerData, lerPaginacao, semCuringas } from "../consul
 import { registrarAuditoria } from "../auditoria.js";
 import { emailLigado, enviarEmails, estadoDoEnvio } from "../email.js";
 import { MAX_RESPOSTA, montarResposta } from "../respostas.js";
+import { limiteDasRespostas } from "../limites.js";
 
 // Feedbacks para a gestão (protegido) — DONO: Victor
 export const occurrencesRoutes = Router();
@@ -178,12 +179,19 @@ occurrencesRoutes.get(
 occurrencesRoutes.post(
   "/:id/respostas",
   requireAuth(PAPEIS_DA_GESTAO),
+  limiteDasRespostas,
   asyncHandler(async (req, res) => {
+    // Recusa sem e-mail enviado: devolve a vez no limite de respostas (ver limites.ts).
+    const recusar = (status: number, corpo: { erro: string; codigo: string }) => {
+      limiteDasRespostas.devolver(req);
+      return res.status(status).json(corpo);
+    };
+
     const bruto = req.body?.texto;
     // O textarea pode mandar \r\n; o e-mail e o que fica guardado usam \n.
     const texto = typeof bruto === "string" ? bruto.replace(/\r\n?/g, "\n").trim() : "";
     if (texto.length === 0 || texto.length > MAX_RESPOSTA) {
-      return res.status(400).json({
+      return recusar(400, {
         erro: `texto obrigatório, com no máximo ${MAX_RESPOSTA} caracteres`,
         codigo: "VALIDACAO",
       });
@@ -201,18 +209,14 @@ occurrencesRoutes.post(
       },
     });
     if (!feedback) {
-      return res
-        .status(404)
-        .json({ erro: "Ocorrência não encontrada", codigo: "OCORRENCIA_NAO_ENCONTRADA" });
+      return recusar(404, { erro: "Ocorrência não encontrada", codigo: "OCORRENCIA_NAO_ENCONTRADA" });
     }
     // Anônimo, ou o contato já saiu pela retenção: não há a quem responder.
     if (feedback.anonimo || !feedback.contatoEmail) {
-      return res
-        .status(409)
-        .json({ erro: "O cliente não deixou contato para resposta.", codigo: "SEM_CONTATO" });
+      return recusar(409, { erro: "O cliente não deixou contato para resposta.", codigo: "SEM_CONTATO" });
     }
     if (!emailLigado()) {
-      return res.status(503).json({
+      return recusar(503, {
         erro: "O envio de e-mail não está ligado neste servidor.",
         codigo: "EMAIL_DESLIGADO",
       });
@@ -237,7 +241,7 @@ occurrencesRoutes.post(
     } catch (erro) {
       // Só a mensagem do provedor no log; o texto e o e-mail do cliente, não.
       console.error("Resposta ao cliente não enviada:", erro instanceof Error ? erro.message : erro);
-      return res.status(502).json({
+      return recusar(502, {
         erro: "O e-mail não foi enviado. Tente de novo em instantes.",
         codigo: "EMAIL_NAO_ENVIADO",
       });

@@ -147,6 +147,26 @@ describe('responder pelo Echo', () => {
     expect(screen.queryByRole('region', { name: /Resposta enviada/ })).not.toBeInTheDocument();
   });
 
+  it('com muitas respostas na hora (429), diz quanto esperar e mantém o texto', async () => {
+    const { api, usuario } = await abrir();
+    api.quando('POST /occurrences/oc-1/respostas', {
+      status: 429,
+      corpo: {
+        erro: 'Você enviou muitas respostas na última hora. Tente de novo em 23 minutos.',
+        codigo: 'MUITAS_REQUISICOES',
+        tenteEmSegundos: 1380,
+      },
+    });
+
+    await usuario.type(caixa(), 'Pedimos desculpas.');
+    await usuario.click(botaoEnviar());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Você enviou muitas respostas na última hora. Tente de novo em 23 minutos.'
+    );
+    expect((caixa() as HTMLTextAreaElement).value).toContain('Pedimos desculpas.');
+  });
+
   it('em teste, avisa que a resposta vai para o endereço de demonstração', async () => {
     await abrir({ envioDeEmail: 'teste' });
     expect(

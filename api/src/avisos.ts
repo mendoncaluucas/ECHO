@@ -74,8 +74,42 @@ ${
   return { assunto, texto, html };
 }
 
+// Teto de avisos por e-mail: 30 na última hora, somando todos os destinatários. Passou,
+// o aviso daquele feedback não sai por e-mail (o sino avisa igual) até a hora andar.
+// Protege a cota do provedor (o Resend grátis manda 100 por dia) mesmo de quem contorne
+// o limite por IP do formulário, trocando de rede.
+export const TETO_DE_AVISOS_POR_HORA = 30;
+const UMA_HORA = 60 * 60 * 1000;
+// Quando saiu cada e-mail de aviso da última hora.
+let avisosRecentes: number[] = [];
+// Para escrever no log uma vez quando o teto é atingido, e não a cada feedback.
+let tetoAvisado = false;
+
+export function zerarTetoDeAvisos() {
+  avisosRecentes = [];
+  tetoAvisado = false;
+}
+
+// Reserva lugar no teto para `quantos` e-mails, ou recusa. Sem nenhum `await` no
+// caminho: dois feedbacks ao mesmo tempo não conseguem os dois o último lugar.
+function reservarNoTeto(quantos: number, agora = Date.now()) {
+  avisosRecentes = avisosRecentes.filter((quando) => agora - quando < UMA_HORA);
+  if (avisosRecentes.length + quantos > TETO_DE_AVISOS_POR_HORA) {
+    if (!tetoAvisado) {
+      console.warn(
+        `Avisos por e-mail pausados: ${TETO_DE_AVISOS_POR_HORA} na última hora. O sino continua avisando.`
+      );
+      tetoAvisado = true;
+    }
+    return false;
+  }
+  tetoAvisado = false;
+  for (let i = 0; i < quantos; i++) avisosRecentes.push(agora);
+  return true;
+}
+
 // Monta e envia o aviso de um feedback para quem quer recebê-lo. Devolve quantos
-// e-mails saíram (0 com o envio desligado ou sem ninguém que queira).
+// e-mails saíram (0 com o envio desligado, sem ninguém que queira ou com o teto cheio).
 export async function avisarEquipePorEmail(feedbackId: string): Promise<number> {
   if (!emailLigado()) return 0;
 
@@ -101,6 +135,10 @@ export async function avisarEquipePorEmail(feedbackId: string): Promise<number> 
     select: { email: true },
   });
   if (equipe.length === 0) return 0;
+  // Ou sai para todos, ou para ninguém: metade da equipe avisada, escolhida pela ordem
+  // do e-mail, seria pior do que todos esperando o sino. O lugar fica gasto mesmo se o
+  // provedor falhar: ele pode ter mandado parte antes do erro.
+  if (!reservarNoTeto(equipe.length)) return 0;
 
   const aviso = montarAviso(feedback);
   return enviarEmails(equipe.map((pessoa) => ({ para: pessoa.email, ...aviso })));
