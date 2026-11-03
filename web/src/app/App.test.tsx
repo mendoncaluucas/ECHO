@@ -55,7 +55,11 @@ beforeEach(() => {
 afterEach(() => window.removeEventListener('error', calarErroEsperado));
 
 describe('quem pode abrir cada tela', () => {
-  const ROTAS = [...MENU.flatMap((s) => s.itens.map((i) => i.caminho)), '/coordenador/ocorrencia/oc-1'];
+  const ROTAS = [
+    ...MENU.flatMap((s) => s.itens.map((i) => i.caminho)),
+    '/coordenador/ocorrencia/oc-1',
+    '/minha-senha',
+  ];
   const casos = (['COORDENADOR', 'GERENTE', 'ADMINISTRADOR'] as Papel[]).flatMap((papel) =>
     ROTAS.map((rota) => [papel, rota, papelPodeAbrir(papel, rota)] as const)
   );
