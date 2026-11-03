@@ -16,7 +16,7 @@
   ```json
   { "erro": "mensagem legível", "codigo": "VALIDACAO" }
   ```
-- **Status usados:** `200` ok · `201` criado · `400` validação · `401` não autenticado · `403` sem permissão · `404` não encontrado
+- **Status usados:** `200` ok · `201` criado · `400` validação · `401` não autenticado · `403` sem permissão · `404` não encontrado · `429` muitos pedidos
 - **Códigos de erro (`codigo`):**
 
   | `codigo` | Status | Quando acontece |
@@ -32,7 +32,23 @@
   | `USUARIO_NAO_ENCONTRADO` | 404 | Usuário inexistente |
   | `TOKEN_DUPLICADO` / `CONFLITO` | 409 | Token de QR Code já em uso |
   | `ROTA_NAO_ENCONTRADA` | 404 | Rota inexistente |
+  | `MUITAS_REQUISICOES` | 429 | Passou do limite de pedidos da rota (ver abaixo) |
   | `ERRO_INTERNO` | 500 | Erro inesperado |
+
+- **Limites de pedidos (03/11):** guardados na memória da API, por IP (o do cliente, com o
+  `TRUST_PROXY` certo; ver `docs/DEPLOY.md`) ou por conta:
+
+  | Rota | Limite |
+  |---|---|
+  | `GET /public/venue/:qrToken` | 60 por minuto por IP |
+  | `POST /public/feedback` | 20 a cada 10 min por IP |
+  | `POST /auth/login` | 10 tentativas a cada 15 min por IP, e 5 **senhas erradas** a cada 15 min por e-mail |
+  | `POST /occurrences/:id/respostas` | 20 respostas **enviadas** por hora por pessoa |
+  | `GET /api/qrcodes/:token/imagem` | 60 por minuto por IP |
+
+  Passou: `429` com `{ "erro", "codigo": "MUITAS_REQUISICOES", "tenteEmSegundos" }`, e o `erro`
+  já diz quanto esperar ("Tente de novo em 12 minutos."). Também vão os cabeçalhos `Retry-After` e
+  `RateLimit-*`, mas o front, em outro endereço, não os lê: o tempo vem no corpo.
 
 ---
 
@@ -56,7 +72,8 @@
 aqui para o formulário dizer por quanto tempo o contato fica sem um segundo pedido no celular do
 cliente.
 
-**Erros:** `404` se o token não existir ou estiver inativo.
+**Erros:** `404` se o token não existir ou estiver inativo · `429` `MUITAS_REQUISICOES` (60 por
+minuto por IP, contando código inexistente: dificulta testar códigos em sequência).
 
 ---
 
@@ -102,7 +119,9 @@ mudar o prazo.
 ```json
 { "id": "uuid", "criadoEm": "2026-08-27T14:30:00.000Z" }
 ```
-**Erros:** `400` (dados inválidos) · `404` (qrToken inexistente).
+**Erros:** `400` (dados inválidos) · `404` (qrToken inexistente) · `429` `MUITAS_REQUISICOES`
+(20 a cada 10 min por IP; generoso porque, no Wi-Fi do restaurante, todas as mesas saem pelo
+mesmo IP).
 
 > **Todo feedback aceito notifica a gestão**, de qualquer tipo, para cada usuário ativo. A
 > notificação nasce no mesmo comando que grava o feedback. Ver `GET /api/notifications` (seção 17).
@@ -110,6 +129,11 @@ mudar o prazo.
 > **E-mail, para quem escolheu** (seção 20.1): depois de gravar, a API manda o aviso por e-mail
 > **sem esperar** o provedor responder. O `201` não depende do e-mail, e uma falha no envio não
 > desfaz o feedback nem a notificação: fica no log do servidor, sem destinatário nem conteúdo.
+>
+> **Teto de 30 e-mails de aviso por hora**, somando os destinatários de todos os feedbacks. Passou,
+> o aviso não sai por e-mail para ninguém da equipe (nem para parte dela) até a hora andar; o sino
+> avisa igual, e o log diz uma vez que os avisos pausaram. Protege a cota do provedor mesmo de quem
+> contorne o limite por IP trocando de rede.
 
 ---
 
@@ -127,10 +151,19 @@ mudar o prazo.
   "usuario": { "id": "uuid", "nome": "Valmir Inácio", "papel": "GERENTE" }
 }
 ```
-**Erros:** `400` `VALIDACAO` (`email` ou `senha` ausentes) · `401` `CREDENCIAIS_INVALIDAS`.
+**Erros:** `400` `VALIDACAO` (`email` ou `senha` ausentes) · `401` `CREDENCIAIS_INVALIDAS` ·
+`429` `MUITAS_REQUISICOES`.
 
 > A resposta de `401` é **idêntica** para e-mail inexistente e senha errada — de propósito, para não
 > revelar quais e-mails têm cadastro. O `senhaHash` nunca sai na resposta.
+>
+> **Dois limites:** 10 tentativas a cada 15 min por IP, certas ou erradas (quem testa senhas de
+> muitas contas do mesmo lugar), e 5 **senhas erradas** a cada 15 min por e-mail, de qualquer IP
+> (quem testa senhas de uma conta trocando de IP). No segundo, o e-mail é comparado sem
+> maiúsculas nem espaços nas pontas, entrar com a senha certa não gasta tentativa e, bloqueado,
+> nem a senha certa entra até a janela passar. O bloqueio é temporário de propósito: permanente,
+> qualquer um trancaria o administrador do lado de fora errando a senha dele. E-mail sem cadastro
+> conta igual, com a mesma mensagem: o `429` também não revela quem tem conta.
 
 ---
 
@@ -286,7 +319,9 @@ endereço de teste e **sem** o "responder para" (seria um e-mail fictício do se
 
 **Erros:** `400` `VALIDACAO` · `401` · `404` `OCORRENCIA_NAO_ENCONTRADA` · `409` `SEM_CONTATO`
 (anônimo, ou o contato já saiu pela retenção) · `502` `EMAIL_NAO_ENVIADO` (o provedor recusou ou
-não respondeu) · `503` `EMAIL_DESLIGADO` (a API está sem provedor).
+não respondeu) · `503` `EMAIL_DESLIGADO` (a API está sem provedor) · `429` `MUITAS_REQUISICOES`
+(20 respostas por hora por pessoa: conta invadida não vira disparador de e-mail. Só as que saíram
+contam; recusa e falha do provedor não gastam).
 
 ---
 

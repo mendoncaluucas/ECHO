@@ -415,8 +415,9 @@ padrão (a suíte faz centenas de logins) e cada limite tem teste próprio que o
    caminho, apareceu que variar o tamanho escapava do cache (ainda 1,7 s): o tamanho passou a
    subir para o múltiplo de 128 seguinte, no máximo 7 PNGs por código. `npm audit` da API zerado
    (express 4.22.3, com `body-parser`, `proxy-addr` e `qs` corrigidos). `express-rate-limit`
-   fixado em 8.7.1. **Falta, depois do merge:** `TRUST_PROXY=1` no Render e a conferência de
-   `docs/DEPLOY.md` (cabeçalho falso e celular no 4G)
+   fixado em 8.7.1. Na produção, depois do merge (03/11): passos 1 e 2 de `docs/DEPLOY.md`
+   conferidos (a contagem cai de 59 para 58 e segue caindo com `X-Forwarded-For` falso). **Falta o
+   passo 3** (celular no 4G), o único que distingue o valor certo de um baixo demais
    - cache na memória da API por código, formato e tamanho (até ~200 imagens): o mesmo QR não é
      gerado duas vezes. A consulta que confere se o código está ativo continua a cada pedido, então
      um QR desativado é recusado mesmo com a imagem guardada. `Cache-Control: private,
@@ -432,7 +433,18 @@ padrão (a suíte faz centenas de logins) e cada limite tem teste próprio que o
      do Render
    - prova: repetir a rajada de 50 downloads e medir o `/health` durante ela, que tem de seguir
      em milissegundos
-2. **Limite no login e nas rotas públicas**
+2. ~~**Limite no login e nas rotas públicas**~~ — **feito (03/11)**, sem migration. A
+   mensagem de cada `429` já sai da API dizendo quanto esperar ("Tente de novo em 12 minutos."),
+   e o front a mostra no login, ao abrir e ao enviar o formulário (este com "Suas respostas estão
+   guardadas.") e na resposta ao cliente. O teto de e-mails manda para todos ou para ninguém da
+   equipe, e reserva o lugar antes de enviar (dois feedbacks juntos não pegam o último). Na
+   verificação: o "só o que deu certo conta" da biblioteca (`skipFailedRequests`) devolve a vez
+   também quando a conexão cai, e cortar a conexão logo depois de pedir mandava a resposta sem
+   gastar nada (25 e-mails com limite de 20, reproduzido em teste). A rota é que devolve a vez
+   agora, só quando recusa ou o provedor falha. **Antes do
+   merge:** conferir o `TRUST_PROXY` no Render pelo passo 3 do `docs/DEPLOY.md` (celular no 4G).
+   Com o valor baixo, todos os clientes contam como um só, e o login passaria a aceitar 10
+   tentativas a cada 15 min **para o restaurante inteiro**
    - login: 10 tentativas por 15 min por IP, e 5 **falhas** por 15 min por e-mail (login certo
      não conta). O bloqueio por e-mail é temporário de propósito: permanente, um atacante
      trancaria o administrador do lado de fora
