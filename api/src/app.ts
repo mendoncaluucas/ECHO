@@ -8,6 +8,7 @@ process.env.TZ ??= "America/Sao_Paulo";
 
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import { publicRoutes } from "./routes/public.routes.js";
 import { qrcodesRoutes } from "./routes/qrcodes.routes.js";
 import { areasRoutes } from "./routes/areas.routes.js";
@@ -49,10 +50,35 @@ export function lerTrustProxy(): number {
 }
 app.set("trust proxy", lerTrustProxy());
 
+// Sem o "X-Powered-By: Express": não dizer de graça com o que a API foi feita.
+app.disable("x-powered-by");
+
+// Cabeçalhos de segurança (helmet), ajustados para uma API que só fala JSON e imagem:
+// - CSP que não deixa nada carregar nem a resposta ser embutida: nenhuma resposta da
+//   API é página. O SVG do QR aberto direto numa aba continua aparecendo (só tem
+//   atributos de cor, sem <style> nem script)
+// - Cross-Origin-Resource-Policy "cross-origin": o padrão do helmet (same-origin) faria
+//   o navegador recusar a imagem do QR na tela de QR Codes, que a carrega com <img> a
+//   partir de outro endereço (a Vercel)
+// O resto fica no padrão: nosniff, HSTS, Referrer-Policy no-referrer.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
+    },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    // O mesmo "nunca embutir" do frame-ancestors, para navegador que só lê o antigo.
+    frameguard: { action: "deny" },
+  })
+);
+
 // CORS restrito a CORS_ORIGIN (lista separada por vírgula); sem a variável, libera todas as origens.
 const corsOrigin = process.env.CORS_ORIGIN;
 app.use(cors(corsOrigin ? { origin: corsOrigin.split(",") } : undefined));
-app.use(express.json());
+// 100 kB, o padrão, escrito para ficar à vista: o maior corpo do Echo é uma resposta ao
+// cliente (2000 caracteres). Acima disso, 413 (ver errorHandler).
+app.use(express.json({ limit: "100kb" }));
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "echo-api" });
