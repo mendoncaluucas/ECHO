@@ -259,6 +259,12 @@ function CartaoDaArea({
     aoFalhar(null);
     try {
       const resposta = await fetch(urlDaImagemDoQR(principal.token, 'png', 1024));
+      // Limite de downloads por minuto da API: diz para esperar, não para atualizar a
+      // página (que gastaria mais pedidos).
+      if (resposta.status === 429) {
+        aoFalhar('Muitos downloads seguidos. Espere um minuto e tente de novo.');
+        return;
+      }
       // Sem isso, um código desativado em outra aba baixaria o JSON do erro como .png.
       if (!resposta.ok) throw new Error();
       const blob = await resposta.blob();

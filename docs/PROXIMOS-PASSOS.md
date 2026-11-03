@@ -365,6 +365,105 @@ vai para o `EMAIL_DESTINO_TESTE` (ver `docs/DEPLOY.md`). Dois PRs:
    "Sugestão anotada"), sem desfazer o que o restaurante editar. Migration `respostas_prontas`
 
 ---
+
+## 8. Segurança (plano de 03/11)
+
+Pedido do Lucas depois da apresentação: segurança um pouco melhor e um limite para o download do
+QR Code, para clique repetido não sobrecarregar a API. Levantamento feito em 03/11, no código e
+na produção.
+
+**O que foi medido:**
+
+- A imagem do QR é gerada a cada pedido, e a geração ocupa o processador da API inteira enquanto
+  roda: SVG 43 ms, PNG 1024 px 98 ms, PNG 2048 px 269 ms (máquina de desenvolvimento). Com 50
+  downloads de 2048 px ao mesmo tempo, o `/health` (2 ms normalmente) levou **4,3 s**: o Echo
+  inteiro fica lento para todos. No Render gratuito, com menos processador, é pior
+- **Nenhuma rota tem limite de requisições.** O login aceita tentativas sem fim; o
+  `POST /public/feedback` é público e cada reclamação dispara e-mail (o Resend grátis aguenta
+  100 por dia)
+- JSON malformado e corpo acima de 100 kB respondem **500** ("Erro interno", com o erro inteiro
+  no log), em vez de 400 e 413
+- `npm audit` da API: `proxy-addr` (crítica: falsificar o IP de quem chama, o que furaria um
+  limite por IP), `body-parser` (alta) e `qs` (moderada), todas com correção sem trocar de versão
+  principal. No front: `react-router` (alta; quase tudo é de recursos que o Echo não usa, mas há
+  um redirecionamento aberto que se aplica)
+- Trocar ou redefinir a senha **não derruba as sessões abertas**: o token segue valendo até o
+  tempo de sessão. E não há tela para a pessoa trocar a própria senha (a API tem a rota; só o
+  administrador redefine, em Usuários)
+- A API se apresenta (`X-Powered-By: Express`) e não manda cabeçalhos de segurança. O front, na
+  Vercel, só tem HSTS: sem CSP, sem proteção contra ser embutido em outro site, sem `nosniff`. O
+  token da sessão é legível pelo JavaScript, então a CSP é o que limita o estrago de um XSS
+- **Em ordem:** CORS restrito à Vercel (testado com origem falsa), login com o mesmo tempo para
+  e-mail inexistente e senha errada, senha mínima de 8, papel relido do banco a cada requisição,
+  segredo do JWT obrigatório
+
+**Antes de qualquer PR (o Lucas):** o repositório é **público** e o README mostra a senha
+`echo123` e os e-mails das três contas. Conferir se a produção ainda aceita essa senha; se aceitar,
+trocar as três já (Usuários → redefinir). Trocar também a senha do Neon, que já circulou.
+
+**Decisões:** limites contados por IP, guardados na memória da API (o Render roda uma instância
+só; zera quando ela dorme, o que não ajuda ataque nenhum, porque ataque a mantém acordada).
+Biblioteca `express-rate-limit`. Passou do limite: `429` com `codigo: "MUITAS_REQUISICOES"` e o
+cabeçalho `Retry-After`, e o front diz quanto esperar. Nos testes os limites ficam altos por
+padrão (a suíte faz centenas de logins) e cada limite tem teste próprio que o atinge.
+
+**Ordem, 5 PRs:**
+
+1. ~~**QR Code: cache, limite e tamanho**~~ (o pedido do Lucas) — **feito (03/11).** Medido na
+   máquina de desenvolvimento, com 50 downloads ao mesmo tempo, o `/health` durante a rajada:
+   **4,3 s antes; 1,5 ms depois** (pedidos iguais) e **1,6 ms** com 50 tamanhos diferentes. No
+   caminho, apareceu que variar o tamanho escapava do cache (ainda 1,7 s): o tamanho passou a
+   subir para o múltiplo de 128 seguinte, no máximo 7 PNGs por código. `npm audit` da API zerado
+   (express 4.22.3, com `body-parser`, `proxy-addr` e `qs` corrigidos). `express-rate-limit`
+   fixado em 8.7.1. **Falta, depois do merge:** `TRUST_PROXY=1` no Render e a conferência de
+   `docs/DEPLOY.md` (cabeçalho falso e celular no 4G)
+   - cache na memória da API por código, formato e tamanho (até ~200 imagens): o mesmo QR não é
+     gerado duas vezes. A consulta que confere se o código está ativo continua a cada pedido, então
+     um QR desativado é recusado mesmo com a imagem guardada. `Cache-Control: private,
+     max-age=300`: o navegador reaproveita por 5 min sem nem pedir
+   - limite de **60 imagens por minuto por IP** na `GET /qrcodes/:token/imagem` (a tela de QR Codes
+     carrega uma por área de uma vez; sobra para o uso normal e corta script e clique em série).
+     "Baixar PNG" mostra "Muitos downloads seguidos. Espere um minuto e tente de novo."
+   - tamanho máximo de 2048 para **1024 px** (o front nunca pede mais; impressão usa o SVG)
+   - `npm audit fix` na API (o `proxy-addr` é pré-requisito do limite por IP) e `trust proxy`
+     para o Render: sem isso todo pedido parece vir do mesmo IP, e o limite bloquearia todos
+     juntos. **Conferir em produção:** estourar o limite pelo celular (4G) e ver que o computador
+     (outra rede) continua baixando; e os avisos de configuração do `express-rate-limit` no log
+     do Render
+   - prova: repetir a rajada de 50 downloads e medir o `/health` durante ela, que tem de seguir
+     em milissegundos
+2. **Limite no login e nas rotas públicas**
+   - login: 10 tentativas por 15 min por IP, e 5 **falhas** por 15 min por e-mail (login certo
+     não conta). O bloqueio por e-mail é temporário de propósito: permanente, um atacante
+     trancaria o administrador do lado de fora
+   - `POST /public/feedback`: 20 a cada 10 min por IP. Generoso de propósito: no Wi-Fi do
+     restaurante, todas as mesas saem pelo mesmo IP
+   - `GET /public/venue/:qrToken`: 60 por minuto por IP (dificulta testar códigos em sequência)
+   - teto de **30 e-mails de aviso por hora** no total; passou, só o sino avisa até a hora virar
+     (protege a cota do Resend mesmo se o limite por IP for contornado)
+   - `POST /occurrences/:id/respostas`: 20 por hora **por pessoa** (conta invadida não vira
+     disparador de e-mail)
+   - mensagens de 429 no login, no formulário do cliente e na resposta ao cliente
+3. **Erros e cabeçalhos da API**
+   - JSON malformado → `400 JSON_INVALIDO`; corpo grande demais → `413`; sem ir para o log como
+     "Erro não tratado"
+   - `helmet` (cabeçalhos de segurança) e sem o `X-Powered-By`
+4. **Sessões e senha**
+   - trocar ou redefinir a senha derruba as outras sessões daquela pessoa: campo
+     `sessoesValidasDesde` no `User`, comparado com o horário do token no `requireAuth` (que já lê o
+     usuário a cada requisição, então não custa uma consulta a mais). Migration
+   - tela **"Trocar minha senha"** para os três papéis (a rota `PATCH /auth/senha` já existe)
+5. **Front**
+   - cabeçalhos na Vercel (`vercel.json`): CSP (scripts só do próprio site; conexões e imagens
+     também da API; estilos inline liberados, que o React usa), `frame-ancestors 'none'`,
+     `nosniff`, `Referrer-Policy`, `Permissions-Policy` (câmera e microfone desligados). Testar
+     tela a tela numa prévia da Vercel antes do merge, olhando o console por bloqueio da CSP
+   - atualizar `react-router` (fixado em 7.13.0) e `react-router-dom`, e o `vite`
+
+**Fora, por ora:** dois fatores no login e regras de senha mais complexas. Para o tamanho do Echo,
+limite de tentativas e sessões derrubadas na troca de senha cobrem o risco real.
+
+---
 ## Antes da apresentação
 
 - **Cold start do Render: ~22 segundos.** Abrir o sistema alguns minutos antes, ou assinar o plano

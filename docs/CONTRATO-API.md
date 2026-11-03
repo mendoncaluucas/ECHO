@@ -373,18 +373,33 @@ Devolve a imagem do QR. Escaneada, abre o formulário do cliente.
 | Parâmetro | Valores | Padrão |
 |---|---|---|
 | `formato` | `png` · `svg` | `png` |
-| `tamanho` | inteiro de `200` a `2048` (largura do PNG em pixels; ignorado no SVG) | `400` |
+| `tamanho` | inteiro de `200` a `1024` (largura do PNG em pixels, arredondada para cima ao múltiplo de 128; ignorado no SVG) | `400` (sai com 512) |
 
 - **SVG** é vetorial: nítido em qualquer tamanho. É o que a tela de apresentação e o cartão de mesa
   impresso usam. **PNG** serve para quem precisa de um arquivo de imagem (o botão "Baixar PNG" pede 1024).
 - Correção de erro nível **M** (até 15% do código pode estar danificado) e margem de 2 módulos.
 
-**Resposta `200`:** `Content-Type: image/png` ou `image/svg+xml`.
+**Resposta `200`:** `Content-Type: image/png` ou `image/svg+xml`, com
+`Cache-Control: private, max-age=300` (o navegador reaproveita por 5 min).
 
 > **Aberta**: só serve token ativo, e o token já está impresso na mesa.
 
+> **Limite e cache (03/11).** Gerar a imagem ocupa o processador da API inteira enquanto roda; 50
+> downloads de 2048 px ao mesmo tempo deixavam qualquer outro pedido em 4,3 s. Agora:
+> - **60 pedidos por minuto por IP** nesta rota, contando também os inválidos e os de código
+>   inexistente. Passou: `429` com `{ "erro", "codigo": "MUITAS_REQUISICOES", "tenteEmSegundos" }`
+>   e o cabeçalho `Retry-After`. Os cabeçalhos `RateLimit-Limit`, `RateLimit-Remaining` e
+>   `RateLimit-Reset` vêm em toda resposta
+> - cada imagem é gerada **uma vez** e fica na memória (até 200, sai a usada há mais tempo);
+>   pedidos iguais ao mesmo tempo esperam a mesma geração. O QR desativado é recusado mesmo com a
+>   imagem guardada: o banco é consultado a cada pedido
+> - tamanho máximo de 2048 para **1024** (o front nunca pediu mais), e o tamanho pedido **sobe
+>   para o múltiplo de 128 seguinte** (200 → 256, 400 → 512, 900 → 1024): no máximo 7 PNGs por
+>   código. Aceitando qualquer número, variar o tamanho escapava do cache, e 50 tamanhos
+>   diferentes ainda deixavam o `/health` em 1,7 s
+
 **Erros:** `400` `VALIDACAO` (`formato` ou `tamanho` inválido) · `404` `QR_NAO_ENCONTRADO` (token
-não encontrado ou inativo).
+não encontrado ou inativo) · `429` `MUITAS_REQUISICOES`.
 
 ---
 

@@ -44,8 +44,29 @@ colocá-las no start faria rodar a cada despertar.
 | `JWT_SECRET` | **gerar um novo**, nunca reaproveitar o de desenvolvimento |
 | `WEB_BASE_URL` | a URL da Vercel, sem barra no final |
 | `CORS_ORIGIN` | a mesma URL da Vercel |
+| `TRUST_PROXY` | `1` (quantos proxies há antes da API; ver abaixo como conferir) |
 
-Gerar o segredo:
+> **`TRUST_PROXY` e o limite de requisições.** No Render, a API recebe os pedidos de um proxy, e
+> o IP do cliente vem no cabeçalho `X-Forwarded-For`. O limite por IP (hoje, 60 imagens de QR por
+> minuto) depende de ler o IP certo:
+> - **sem a variável (ou baixa demais):** todo pedido parece vir do proxy, e o limite cai sobre
+>   todos juntos. No log do Render aparece `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`
+> - **alta demais:** a API passa a acreditar no que o próprio cliente escreve no cabeçalho, e
+>   qualquer um troca de "IP" para escapar do limite
+>
+> O Render não documenta quantos proxies há (relatos falam em 1 e em 3). **Como conferir depois do
+> deploy**, com a imagem de um QR ativo (`<api>/qrcodes/<token>/imagem?formato=svg`):
+> 1. No computador, `curl -sI "<url>"` duas vezes: o `RateLimit-Remaining` cai de 59 para 58
+> 2. `curl -sI -H "X-Forwarded-For: 1.2.3.4" "<url>"`: tem de **continuar caindo** (57). Se
+>    voltar a 59, o valor está alto demais: o cliente escolheu o próprio IP
+> 3. Gaste o limite no computador (60 pedidos) e abra a mesma URL no celular, **no 4G** (outra
+>    rede). Tem de aparecer o QR. Se aparecer "Muitos downloads seguidos", o valor está baixo
+>    demais: os dois aparelhos estão contando juntos
+>
+> Se o passo 3 falhar com `1`, tente `2` (há relatos de mais de um proxy, como uma CDN na frente
+> do Render) e repita os três passos. Trocar o valor no Render reinicia a API, sem mexer no
+> código. Valor que não seja número de 0 a 5 (um `true`, por exemplo) **não derruba** a API: ela
+> escreve `TRUST_PROXY ignorado` no log e segue como se a variável não existisse.
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
